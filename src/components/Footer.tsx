@@ -1,7 +1,34 @@
+import { useEffect, useState } from "react";
 import { Shield, ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
+import { apiRequest } from "@/lib/api";
+
+interface LegalNoticeResponse {
+  disclaimer: string;
+  kycConsentRequirement: string;
+  dataRetentionPolicy: {
+    retentionDays: number;
+    statement: string;
+  };
+  disclosurePolicy: string;
+}
 
 const Footer = () => {
+  const [legalNotice, setLegalNotice] = useState<LegalNoticeResponse | null>(null);
+
+  useEffect(() => {
+    const loadLegalNotice = async () => {
+      try {
+        const response = await apiRequest<LegalNoticeResponse>("/legal/notices");
+        setLegalNotice(response);
+      } catch {
+        setLegalNotice(null);
+      }
+    };
+
+    void loadLegalNotice();
+  }, []);
+
   return (
     <footer className="bg-primary text-primary-foreground relative overflow-hidden">
       <div className="absolute inset-0 grid-pattern opacity-5" />
@@ -18,7 +45,8 @@ const Footer = () => {
               A private Web3 identity-linked wallet registry platform. KYC verification with enterprise-grade encryption and full regulatory compliance.
             </p>
             <p className="text-primary-foreground/30 text-xs leading-relaxed">
-              FIUlink is not affiliated with any government authority. All data handling complies with applicable regulations.
+              {legalNotice?.disclaimer ??
+                "FIUlink is not affiliated with any government authority. All data handling complies with applicable regulations."}
             </p>
           </div>
 
@@ -43,7 +71,13 @@ const Footer = () => {
           <div className="md:col-span-2">
             <h4 className="font-display font-semibold text-sm mb-5 text-primary-foreground/80">Legal</h4>
             <ul className="space-y-3">
-              {["Privacy Policy", "Terms of Service", "Data Retention"].map((item) => (
+              {[
+                "Privacy Policy",
+                "Terms of Service",
+                legalNotice
+                  ? `Data Retention (${legalNotice.dataRetentionPolicy.retentionDays} days)`
+                  : "Data Retention"
+              ].map((item) => (
                 <li key={item}>
                   <a href="#" className="text-sm text-primary-foreground/50 hover:text-primary-foreground transition-colors inline-flex items-center gap-1 group">
                     {item}

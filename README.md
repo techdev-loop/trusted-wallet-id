@@ -4,6 +4,13 @@
 
 **URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
 
+## Full Stack Local Run
+
+- Frontend `.env`: copy `.env.example` and set `VITE_API_BASE_URL` (defaults to `http://localhost:4000/api`)
+- Backend config and setup: see `backend/README.md`
+- Start backend in one terminal: `cd backend && npm run dev`
+- Start frontend in another terminal: `npm run dev`
+
 ## How can I edit this code?
 
 There are several ways of editing your application.
