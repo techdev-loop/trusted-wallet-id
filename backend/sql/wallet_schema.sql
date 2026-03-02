@@ -31,6 +31,18 @@ CREATE TABLE IF NOT EXISTS disclosure_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS disclosure_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  wallet_address TEXT NOT NULL,
+  lawful_request_reference TEXT NOT NULL,
+  created_by_admin_user_id UUID NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  approved_by_user BOOLEAN NULL,
+  approved_at TIMESTAMPTZ NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS admin_audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   actor_user_id UUID NOT NULL,
