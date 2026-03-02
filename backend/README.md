@@ -26,6 +26,7 @@ Private identity-linked wallet registry backend for FIUlink.
 1. Copy environment template:
    - `cp .env.example .env` (or create `.env` manually on Windows)
 2. Fill secure values for `JWT_SECRET` and `AES_256_KEY`.
+   - For local frontend ports, set `ALLOWED_ORIGINS` (comma-separated, e.g. `http://localhost:8080,http://localhost:8081`)
 3. Install dependencies:
    - `npm install`
 4. Initialize DB schema in both databases:

@@ -31,11 +31,19 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     }
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined
+    });
+  } catch {
+    throw new ApiError(
+      `Unable to reach backend API at ${API_BASE_URL}. Check that backend is running and CORS is configured.`,
+      0
+    );
+  }
 
   let payload: unknown = null;
   try {

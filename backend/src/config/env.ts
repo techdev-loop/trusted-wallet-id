@@ -4,7 +4,8 @@ import { z } from "zod";
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
-  ALLOWED_ORIGIN: z.string().min(1).default("*"),
+  ALLOWED_ORIGIN: z.string().min(1).optional(),
+  ALLOWED_ORIGINS: z.string().min(1).optional(),
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRY: z.string().min(1).default("1h"),
   AES_256_KEY: z
@@ -22,3 +23,11 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+export function getAllowedOrigins(): string[] {
+  const rawOrigins = env.ALLOWED_ORIGINS ?? env.ALLOWED_ORIGIN ?? "*";
+  return rawOrigins
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
