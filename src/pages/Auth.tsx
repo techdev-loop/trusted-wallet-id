@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Shield, Mail, ArrowRight, ArrowLeft, Lock, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,30 +7,75 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "sonner";
+import { apiRequest, ApiError } from "@/lib/api";
+import { setSession } from "@/lib/session";
 
 const Auth = () => {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">(
     searchParams.get("mode") === "signup" ? "signup" : "signin"
   );
   const [step, setStep] = useState<"email" | "otp">("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
+  const [submittingEmail, setSubmittingEmail] = useState(false);
+  const [submittingOtp, setSubmittingOtp] = useState(false);
 
-  const handleEmailSubmit = (e: React.FormEvent) => {
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
-    setStep("otp");
-    toast.success("Verification code sent to " + email);
+    if (!email) {
+      return;
+    }
+
+    try {
+      setSubmittingEmail(true);
+      await apiRequest<{ message: string; email: string }>("/auth/signup", {
+        method: "POST",
+        body: { email }
+      });
+      setStep("otp");
+      toast.success(`Verification code sent to ${email}`);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Failed to send verification code";
+      toast.error(message);
+    } finally {
+      setSubmittingEmail(false);
+    }
   };
 
-  const handleOtpSubmit = (e: React.FormEvent) => {
+  const handleOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (otp.length < 6) return;
-    toast.success("Verified! Redirecting to dashboard...");
-    setTimeout(() => {
-      window.location.href = "/dashboard";
-    }, 1000);
+    if (otp.length < 6) {
+      return;
+    }
+
+    try {
+      setSubmittingOtp(true);
+      const result = await apiRequest<{
+        token: string;
+        user: { id: string; email: string; role: "user" | "admin" | "compliance" };
+      }>("/auth/verify-otp", {
+        method: "POST",
+        body: {
+          email,
+          otpCode: otp
+        }
+      });
+
+      setSession({
+        token: result.token,
+        user: result.user
+      });
+
+      toast.success("Verification complete. Redirecting...");
+      navigate("/dashboard");
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Failed to verify OTP";
+      toast.error(message);
+    } finally {
+      setSubmittingOtp(false);
+    }
   };
 
   return (
@@ -115,7 +160,7 @@ const Auth = () => {
                 </p>
               )}
 
-              <Button type="submit" className="w-full" variant="accent" size="lg">
+              <Button type="submit" className="w-full" variant="accent" size="lg" disabled={submittingEmail}>
                 Continue
                 <ArrowRight className="w-4 h-4 ml-1" />
               </Button>
@@ -136,7 +181,13 @@ const Auth = () => {
                 </InputOTP>
               </div>
 
-              <Button type="submit" className="w-full" variant="accent" size="lg" disabled={otp.length < 6}>
+              <Button
+                type="submit"
+                className="w-full"
+                variant="accent"
+                size="lg"
+                disabled={otp.length < 6 || submittingOtp}
+              >
                 Verify & Continue
               </Button>
 
