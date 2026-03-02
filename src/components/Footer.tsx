@@ -1,46 +1,68 @@
-import { Shield } from "lucide-react";
+import { Shield, ArrowUpRight } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const Footer = () => {
   return (
-    <footer className="bg-primary text-primary-foreground py-16">
-      <div className="container mx-auto px-4">
-        <div className="grid md:grid-cols-4 gap-8 mb-12">
-          <div className="md:col-span-2">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg gradient-accent flex items-center justify-center">
+    <footer className="bg-primary text-primary-foreground relative overflow-hidden">
+      <div className="absolute inset-0 grid-pattern opacity-5" />
+      <div className="container mx-auto px-4 py-20 relative">
+        <div className="grid md:grid-cols-12 gap-12 mb-16">
+          <div className="md:col-span-5">
+            <Link to="/" className="flex items-center gap-2.5 mb-5 group">
+              <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
                 <Shield className="w-4 h-4 text-accent-foreground" />
               </div>
-              <span className="font-display font-bold text-lg">FIUlink</span>
-            </div>
-            <p className="text-primary-foreground/60 text-sm max-w-md leading-relaxed">
-              A private Web3 identity-linked wallet registry platform. We perform KYC verification and link verified identity to self-custody wallet addresses.
+              <span className="font-display font-bold text-xl">FIUlink</span>
+            </Link>
+            <p className="text-primary-foreground/50 text-sm max-w-sm leading-relaxed mb-6">
+              A private Web3 identity-linked wallet registry platform. KYC verification with enterprise-grade encryption and full regulatory compliance.
             </p>
-            <p className="text-primary-foreground/40 text-xs mt-4">
+            <p className="text-primary-foreground/30 text-xs leading-relaxed">
               FIUlink is not affiliated with any government authority. All data handling complies with applicable regulations.
             </p>
           </div>
 
-          <div>
-            <h4 className="font-display font-semibold text-sm mb-4">Platform</h4>
-            <ul className="space-y-2 text-sm text-primary-foreground/60">
-              <li><a href="#how-it-works" className="hover:text-primary-foreground transition-colors">How It Works</a></li>
-              <li><a href="#features" className="hover:text-primary-foreground transition-colors">Features</a></li>
-              <li><a href="#security" className="hover:text-primary-foreground transition-colors">Security</a></li>
+          <div className="md:col-span-3 md:col-start-7">
+            <h4 className="font-display font-semibold text-sm mb-5 text-primary-foreground/80">Platform</h4>
+            <ul className="space-y-3">
+              {[
+                { label: "How It Works", href: "#how-it-works" },
+                { label: "Features", href: "#features" },
+                { label: "Security", href: "#security" },
+              ].map((item) => (
+                <li key={item.label}>
+                  <a href={item.href} className="text-sm text-primary-foreground/50 hover:text-primary-foreground transition-colors inline-flex items-center gap-1 group">
+                    {item.label}
+                    <ArrowUpRight className="w-3 h-3 opacity-0 -translate-y-0.5 group-hover:opacity-100 group-hover:translate-y-0 transition-all" />
+                  </a>
+                </li>
+              ))}
             </ul>
           </div>
 
-          <div>
-            <h4 className="font-display font-semibold text-sm mb-4">Legal</h4>
-            <ul className="space-y-2 text-sm text-primary-foreground/60">
-              <li><a href="#" className="hover:text-primary-foreground transition-colors">Privacy Policy</a></li>
-              <li><a href="#" className="hover:text-primary-foreground transition-colors">Terms of Service</a></li>
-              <li><a href="#" className="hover:text-primary-foreground transition-colors">Data Retention</a></li>
+          <div className="md:col-span-2">
+            <h4 className="font-display font-semibold text-sm mb-5 text-primary-foreground/80">Legal</h4>
+            <ul className="space-y-3">
+              {["Privacy Policy", "Terms of Service", "Data Retention"].map((item) => (
+                <li key={item}>
+                  <a href="#" className="text-sm text-primary-foreground/50 hover:text-primary-foreground transition-colors inline-flex items-center gap-1 group">
+                    {item}
+                    <ArrowUpRight className="w-3 h-3 opacity-0 -translate-y-0.5 group-hover:opacity-100 group-hover:translate-y-0 transition-all" />
+                  </a>
+                </li>
+              ))}
             </ul>
           </div>
         </div>
 
-        <div className="border-t border-primary-foreground/10 pt-8 text-center text-xs text-primary-foreground/40">
-          © {new Date().getFullYear()} FIUlink. All rights reserved.
+        <div className="border-t border-primary-foreground/8 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p className="text-xs text-primary-foreground/30">
+            © {new Date().getFullYear()} FIUlink. All rights reserved.
+          </p>
+          <div className="flex items-center gap-6">
+            <a href="#" className="text-xs text-primary-foreground/30 hover:text-primary-foreground/60 transition-colors">Status</a>
+            <a href="#" className="text-xs text-primary-foreground/30 hover:text-primary-foreground/60 transition-colors">Contact</a>
+          </div>
         </div>
       </div>
     </footer>

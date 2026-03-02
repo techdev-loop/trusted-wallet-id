@@ -3,12 +3,12 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Shield, Search, Users, FileText, Clock, CheckCircle2,
-  Eye, ChevronRight, LogOut, User, ShieldCheck, AlertTriangle
+  Eye, ChevronRight, LogOut, User, ShieldCheck, AlertTriangle, ArrowUpRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
@@ -31,6 +31,15 @@ const mockDisclosureRequests = [
   { id: "REQ-003", requestor: "Court Order", userId: "USR-001", reason: "Judicial mandate #JM-456", status: "approved", date: "2026-02-10" },
 ];
 
+const fadeIn = {
+  hidden: { opacity: 0, y: 15 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: i * 0.08, duration: 0.4, ease: [0.16, 1, 0.3, 1] as const },
+  }),
+};
+
 const Admin = () => {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -43,122 +52,106 @@ const Admin = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 bg-card/80 backdrop-blur-xl border-b border-border/50">
+      <header className="sticky top-0 z-50 bg-card/85 backdrop-blur-xl border-b border-border/50 shadow-[var(--shadow-xs)]">
         <div className="container mx-auto flex items-center justify-between h-16 px-4">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg gradient-accent flex items-center justify-center">
+          <Link to="/" className="flex items-center gap-2.5 group">
+            <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
               <Shield className="w-4 h-4 text-accent-foreground" />
             </div>
             <span className="font-display font-bold text-lg text-foreground">FIUlink</span>
-            <Badge variant="outline" className="ml-2 text-xs">Admin</Badge>
+            <Badge className="ml-1.5 text-[10px] gradient-accent text-accent-foreground border-0 rounded-md px-2">Admin</Badge>
           </Link>
-          <div className="flex items-center gap-4">
-            <Link to="/dashboard" className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:block">
-              User Dashboard
+          <div className="flex items-center gap-3">
+            <Link to="/dashboard" className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:inline-flex items-center gap-1">
+              User Dashboard <ArrowUpRight className="w-3 h-3" />
             </Link>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted">
-              <ShieldCheck className="w-4 h-4 text-accent" />
-              <span className="text-sm font-medium text-foreground">admin@fiulink.com</span>
+            <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-muted/70 border border-border/50">
+              <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
+                <ShieldCheck className="w-3.5 h-3.5 text-accent" />
+              </div>
+              <span className="text-sm font-medium text-foreground hidden sm:block">admin@fiulink.com</span>
             </div>
-            <Button variant="ghost" size="icon" asChild>
+            <Button variant="ghost" size="icon" className="rounded-xl" asChild>
               <Link to="/"><LogOut className="w-4 h-4" /></Link>
             </Button>
           </div>
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <div className="flex items-center gap-3 mb-8">
-            <ShieldCheck className="w-6 h-6 text-accent" />
-            <h1 className="font-display text-2xl font-bold text-foreground">Admin Panel</h1>
+      <div className="container mx-auto px-4 py-10 max-w-6xl">
+        <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={0}>
+          <div className="mb-10">
+            <div className="flex items-center gap-3 mb-2">
+              <ShieldCheck className="w-6 h-6 text-accent" />
+              <h1 className="font-display text-3xl font-bold text-foreground">Admin Panel</h1>
+            </div>
+            <p className="text-muted-foreground ml-9">Manage users, disclosure requests, and audit logs</p>
           </div>
+        </motion.div>
 
-          {/* Stats */}
-          <div className="grid sm:grid-cols-4 gap-4 mb-8">
-            <Card className="glass-card">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm text-muted-foreground">Total Users</span>
-                  <Users className="w-5 h-5 text-accent" />
-                </div>
-                <p className="font-display text-2xl font-bold text-foreground">{mockUsers.length}</p>
-              </CardContent>
-            </Card>
-            <Card className="glass-card">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm text-muted-foreground">Verified</span>
-                  <CheckCircle2 className="w-5 h-5 text-success" />
-                </div>
-                <p className="font-display text-2xl font-bold text-foreground">
-                  {mockUsers.filter(u => u.kycStatus === "verified").length}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="glass-card">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm text-muted-foreground">Pending Requests</span>
-                  <Clock className="w-5 h-5 text-warning" />
-                </div>
-                <p className="font-display text-2xl font-bold text-foreground">
-                  {mockDisclosureRequests.filter(r => r.status === "pending").length}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="glass-card">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm text-muted-foreground">Audit Events</span>
-                  <FileText className="w-5 h-5 text-accent" />
-                </div>
-                <p className="font-display text-2xl font-bold text-foreground">{mockAuditLogs.length}</p>
-              </CardContent>
-            </Card>
-          </div>
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mb-10">
+          {[
+            { label: "Total Users", value: mockUsers.length, icon: Users, iconClass: "text-accent", accent: "from-accent/10 to-accent/5" },
+            { label: "Verified", value: mockUsers.filter(u => u.kycStatus === "verified").length, icon: CheckCircle2, iconClass: "text-success", accent: "from-success/10 to-success/5" },
+            { label: "Pending", value: mockDisclosureRequests.filter(r => r.status === "pending").length, icon: Clock, iconClass: "text-warning", accent: "from-warning/10 to-warning/5" },
+            { label: "Audit Events", value: mockAuditLogs.length, icon: FileText, iconClass: "text-accent", accent: "from-accent/10 to-accent/5" },
+          ].map((card, i) => (
+            <motion.div key={card.label} initial="hidden" animate="visible" variants={fadeIn} custom={i + 1}>
+              <Card className="stat-card rounded-2xl overflow-hidden">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-sm font-medium text-muted-foreground">{card.label}</span>
+                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${card.accent} flex items-center justify-center`}>
+                      <card.icon className={`w-5 h-5 ${card.iconClass}`} />
+                    </div>
+                  </div>
+                  <p className="font-display text-3xl font-bold text-foreground">{card.value}</p>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
 
+        <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={5}>
           <Tabs defaultValue="users" className="space-y-6">
-            <TabsList className="bg-muted p-1">
-              <TabsTrigger value="users">Users</TabsTrigger>
-              <TabsTrigger value="disclosures">Disclosure Requests</TabsTrigger>
-              <TabsTrigger value="audit">Audit Logs</TabsTrigger>
+            <TabsList className="bg-muted/70 p-1.5 rounded-xl border border-border/50">
+              <TabsTrigger value="users" className="rounded-lg font-medium">Users</TabsTrigger>
+              <TabsTrigger value="disclosures" className="rounded-lg font-medium">Disclosure Requests</TabsTrigger>
+              <TabsTrigger value="audit" className="rounded-lg font-medium">Audit Logs</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="users" className="space-y-4">
+            <TabsContent value="users" className="space-y-5">
               <div className="relative max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   placeholder="Search by wallet, email, or user ID..."
-                  className="pl-10"
+                  className="pl-11 h-11 rounded-xl bg-muted/50 border-border/60 focus:bg-card transition-colors"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
               <div className="space-y-3">
                 {filteredUsers.map((user) => (
-                  <Card key={user.id} className="glass-card">
+                  <Card key={user.id} className="glass-card rounded-xl">
                     <CardContent className="p-5 flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+                        <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
                           <User className="w-5 h-5 text-accent" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-foreground">{user.id} — {user.email}</p>
-                          <p className="text-xs text-muted-foreground font-mono">{user.wallet} · {user.wallets} wallet(s)</p>
+                          <p className="text-sm font-semibold text-foreground">{user.id} — {user.email}</p>
+                          <p className="text-xs text-muted-foreground font-mono mt-0.5">{user.wallet} · {user.wallets} wallet(s)</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
                         <Badge
                           variant="outline"
-                          className={user.kycStatus === "verified"
-                            ? "bg-success/10 text-success border-success/20"
-                            : "bg-warning/10 text-warning border-warning/20"
-                          }
+                          className={`rounded-lg px-2.5 ${
+                            user.kycStatus === "verified"
+                              ? "bg-success/10 text-success border-success/20"
+                              : "bg-warning/10 text-warning border-warning/20"
+                          }`}
                         >
                           {user.kycStatus === "verified" ? (
                             <><CheckCircle2 className="w-3 h-3 mr-1" /> Verified</>
@@ -166,7 +159,7 @@ const Admin = () => {
                             <><Clock className="w-3 h-3 mr-1" /> Pending</>
                           )}
                         </Badge>
-                        <Button variant="ghost" size="sm" onClick={() => toast.info("Identity view restricted - access logged")}>
+                        <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9" onClick={() => toast.info("Identity view restricted - access logged")}>
                           <Eye className="w-4 h-4" />
                         </Button>
                       </div>
@@ -176,28 +169,29 @@ const Admin = () => {
               </div>
             </TabsContent>
 
-            <TabsContent value="disclosures" className="space-y-4">
-              <h3 className="font-display font-semibold text-foreground">Lawful Disclosure Requests</h3>
+            <TabsContent value="disclosures" className="space-y-5">
+              <h3 className="font-display font-bold text-lg text-foreground">Lawful Disclosure Requests</h3>
               <div className="space-y-3">
                 {mockDisclosureRequests.map((req) => (
-                  <Card key={req.id} className="glass-card">
+                  <Card key={req.id} className="glass-card rounded-xl">
                     <CardContent className="p-5">
                       <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+                        <div className="flex items-center gap-4">
+                          <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
                             <FileText className="w-5 h-5 text-accent" />
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-foreground">{req.id} — {req.requestor}</p>
-                            <p className="text-xs text-muted-foreground">User: {req.userId} · {req.date}</p>
+                            <p className="text-sm font-semibold text-foreground">{req.id} — {req.requestor}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">User: {req.userId} · {req.date}</p>
                           </div>
                         </div>
                         <Badge
                           variant="outline"
-                          className={req.status === "pending"
-                            ? "bg-warning/10 text-warning border-warning/20"
-                            : "bg-success/10 text-success border-success/20"
-                          }
+                          className={`rounded-lg px-2.5 ${
+                            req.status === "pending"
+                              ? "bg-warning/10 text-warning border-warning/20"
+                              : "bg-success/10 text-success border-success/20"
+                          }`}
                         >
                           {req.status === "pending" ? (
                             <><Clock className="w-3 h-3 mr-1" /> Pending</>
@@ -206,10 +200,10 @@ const Admin = () => {
                           )}
                         </Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground ml-[52px]">{req.reason}</p>
+                      <p className="text-sm text-muted-foreground ml-[60px]">{req.reason}</p>
                       {req.status === "pending" && (
-                        <div className="flex gap-2 ml-[52px] mt-3">
-                          <Button size="sm" onClick={() => toast.success("Disclosure approved - action logged")}>
+                        <div className="flex gap-2 ml-[60px] mt-4">
+                          <Button size="sm" variant="accent" onClick={() => toast.success("Disclosure approved - action logged")}>
                             Approve
                           </Button>
                           <Button size="sm" variant="outline" onClick={() => toast.info("Disclosure rejected - action logged")}>
@@ -223,15 +217,17 @@ const Admin = () => {
               </div>
             </TabsContent>
 
-            <TabsContent value="audit" className="space-y-4">
-              <h3 className="font-display font-semibold text-foreground">Audit Logs</h3>
+            <TabsContent value="audit" className="space-y-5">
+              <h3 className="font-display font-bold text-lg text-foreground">Audit Logs</h3>
               <div className="space-y-3">
                 {mockAuditLogs.map((log) => (
-                  <Card key={log.id} className="glass-card">
+                  <Card key={log.id} className="glass-card rounded-xl">
                     <CardContent className="p-5 flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                          log.severity === "warning" ? "bg-warning/10" : "bg-accent/10"
+                        <div className={`w-11 h-11 rounded-xl border flex items-center justify-center ${
+                          log.severity === "warning"
+                            ? "bg-warning/8 border-warning/10"
+                            : "bg-accent/8 border-accent/10"
                         }`}>
                           {log.severity === "warning"
                             ? <AlertTriangle className="w-5 h-5 text-warning" />
@@ -239,8 +235,8 @@ const Admin = () => {
                           }
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-foreground">{log.action}</p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-sm font-semibold text-foreground">{log.action}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
                             {log.admin} → {log.target} · {log.timestamp}
                           </p>
                         </div>
