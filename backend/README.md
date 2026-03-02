@@ -33,6 +33,17 @@ Private identity-linked wallet registry backend for FIUlink.
 5. Start development server:
    - `npm run dev`
 
+## Admin Bootstrap
+
+Create or promote a user as `admin` or `compliance`:
+
+- `npm run admin:bootstrap -- --email admin@fiulink.com --role admin`
+- `npm run admin:bootstrap -- --email compliance@fiulink.com --role compliance`
+
+Notes:
+- Run this after `npm run db:init`.
+- If the email already exists, the role is updated.
+
 ## API Entry Points
 
 - `GET /api/health`
