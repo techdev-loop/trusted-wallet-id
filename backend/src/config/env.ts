@@ -11,7 +11,8 @@ const envSchema = z.object({
     .string()
     .regex(/^[0-9a-fA-F]{64}$/, "AES_256_KEY must be 64 hex characters"),
   IDENTITY_DATABASE_URL: z.string().url(),
-  WALLET_DATABASE_URL: z.string().url()
+  WALLET_DATABASE_URL: z.string().url(),
+  DATA_RETENTION_DAYS: z.coerce.number().int().positive().default(1825)
 });
 
 const parsed = envSchema.safeParse(process.env);
