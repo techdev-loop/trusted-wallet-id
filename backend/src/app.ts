@@ -1,13 +1,14 @@
 import cors from "cors";
-import dotenv from "dotenv";
 import express from "express";
 import helmet from "helmet";
 import morgan from "morgan";
 import { StatusCodes } from "http-status-codes";
 import { env } from "./config/env.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
-
-dotenv.config();
+import { authRoutes } from "./routes/auth.routes.js";
+import { kycRoutes } from "./routes/kyc.routes.js";
+import { paymentRoutes } from "./routes/payment.routes.js";
+import { walletRoutes } from "./routes/wallet.routes.js";
 
 const app = express();
 
@@ -27,6 +28,11 @@ app.get("/api/health", (_req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+app.use("/api/auth", authRoutes);
+app.use("/api/kyc", kycRoutes);
+app.use("/api/wallet", walletRoutes);
+app.use("/api/payments", paymentRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
