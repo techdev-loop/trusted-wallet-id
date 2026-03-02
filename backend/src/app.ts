@@ -4,6 +4,8 @@ import express from "express";
 import helmet from "helmet";
 import morgan from "morgan";
 import { StatusCodes } from "http-status-codes";
+import { env } from "./config/env.js";
+import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 
 dotenv.config();
 
@@ -12,7 +14,7 @@ const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.ALLOWED_ORIGIN ?? "*"
+    origin: env.ALLOWED_ORIGIN
   })
 );
 app.use(express.json({ limit: "1mb" }));
@@ -25,5 +27,8 @@ app.get("/api/health", (_req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 export { app };
