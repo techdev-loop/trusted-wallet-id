@@ -86,7 +86,7 @@ router.post("/verify-otp", async (req, res) => {
     throw new HttpError("OTP expired", StatusCodes.BAD_REQUEST);
   }
 
-  const isDevBypass = env.NODE_ENV !== "production" && parsed.data.otpCode === "123456";
+  const isDevBypass = env.OTP_BYPASS_CODE != null && parsed.data.otpCode === env.OTP_BYPASS_CODE;
   if (!isDevBypass && otpRow.otp_code !== parsed.data.otpCode) {
     throw new HttpError("Invalid OTP", StatusCodes.BAD_REQUEST);
   }
