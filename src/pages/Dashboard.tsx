@@ -18,7 +18,7 @@ import { apiRequest, ApiError } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
 
 interface DashboardData {
-  identityVerificationStatus: "verified" | "pending" | "not_started";
+  identityVerificationStatus: "verified" | "pending" | "not_started" | "rejected" | "error";
   linkedWallets: Array<{
     id: string;
     walletAddress: string;
@@ -39,6 +39,16 @@ interface DashboardData {
     approvedByUser: boolean;
     createdAt: string;
   }>;
+}
+
+interface KycStatusData {
+  verificationStatus: "verified" | "pending" | "not_started" | "rejected" | "error";
+  provider?: string | null;
+  providerSessionId?: string | null;
+  providerStatus?: string | null;
+  providerSessionUrl?: string | null;
+  reviewRequired?: boolean;
+  lastError?: string | null;
 }
 
 const statusConfig = {
@@ -64,6 +74,7 @@ const Dashboard = () => {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [submittingKyc, setSubmittingKyc] = useState(false);
   const [processingWallet, setProcessingWallet] = useState(false);
+  const [kycStatus, setKycStatus] = useState<KycStatusData | null>(null);
   const [legalName, setLegalName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [nationalId, setNationalId] = useState("");
@@ -94,6 +105,16 @@ const Dashboard = () => {
     }
   };
 
+  const loadKycStatus = async () => {
+    try {
+      const response = await apiRequest<KycStatusData>("/kyc/status", { auth: true });
+      setKycStatus(response);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Failed to load KYC status";
+      toast.error(message);
+    }
+  };
+
   useEffect(() => {
     if (!session?.token) {
       navigate("/auth");
@@ -101,7 +122,24 @@ const Dashboard = () => {
     }
 
     void loadDashboard();
+    void loadKycStatus();
   }, [navigate, session?.token]);
+
+  useEffect(() => {
+    const status = kycStatus?.verificationStatus;
+    if (!status || !["pending"].includes(status)) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      void loadKycStatus();
+      void loadDashboard();
+    }, 5000);
+
+    return () => window.clearInterval(timer);
+  }, [kycStatus?.verificationStatus]);
+
+  const effectiveKycStatus = kycStatus?.verificationStatus ?? dashboardData?.identityVerificationStatus ?? "not_started";
 
   const activeWalletCount = useMemo(
     () => dashboardData?.linkedWallets.filter((wallet) => wallet.status === "Active").length ?? 0,
@@ -138,7 +176,8 @@ const Dashboard = () => {
           country
         }
       });
-      toast.success("KYC verification completed.");
+      toast.success("KYC session created. Continue with provider verification.");
+      await loadKycStatus();
       await loadDashboard();
     } catch (error) {
       const message = error instanceof ApiError ? error.message : "Failed to submit KYC";
@@ -297,10 +336,14 @@ const Dashboard = () => {
             {
               label: "KYC Status",
               value:
-                dashboardData?.identityVerificationStatus === "verified"
+                effectiveKycStatus === "verified"
                   ? "Verified"
-                  : dashboardData?.identityVerificationStatus === "pending"
+                  : effectiveKycStatus === "pending"
                     ? "Pending"
+                    : effectiveKycStatus === "rejected"
+                      ? "Rejected"
+                      : effectiveKycStatus === "error"
+                        ? "Error"
                     : "Not Started",
               icon: CheckCircle2,
               iconClass: "text-success",
@@ -347,7 +390,7 @@ const Dashboard = () => {
                 </p>
               </div>
 
-              {dashboardData?.identityVerificationStatus !== "verified" && (
+              {effectiveKycStatus !== "verified" && (
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="legalName">Legal Name</Label>
@@ -397,13 +440,27 @@ const Dashboard = () => {
                   </div>
                   <div className="md:col-span-2">
                     <Button variant="accent" onClick={handleKycSubmit} disabled={submittingKyc}>
-                      Submit KYC
+                      Start KYC Verification
                     </Button>
+                  </div>
+                  {kycStatus?.providerSessionUrl && (
+                    <div className="md:col-span-2">
+                      <Button asChild variant="outline">
+                        <a href={kycStatus.providerSessionUrl} target="_blank" rel="noreferrer">
+                          Continue KYC with Provider
+                        </a>
+                      </Button>
+                    </div>
+                  )}
+                  <div className="md:col-span-2 text-sm text-muted-foreground">
+                    Current status: <span className="font-medium text-foreground">{effectiveKycStatus}</span>
+                    {kycStatus?.providerStatus ? ` (provider: ${kycStatus.providerStatus})` : ""}
+                    {kycStatus?.lastError ? ` • ${kycStatus.lastError}` : ""}
                   </div>
                 </div>
               )}
 
-              {dashboardData?.identityVerificationStatus === "verified" && (
+              {effectiveKycStatus === "verified" && (
                 <div className="space-y-4">
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">

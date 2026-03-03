@@ -48,7 +48,14 @@ app.use(
     }
   })
 );
-app.use(express.json({ limit: "1mb" }));
+app.use(
+  express.json({
+    limit: "1mb",
+    verify: (req, _res, buffer) => {
+      (req as { rawBody?: string }).rawBody = buffer.toString("utf8");
+    }
+  })
+);
 app.use(morgan("combined"));
 
 app.get("/api/health", async (_req, res) => {

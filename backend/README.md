@@ -43,6 +43,23 @@ Private identity-linked wallet registry backend for FIUlink.
   - Set `OTP_EMAIL_FROM` (for dev/staging, `onboarding@resend.dev` can be used)
 - When Resend is enabled, OTP is not exposed in API response.
 
+## KYC Provider (Didit)
+
+- Set `KYC_PROVIDER=didit` to enable provider-backed KYC.
+- Required values:
+  - `DIDIT_API_KEY`
+  - `DIDIT_FLOW_ID`
+  - `DIDIT_WEBHOOK_SECRET`
+- Optional:
+  - `DIDIT_BASE_URL` (defaults to `https://api.didit.me`)
+
+### Didit webhook setup
+
+- Configure Didit webhook URL to:
+  - `POST /api/kyc/webhooks/didit`
+- Use a public tunnel in local development (for example ngrok) and set webhook URL to your tunnel domain.
+- Webhook signatures are validated using `DIDIT_WEBHOOK_SECRET` before state updates are applied.
+
 ## Admin Bootstrap
 
 Create or promote a user as `admin` or `compliance`:
