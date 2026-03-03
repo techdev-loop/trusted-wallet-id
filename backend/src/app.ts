@@ -17,6 +17,17 @@ import { walletRoutes } from "./routes/wallet.routes.js";
 const app = express();
 const allowedOrigins = getAllowedOrigins();
 
+function originMatchesPattern(requestOrigin: string, pattern: string): boolean {
+  if (!pattern.includes("*")) {
+    return pattern === requestOrigin;
+  }
+
+  // Allow simple wildcard patterns like https://*.vercel.app
+  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+  const regex = new RegExp(`^${escaped}$`, "i");
+  return regex.test(requestOrigin);
+}
+
 app.use(helmet());
 app.use(
   cors({
@@ -31,7 +42,7 @@ app.use(
         return;
       }
 
-      if (allowedOrigins.includes(requestOrigin)) {
+      if (allowedOrigins.some((allowedOrigin) => originMatchesPattern(requestOrigin, allowedOrigin))) {
         callback(null, true);
         return;
       }
