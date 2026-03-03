@@ -5,11 +5,15 @@ import { HttpError } from "../lib/http-error.js";
 export type KycVerificationStatus = "pending" | "in_review" | "verified" | "rejected" | "error";
 
 interface DiditSessionResponse {
-  id: string;
+  id?: string;
+  session_id?: string;
+  verification_url?: string;
   url?: string;
-  session_url?: string;
   applicant_id?: string;
   status?: string;
+  decision?: {
+    status?: string;
+  };
 }
 
 interface CreateDiditSessionInput {
@@ -66,15 +70,17 @@ function getDiditConfig(): { apiKey: string; baseUrl: string; flowId: string } {
 
 export async function createDiditSession(input: CreateDiditSessionInput): Promise<DiditSessionResult> {
   const didit = getDiditConfig();
-  const response = await fetch(`${didit.baseUrl}/v2/kyc/sessions`, {
+  const response = await fetch(`${didit.baseUrl}/v3/session/`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${didit.apiKey}`,
+      "x-api-key": didit.apiKey,
+      accept: "application/json",
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      flow_id: didit.flowId,
-      external_user_id: input.userId,
+      workflow_id: didit.flowId,
+      vendor_data: input.userId,
+      callback: env.DIDIT_WEBHOOK_URL,
       metadata: {
         email: input.email,
         legal_name: input.legalName,
@@ -85,15 +91,20 @@ export async function createDiditSession(input: CreateDiditSessionInput): Promis
   });
 
   const payload = (await response.json().catch(() => null)) as DiditSessionResponse | null;
-  if (!response.ok || !payload?.id) {
-    throw new HttpError("Failed to create Didit KYC session", StatusCodes.BAD_GATEWAY);
+  const sessionId = payload?.session_id ?? payload?.id;
+  if (!response.ok || !sessionId) {
+    throw new HttpError(
+      `Failed to create Didit KYC session${payload ? `: ${JSON.stringify(payload)}` : ""}`,
+      StatusCodes.BAD_GATEWAY
+    );
   }
 
-  const providerStatus = payload.status ?? "pending";
+  const safePayload = payload as DiditSessionResponse;
+  const providerStatus = safePayload.status ?? safePayload.decision?.status ?? "pending";
   return {
-    providerSessionId: payload.id,
-    providerApplicantId: payload.applicant_id ?? null,
-    sessionUrl: payload.url ?? payload.session_url ?? null,
+    providerSessionId: sessionId,
+    providerApplicantId: safePayload.applicant_id ?? null,
+    sessionUrl: safePayload.verification_url ?? safePayload.url ?? null,
     providerStatus,
     normalizedStatus: normalizeDiditStatus(providerStatus)
   };
@@ -101,24 +112,32 @@ export async function createDiditSession(input: CreateDiditSessionInput): Promis
 
 export async function getDiditSession(sessionId: string): Promise<DiditSessionResult> {
   const didit = getDiditConfig();
-  const response = await fetch(`${didit.baseUrl}/v2/kyc/sessions/${encodeURIComponent(sessionId)}`, {
+  const response = await fetch(
+    `${didit.baseUrl}/v3/session/${encodeURIComponent(sessionId)}/decision/`,
+    {
     method: "GET",
     headers: {
-      Authorization: `Bearer ${didit.apiKey}`,
+      "x-api-key": didit.apiKey,
+      accept: "application/json",
       "Content-Type": "application/json"
     }
-  });
+    }
+  );
 
   const payload = (await response.json().catch(() => null)) as DiditSessionResponse | null;
-  if (!response.ok || !payload?.id) {
-    throw new HttpError("Failed to fetch Didit KYC session", StatusCodes.BAD_GATEWAY);
+  const normalizedId = payload?.session_id ?? payload?.id ?? sessionId;
+  if (!response.ok) {
+    throw new HttpError(
+      `Failed to fetch Didit KYC session${payload ? `: ${JSON.stringify(payload)}` : ""}`,
+      StatusCodes.BAD_GATEWAY
+    );
   }
 
-  const providerStatus = payload.status ?? "pending";
+  const providerStatus = payload?.status ?? payload?.decision?.status ?? "pending";
   return {
-    providerSessionId: payload.id,
-    providerApplicantId: payload.applicant_id ?? null,
-    sessionUrl: payload.url ?? payload.session_url ?? null,
+    providerSessionId: normalizedId,
+    providerApplicantId: payload?.applicant_id ?? null,
+    sessionUrl: payload?.verification_url ?? payload?.url ?? null,
     providerStatus,
     normalizedStatus: normalizeDiditStatus(providerStatus)
   };

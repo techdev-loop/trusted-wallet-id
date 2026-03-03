@@ -8,9 +8,13 @@ const envSchema = z.object({
   ALLOWED_ORIGINS: z.string().min(1).optional(),
   KYC_PROVIDER: z.enum(["none", "didit"]).default("none"),
   DIDIT_API_KEY: z.string().min(1).optional(),
-  DIDIT_BASE_URL: z.string().url().default("https://api.didit.me"),
+  DIDIT_BASE_URL: z.string().url().default("https://verification.didit.me"),
   DIDIT_WEBHOOK_SECRET: z.string().min(1).optional(),
   DIDIT_FLOW_ID: z.string().min(1).optional(),
+  DIDIT_WEBHOOK_URL: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().url().optional()
+  ),
   EMAIL_PROVIDER: z.enum(["none", "resend"]).default("none"),
   RESEND_API_KEY: z.string().min(1).optional(),
   OTP_EMAIL_FROM: z.string().email().default("onboarding@resend.dev"),
