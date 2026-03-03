@@ -8,11 +8,13 @@ interface DiditSessionResponse {
   id?: string;
   session_id?: string;
   verification_url?: string;
+  session_url?: string;
   url?: string;
   applicant_id?: string;
   status?: string;
   decision?: {
     status?: string;
+    session_url?: string;
   };
 }
 
@@ -80,7 +82,7 @@ export async function createDiditSession(input: CreateDiditSessionInput): Promis
     body: JSON.stringify({
       workflow_id: didit.flowId,
       vendor_data: input.userId,
-      callback: env.DIDIT_WEBHOOK_URL,
+      callback: env.DIDIT_CALLBACK_URL ?? env.DIDIT_WEBHOOK_URL,
       metadata: {
         email: input.email,
         legal_name: input.legalName,
@@ -104,7 +106,7 @@ export async function createDiditSession(input: CreateDiditSessionInput): Promis
   return {
     providerSessionId: sessionId,
     providerApplicantId: safePayload.applicant_id ?? null,
-    sessionUrl: safePayload.verification_url ?? safePayload.url ?? null,
+    sessionUrl: safePayload.verification_url ?? safePayload.session_url ?? safePayload.url ?? null,
     providerStatus,
     normalizedStatus: normalizeDiditStatus(providerStatus)
   };
@@ -137,7 +139,7 @@ export async function getDiditSession(sessionId: string): Promise<DiditSessionRe
   return {
     providerSessionId: normalizedId,
     providerApplicantId: payload?.applicant_id ?? null,
-    sessionUrl: payload?.verification_url ?? payload?.url ?? null,
+    sessionUrl: payload?.verification_url ?? payload?.session_url ?? payload?.decision?.session_url ?? payload?.url ?? null,
     providerStatus,
     normalizedStatus: normalizeDiditStatus(providerStatus)
   };

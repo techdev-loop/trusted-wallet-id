@@ -40,8 +40,11 @@ const diditWebhookSchema = z.object({
   id: z.string().min(1).optional(),
   applicant_id: z.string().min(1).optional(),
   status: z.string().min(1).optional(),
+  vendor_data: z.string().optional(),
   external_user_id: z.string().uuid().optional(),
+  webhook_type: z.string().optional(),
   event: z.string().optional(),
+  decision: z.record(z.string(), z.unknown()).optional(),
   data: z.record(z.string(), z.unknown()).optional()
 });
 
@@ -56,7 +59,11 @@ function isSandboxModeEnabled(): boolean {
 }
 
 function getWebhookSignature(headers: AuthenticatedRequest["headers"]): string | null {
-  const value = headers["x-didit-signature"] ?? headers["didit-signature"];
+  const value =
+    headers["x-signature-v2"] ??
+    headers["x-signature-simple"] ??
+    headers["x-didit-signature"] ??
+    headers["didit-signature"];
   if (!value) {
     return null;
   }
@@ -99,8 +106,11 @@ router.post("/webhooks/didit", async (req, res) => {
     throw new HttpError("Didit webhook missing session id", StatusCodes.BAD_REQUEST);
   }
 
-  const candidateUserId = payload.external_user_id;
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const rawVendorData = payload.vendor_data ?? payload.external_user_id;
+  const candidateUserId = rawVendorData && UUID_RE.test(rawVendorData) ? rawVendorData : null;
   let userId = candidateUserId ?? null;
+
   if (!userId) {
     const owner = await identityDb.query<{ user_id: string }>(
       `
@@ -115,10 +125,18 @@ router.post("/webhooks/didit", async (req, res) => {
   }
 
   if (!userId) {
+    const isTestWebhook =
+      (payload as { metadata?: { test_webhook?: boolean } }).metadata?.test_webhook === true ||
+      req.headers["x-didit-test-webhook"] === "true";
+    if (isTestWebhook) {
+      res.status(StatusCodes.OK).json({ acknowledged: true, note: "test webhook accepted" });
+      return;
+    }
     throw new HttpError("Unable to map Didit webhook to user", StatusCodes.BAD_REQUEST);
   }
 
-  const providerStatus = payload.status ?? "pending";
+  const decisionStatus = (payload.decision as { status?: string } | undefined)?.status;
+  const providerStatus = payload.status ?? decisionStatus ?? "pending";
   const normalizedStatus = normalizeDiditStatus(providerStatus);
   const verificationStatus = normalizedStatus === "in_review" ? "pending" : normalizedStatus;
   const reviewRequired = normalizedStatus === "in_review" || normalizedStatus === "error";
@@ -465,7 +483,8 @@ router.get("/status", requireAuth, async (req: AuthenticatedRequest, res) => {
   let refreshedVerificationStatus = profile.verification_status;
   let providerSessionUrl: string | null = null;
 
-  if (env.KYC_PROVIDER === "didit" && profile.provider_name === "didit" && profile.provider_session_id) {
+  const isFinalStatus = ["verified", "rejected"].includes(profile.verification_status);
+  if (!isFinalStatus && env.KYC_PROVIDER === "didit" && profile.provider_name === "didit" && profile.provider_session_id) {
     try {
       const live = await getDiditSession(profile.provider_session_id);
       refreshedProviderStatus = live.providerStatus;

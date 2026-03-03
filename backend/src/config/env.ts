@@ -28,6 +28,10 @@ const envSchema = z.object({
     (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
     z.string().url().optional()
   ),
+  DIDIT_CALLBACK_URL: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().url().optional()
+  ),
   KYC_SANDBOX_MODE: booleanFromEnv.optional().default(false),
   KYC_SANDBOX_AUTO_APPROVE: booleanFromEnv.optional().default(false),
   EMAIL_PROVIDER: z.enum(["none", "resend"]).default("none"),

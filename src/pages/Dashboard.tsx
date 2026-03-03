@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Shield, Wallet, CheckCircle2, XCircle, Clock, ExternalLink,
-  Unlink, FileText, ChevronRight, LogOut, User, LayoutDashboard, ArrowUpRight
+  Unlink, FileText, ChevronRight, LogOut, User, LayoutDashboard, ArrowUpRight, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -168,7 +168,7 @@ const Dashboard = () => {
 
     try {
       setSubmittingKyc(true);
-      await apiRequest("/kyc/submit", {
+      const submitResponse = await apiRequest<KycStatusData>("/kyc/submit", {
         method: "POST",
         auth: true,
         body: {
@@ -180,6 +180,14 @@ const Dashboard = () => {
           country
         }
       });
+      // Immediately store the session URL from submit so the button shows right away
+      if (submitResponse.providerSessionUrl) {
+        setKycStatus((prev) => ({
+          ...prev,
+          verificationStatus: "pending",
+          providerSessionUrl: submitResponse.providerSessionUrl
+        } as KycStatusData));
+      }
       toast.success("KYC session created. Continue with provider verification.");
       await loadKycStatus();
       await loadDashboard();
@@ -475,7 +483,29 @@ const Dashboard = () => {
                 </p>
               </div>
 
-              {effectiveKycStatus !== "verified" && (
+              {effectiveKycStatus === "pending" && (
+                <div className="flex flex-col items-start gap-4">
+                  <div className="flex items-center gap-3 p-4 rounded-xl bg-warning/10 border border-warning/20 w-full">
+                    <Loader2 className="w-5 h-5 text-warning animate-spin shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Verification in progress</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Your identity is being reviewed. This page will update automatically once verified.
+                      </p>
+                    </div>
+                  </div>
+                  {kycStatus?.providerSessionUrl && (
+                    <Button asChild variant="outline">
+                      <a href={kycStatus.providerSessionUrl} target="_blank" rel="noreferrer">
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Continue Verification with Provider
+                      </a>
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {(effectiveKycStatus === "not_started" || effectiveKycStatus === "error") && (
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="legalName">Legal Name</Label>
@@ -528,19 +558,22 @@ const Dashboard = () => {
                       Start KYC Verification
                     </Button>
                   </div>
-                  {kycStatus?.providerSessionUrl && (
-                    <div className="md:col-span-2">
-                      <Button asChild variant="outline">
-                        <a href={kycStatus.providerSessionUrl} target="_blank" rel="noreferrer">
-                          Continue KYC with Provider
-                        </a>
-                      </Button>
+                  {effectiveKycStatus === "error" && kycStatus?.lastError && (
+                    <div className="md:col-span-2 text-sm text-destructive">
+                      {kycStatus.lastError}
                     </div>
                   )}
-                  <div className="md:col-span-2 text-sm text-muted-foreground">
-                    Current status: <span className="font-medium text-foreground">{effectiveKycStatus}</span>
-                    {kycStatus?.providerStatus ? ` (provider: ${kycStatus.providerStatus})` : ""}
-                    {kycStatus?.lastError ? ` • ${kycStatus.lastError}` : ""}
+                </div>
+              )}
+
+              {effectiveKycStatus === "rejected" && (
+                <div className="flex items-center gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/20 w-full">
+                  <XCircle className="w-5 h-5 text-destructive shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Verification rejected</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Your identity verification was not approved. Please contact support.
+                    </p>
                   </div>
                 </div>
               )}
