@@ -17,6 +17,10 @@ import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
 
+interface EthereumProvider {
+  request: (args: { method: string; params?: unknown[] | object }) => Promise<unknown>;
+}
+
 interface DashboardData {
   identityVerificationStatus: "verified" | "pending" | "not_started" | "rejected" | "error";
   linkedWallets: Array<{
@@ -205,6 +209,87 @@ const Dashboard = () => {
       toast.success("Challenge message generated. Sign it with your wallet.");
     } catch (error) {
       const message = error instanceof ApiError ? error.message : "Failed to initiate wallet linking";
+      toast.error(message);
+    } finally {
+      setProcessingWallet(false);
+    }
+  };
+
+  const getEthereumProvider = (): EthereumProvider | null => {
+    const provider = (window as Window & { ethereum?: EthereumProvider }).ethereum;
+    return provider ?? null;
+  };
+
+  const signMessageWithWallet = async (
+    provider: EthereumProvider,
+    account: string,
+    message: string
+  ): Promise<string> => {
+    try {
+      const primary = await provider.request({
+        method: "personal_sign",
+        params: [message, account]
+      });
+      if (typeof primary === "string" && primary.length > 0) {
+        return primary;
+      }
+    } catch {
+      // Some wallets use reversed params for personal_sign.
+    }
+
+    const fallback = await provider.request({
+      method: "personal_sign",
+      params: [account, message]
+    });
+    if (typeof fallback !== "string" || fallback.length === 0) {
+      throw new Error("Wallet did not return a valid signature.");
+    }
+    return fallback;
+  };
+
+  const handleConnectAndSignWallet = async () => {
+    const provider = getEthereumProvider();
+    if (!provider) {
+      toast.error("No EVM wallet detected. Install MetaMask or another wallet.");
+      return;
+    }
+
+    try {
+      setProcessingWallet(true);
+      const accountsRaw = await provider.request({ method: "eth_requestAccounts" });
+      const accounts = Array.isArray(accountsRaw)
+        ? accountsRaw.filter((value): value is string => typeof value === "string")
+        : [];
+      const connectedAccount = accounts[0];
+      if (!connectedAccount) {
+        throw new Error("No wallet account was returned by the provider.");
+      }
+
+      const normalizedAddress = connectedAccount.toLowerCase();
+      setWalletAddress(normalizedAddress);
+
+      const initiateResponse = await apiRequest<{ messageToSign: string }>("/wallet/link/initiate", {
+        method: "POST",
+        auth: true,
+        body: { walletAddress: normalizedAddress }
+      });
+
+      const challengeMessage = initiateResponse.messageToSign;
+      setMessageToSign(challengeMessage);
+
+      const signedMessage = await signMessageWithWallet(provider, normalizedAddress, challengeMessage);
+      setSignature(signedMessage);
+
+      await apiRequest("/wallet/link/confirm", {
+        method: "POST",
+        auth: true,
+        body: { walletAddress: normalizedAddress, signature: signedMessage }
+      });
+
+      setWalletStep("pay");
+      toast.success("Wallet connected and signature verified. Complete the 10 USDT payment.");
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Failed to connect wallet and sign message";
       toast.error(message);
     } finally {
       setProcessingWallet(false);
@@ -504,6 +589,9 @@ const Dashboard = () => {
                   </div>
 
                   <div className="flex flex-wrap gap-3">
+                    <Button variant="accent" onClick={handleConnectAndSignWallet} disabled={processingWallet}>
+                      Connect Wallet & Sign Message
+                    </Button>
                     <Button variant="outline" onClick={handleInitiateWallet} disabled={processingWallet}>
                       1) Generate Challenge
                     </Button>
