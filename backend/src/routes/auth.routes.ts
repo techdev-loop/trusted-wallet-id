@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { StatusCodes } from "http-status-codes";
 import { z } from "zod";
+import { env } from "../config/env.js";
 import { identityDb } from "../db/pool.js";
 import { HttpError } from "../lib/http-error.js";
 import { signAccessToken } from "../security/jwt.js";
+import { sendOtpEmail } from "../services/email.service.js";
 import type { AppRole } from "../types/auth.js";
 
 const signupSchema = z.object({
@@ -34,12 +36,14 @@ router.post("/signup", async (req, res) => {
     [parsed.data.email.toLowerCase(), otpCode, expiresAt]
   );
 
+  await sendOtpEmail(parsed.data.email.toLowerCase(), otpCode);
+
   const response: Record<string, unknown> = {
     message: "OTP sent successfully",
     email: parsed.data.email.toLowerCase()
   };
 
-  if (process.env.NODE_ENV !== "production") {
+  if (env.NODE_ENV !== "production" && env.EMAIL_PROVIDER === "none") {
     response.otpCode = otpCode;
   }
 

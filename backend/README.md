@@ -34,6 +34,15 @@ Private identity-linked wallet registry backend for FIUlink.
 5. Start development server:
    - `npm run dev`
 
+## OTP Email (Resend)
+
+- Default behavior: `EMAIL_PROVIDER=none` (OTP is returned in response during non-production for local development)
+- To enable Resend:
+  - Set `EMAIL_PROVIDER=resend`
+  - Set `RESEND_API_KEY=<your-resend-api-key>`
+  - Set `OTP_EMAIL_FROM` (for dev/staging, `onboarding@resend.dev` can be used)
+- When Resend is enabled, OTP is not exposed in API response.
+
 ## Admin Bootstrap
 
 Create or promote a user as `admin` or `compliance`:

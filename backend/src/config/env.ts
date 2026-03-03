@@ -6,6 +6,10 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   ALLOWED_ORIGIN: z.string().min(1).optional(),
   ALLOWED_ORIGINS: z.string().min(1).optional(),
+  EMAIL_PROVIDER: z.enum(["none", "resend"]).default("none"),
+  RESEND_API_KEY: z.string().min(1).optional(),
+  OTP_EMAIL_FROM: z.string().email().default("onboarding@resend.dev"),
+  OTP_EMAIL_REPLY_TO: z.string().email().optional(),
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRY: z.string().min(1).default("1h"),
   AES_256_KEY: z
