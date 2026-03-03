@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import { StatusCodes } from "http-status-codes";
 import { z } from "zod";
 import { env } from "../config/env.js";
@@ -20,7 +20,19 @@ const kycSchema = z.object({
   legalName: z.string().min(2),
   dateOfBirth: z.string().min(4),
   nationalId: z.string().min(4),
-  country: z.string().min(2)
+  country: z.string().min(2),
+  documents: z
+    .array(
+      z.object({
+        type: z.string().min(1),
+        fileName: z.string().min(1),
+        documentNumber: z.string().min(1).optional(),
+        issuingCountry: z.string().min(2).optional()
+      })
+    )
+    .max(10)
+    .optional(),
+  sandboxDecision: z.enum(["approved", "in_review", "rejected"]).optional()
 });
 
 const diditWebhookSchema = z.object({
@@ -37,6 +49,11 @@ const router = Router();
 const OTP_RETRY_COOLDOWN_MS = 60 * 1000;
 const MAX_KYC_INIT_ATTEMPTS = 5;
 const SYSTEM_AUDIT_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
+const SANDBOX_PROVIDER_NAME = "didit_sandbox";
+
+function isSandboxModeEnabled(): boolean {
+  return env.NODE_ENV !== "production" && env.KYC_SANDBOX_MODE;
+}
 
 function getWebhookSignature(headers: AuthenticatedRequest["headers"]): string | null {
   const value = headers["x-didit-signature"] ?? headers["didit-signature"];
@@ -154,6 +171,73 @@ router.post("/webhooks/didit", async (req, res) => {
 
 router.use(requireAuth);
 
+router.post("/sandbox/decision", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (!isSandboxModeEnabled()) {
+    throw new HttpError("Sandbox KYC controls are disabled", StatusCodes.NOT_FOUND);
+  }
+  if (!req.user) {
+    throw new HttpError("Unauthorized", StatusCodes.UNAUTHORIZED);
+  }
+
+  const parsed = z
+    .object({
+      decision: z.enum(["approved", "in_review", "rejected"]),
+      reason: z.string().max(500).optional()
+    })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
+  }
+
+  const decision = parsed.data.decision;
+  const verificationStatus = decision === "approved" ? "verified" : decision === "rejected" ? "rejected" : "pending";
+  const completed = verificationStatus === "verified" || verificationStatus === "rejected";
+
+  const updateResult = await identityDb.query(
+    `
+      UPDATE kyc_profiles
+      SET provider_name = $2,
+          provider_status = $3,
+          provider_raw_result_json = $4,
+          verification_status = $5,
+          review_required = $6,
+          last_error = CASE WHEN $5 = 'rejected' THEN COALESCE($7, 'Sandbox rejected') ELSE NULL END,
+          verified_at = CASE WHEN $5 = 'verified' THEN NOW() ELSE verified_at END,
+          completed_at = CASE WHEN $8 THEN NOW() ELSE completed_at END,
+          updated_at = NOW()
+      WHERE user_id = $1
+      RETURNING user_id
+    `,
+    [
+      req.user.sub,
+      SANDBOX_PROVIDER_NAME,
+      decision,
+      encryptText(
+        JSON.stringify({
+          provider: SANDBOX_PROVIDER_NAME,
+          decision,
+          reason: parsed.data.reason ?? null,
+          decidedAt: new Date().toISOString()
+        })
+      ),
+      verificationStatus,
+      decision === "in_review",
+      parsed.data.reason ?? null,
+      completed
+    ]
+  );
+
+  if (!updateResult.rows[0]) {
+    throw new HttpError("Start KYC first before setting sandbox decision", StatusCodes.BAD_REQUEST);
+  }
+
+  res.status(StatusCodes.OK).json({
+    verificationStatus,
+    provider: SANDBOX_PROVIDER_NAME,
+    providerStatus: decision
+  });
+});
+
 router.post("/submit", requireAuth, async (req: AuthenticatedRequest, res) => {
   const parsed = kycSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -173,7 +257,8 @@ router.post("/submit", requireAuth, async (req: AuthenticatedRequest, res) => {
       legalName: parsed.data.legalName,
       dateOfBirth: parsed.data.dateOfBirth,
       nationalId: parsed.data.nationalId,
-      country: parsed.data.country
+      country: parsed.data.country,
+      documents: parsed.data.documents ?? []
     })
   );
 
@@ -223,8 +308,20 @@ router.post("/submit", requireAuth, async (req: AuthenticatedRequest, res) => {
   let verificationStatus = "pending";
   let reviewRequired = false;
   let lastError: string | null = null;
+  let providerName: string | null = null;
 
-  if (env.KYC_PROVIDER === "didit") {
+  if (isSandboxModeEnabled()) {
+    const sandboxDecision = parsed.data.sandboxDecision ?? (env.KYC_SANDBOX_AUTO_APPROVE ? "approved" : "in_review");
+    providerName = SANDBOX_PROVIDER_NAME;
+    providerSessionId = `sandbox-${randomUUID()}`;
+    providerApplicantId = `sandbox-applicant-${req.user.sub}`;
+    providerStatus = sandboxDecision;
+    verificationStatus =
+      sandboxDecision === "approved" ? "verified" : sandboxDecision === "rejected" ? "rejected" : "pending";
+    reviewRequired = sandboxDecision === "in_review";
+    providerSessionUrl = null;
+  } else if (env.KYC_PROVIDER === "didit") {
+    providerName = "didit";
     try {
       const session = await createDiditSession({
         userId: req.user.sub,
@@ -302,16 +399,17 @@ router.post("/submit", requireAuth, async (req: AuthenticatedRequest, res) => {
       encryptedIdentityPayload,
       parsed.data.consentVersion,
       verificationStatus,
-      env.KYC_PROVIDER === "didit" ? "didit" : null,
+      providerName,
       providerSessionId,
       providerApplicantId,
       providerStatus,
       providerSessionId
         ? encryptText(
             JSON.stringify({
-              provider: "didit",
+              provider: providerName,
               providerSessionId,
-              providerStatus
+              providerStatus,
+              documents: parsed.data.documents ?? []
             })
           )
         : null,
@@ -327,7 +425,7 @@ router.post("/submit", requireAuth, async (req: AuthenticatedRequest, res) => {
       verificationStatus === "error"
         ? "KYC session could not be started. Compliance review may be required."
         : "KYC session created successfully",
-    provider: env.KYC_PROVIDER === "didit" ? "didit" : "none",
+    provider: providerName ?? "none",
     providerSessionId,
     providerSessionUrl
   });
@@ -367,7 +465,7 @@ router.get("/status", requireAuth, async (req: AuthenticatedRequest, res) => {
   let refreshedVerificationStatus = profile.verification_status;
   let providerSessionUrl: string | null = null;
 
-  if (env.KYC_PROVIDER === "didit" && profile.provider_session_id) {
+  if (env.KYC_PROVIDER === "didit" && profile.provider_name === "didit" && profile.provider_session_id) {
     try {
       const live = await getDiditSession(profile.provider_session_id);
       refreshedProviderStatus = live.providerStatus;

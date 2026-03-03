@@ -1,6 +1,19 @@
 import "dotenv/config";
 import { z } from "zod";
 
+const booleanFromEnv = z.preprocess((value) => {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") {
+      return true;
+    }
+    if (normalized === "false") {
+      return false;
+    }
+  }
+  return value;
+}, z.boolean());
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
@@ -15,6 +28,8 @@ const envSchema = z.object({
     (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
     z.string().url().optional()
   ),
+  KYC_SANDBOX_MODE: booleanFromEnv.optional().default(false),
+  KYC_SANDBOX_AUTO_APPROVE: booleanFromEnv.optional().default(false),
   EMAIL_PROVIDER: z.enum(["none", "resend"]).default("none"),
   RESEND_API_KEY: z.string().min(1).optional(),
   OTP_EMAIL_FROM: z.string().email().default("onboarding@resend.dev"),
