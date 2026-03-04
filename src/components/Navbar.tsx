@@ -2,10 +2,12 @@ import { Link } from "react-router-dom";
 import { Shield, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -14,33 +16,45 @@ const Navbar = () => {
   }, []);
 
   return (
-    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-      scrolled 
-        ? "bg-card/90 backdrop-blur-xl border-b border-border/50 shadow-[var(--shadow-sm)]" 
-        : "bg-transparent border-b border-transparent"
-    }`}>
-      <div className="container mx-auto flex items-center justify-between h-16 px-4">
+    <nav
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        scrolled
+          ? "bg-slate-950/85 backdrop-blur-xl border-b border-slate-800/80 shadow-[var(--shadow-sm)]"
+          : "bg-transparent border-b border-transparent"
+      }`}
+    >
+      <div className="container mx-auto flex items-center justify-between h-16 px-4 text-white">
         <Link to="/" className="flex items-center gap-2.5 group">
           <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow duration-300">
             <Shield className="w-4.5 h-4.5 text-accent-foreground" />
           </div>
-          <span className="font-display font-bold text-lg text-foreground">FIUlink</span>
+          <span className="font-display font-bold text-lg text-white">FIUlink</span>
         </Link>
 
-        <div className="hidden md:flex items-center gap-8">
+        <div className="hidden md:flex items-center gap-1">
           {["How It Works", "Features", "Security"].map((item) => (
             <a
               key={item}
               href={`#${item.toLowerCase().replace(/\s+/g, '-')}`}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-accent after:transition-all after:duration-300 hover:after:w-full"
+              className="relative text-sm py-1.5 px-4 flex cursor-pointer items-center justify-center gap-1 text-white/60 hover:text-white transition-colors duration-300"
+              onMouseEnter={() => setHoveredItem(item)}
+              onMouseLeave={() => setHoveredItem(null)}
             >
-              {item}
+              <span className="relative z-10">{item}</span>
+              {hoveredItem === item && (
+                <motion.div
+                  layoutId="nav-hover-bg"
+                  className="absolute inset-0 bg-white/10"
+                  style={{ borderRadius: 999 }}
+                  transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                />
+              )}
             </a>
           ))}
         </div>
 
         <div className="hidden md:flex items-center gap-3">
-          <Button variant="ghost" asChild>
+          <Button variant="ghost" asChild className="text-white hover:text-white/80">
             <Link to="/auth">Sign In</Link>
           </Button>
           <Button variant="accent" asChild>
@@ -49,7 +63,7 @@ const Navbar = () => {
         </div>
 
         <button
-          className="md:hidden text-foreground p-2 hover:bg-muted rounded-lg transition-colors"
+          className="md:hidden text-white p-2 hover:bg-white/10 rounded-lg transition-colors"
           onClick={() => setMobileOpen(!mobileOpen)}
         >
           {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -57,12 +71,12 @@ const Navbar = () => {
       </div>
 
       {mobileOpen && (
-        <div className="md:hidden bg-card/95 backdrop-blur-xl border-b border-border px-4 pb-5 pt-2 space-y-1 animate-slide-up">
+        <div className="md:hidden bg-slate-950/95 backdrop-blur-xl border-b border-slate-800 px-4 pb-5 pt-2 space-y-1 animate-slide-up text-white">
           {["How It Works", "Features", "Security"].map((item) => (
             <a
               key={item}
               href={`#${item.toLowerCase().replace(/\s+/g, '-')}`}
-              className="block text-sm text-muted-foreground py-2.5 px-3 rounded-lg hover:bg-muted transition-colors"
+              className="block text-sm text-white/80 py-2.5 px-3 rounded-lg hover:bg-white/5 transition-colors"
               onClick={() => setMobileOpen(false)}
             >
               {item}
