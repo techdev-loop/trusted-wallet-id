@@ -13,6 +13,7 @@ import { kycRoutes } from "./routes/kyc.routes.js";
 import { legalRoutes } from "./routes/legal.routes.js";
 import { paymentRoutes } from "./routes/payment.routes.js";
 import { walletRoutes } from "./routes/wallet.routes.js";
+import { web3Routes } from "./routes/web3.routes.js";
 
 const app = express();
 const allowedOrigins = getAllowedOrigins();
@@ -105,6 +106,7 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/legal", legalRoutes);
+app.use("/api/web3", web3Routes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
