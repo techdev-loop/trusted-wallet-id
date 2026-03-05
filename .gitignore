@@ -9,7 +9,6 @@ lerna-debug.log*
 
 node_modules
 contracts
-backend
 dist
 dist-ssr
 *.local
