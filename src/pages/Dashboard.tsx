@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
+import { approveUSDT, registerWalletViaContract } from "@/lib/web3";
 
 interface EthereumProvider {
   request: (args: { method: string; params?: unknown[] | object }) => Promise<unknown>;
@@ -81,7 +82,6 @@ const Dashboard = () => {
   const [walletAddress, setWalletAddress] = useState("");
   const [messageToSign, setMessageToSign] = useState("");
   const [signature, setSignature] = useState("");
-  const [paymentTxHash, setPaymentTxHash] = useState("");
   const [paymentReadyToPay, setPaymentReadyToPay] = useState(false);
 
   const session = getSession();
@@ -331,24 +331,38 @@ const Dashboard = () => {
   };
 
   const handlePayUsdt = async () => {
-    if (!walletAddress || !paymentTxHash) {
-      toast.error("Wallet address and transaction hash are required.");
+    if (!walletAddress) {
+      toast.error("Wallet address is required.");
       return;
     }
 
     try {
       setProcessingWallet(true);
+      toast.info("Preparing contract payment...");
+
+      const contractConfig = await apiRequest<{ contractAddress: string }>("/web3/contract-config/ethereum");
+      if (!contractConfig.contractAddress) {
+        throw new Error("Contract address is not configured.");
+      }
+
+      // Step 1: Approve 10 USDT spend for the registry contract.
+      await approveUSDT("ethereum", contractConfig.contractAddress);
+
+      // Step 2: Execute on-chain wallet registration/payment transaction.
+      const txHash = await registerWalletViaContract("ethereum", contractConfig.contractAddress);
+
+      // Step 3: Persist payment/activation on backend.
       await apiRequest("/payments/confirm", {
         method: "POST",
         auth: true,
         body: {
           walletAddress,
-          txHash: paymentTxHash,
+          txHash,
           amountUsdt: 10
         }
       });
+
       toast.success("10 USDT payment completed and wallet activated.");
-      setPaymentTxHash("");
       setPaymentReadyToPay(false);
       await loadDashboard();
     } catch (error) {
@@ -590,17 +604,6 @@ const Dashboard = () => {
                         placeholder="0x..."
                       />
                     </div>
-                    {paymentReadyToPay && (
-                      <div className="space-y-2">
-                        <Label htmlFor="paymentHash">10 USDT Payment Tx Hash</Label>
-                        <Input
-                          id="paymentHash"
-                          value={paymentTxHash}
-                          onChange={(event) => setPaymentTxHash(event.target.value)}
-                          placeholder="0x..."
-                        />
-                      </div>
-                    )}
                   </div>
 
                   <div className="space-y-2">
