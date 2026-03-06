@@ -316,59 +316,95 @@ export async function connectWallet(
   return await connectWithProvider(provider, chain);
 }
 
-function getRawEip1193Provider(provider: ethers.BrowserProvider): Eip1193Provider | null {
-  const p = provider as unknown as { provider?: Eip1193Provider };
-  return p?.provider ?? null;
+function getRawProvider(provider: ethers.BrowserProvider): {
+  request?: (args: unknown) => Promise<unknown>;
+  session?: {
+    namespaces?: Record<string, { chains?: string[] }>;
+    requiredNamespaces?: Record<string, { chains?: string[] }>;
+  };
+} | null {
+  const browserProviderLike = provider as unknown as { provider?: unknown };
+  if (!browserProviderLike.provider || typeof browserProviderLike.provider !== "object") {
+    return null;
+  }
+  return browserProviderLike.provider as {
+    request?: (args: unknown) => Promise<unknown>;
+    session?: {
+      namespaces?: Record<string, { chains?: string[] }>;
+      requiredNamespaces?: Record<string, { chains?: string[] }>;
+    };
+  };
 }
 
-async function trySwitchChain(
+function getWalletConnectChainCandidates(rawProvider: {
+  session?: {
+    namespaces?: Record<string, { chains?: string[] }>;
+    requiredNamespaces?: Record<string, { chains?: string[] }>;
+  };
+} | null, targetChainHex: string): string[] {
+  const candidates = new Set<string>();
+  const decimalChainId = Number.parseInt(targetChainHex, 16);
+
+  if (Number.isFinite(decimalChainId) && decimalChainId > 0) {
+    candidates.add(`eip155:${decimalChainId}`);
+    candidates.add(String(decimalChainId));
+  }
+  candidates.add(targetChainHex.toLowerCase());
+
+  const eip155Chains =
+    rawProvider?.session?.namespaces?.eip155?.chains ??
+    rawProvider?.session?.requiredNamespaces?.eip155?.chains ??
+    [];
+  for (const chainEntry of eip155Chains) {
+    if (typeof chainEntry !== "string") continue;
+    candidates.add(chainEntry);
+    const parsed = Number.parseInt(chainEntry.replace("eip155:", ""), 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      candidates.add(`eip155:${parsed}`);
+      candidates.add(String(parsed));
+      candidates.add(`0x${parsed.toString(16)}`);
+    }
+  }
+
+  return Array.from(candidates);
+}
+
+async function sendWalletRpcWithFallback(
   provider: ethers.BrowserProvider,
-  config: ChainConfig,
-  rawProvider: Eip1193Provider | null
-): Promise<boolean> {
-  const params = [{ chainId: config.chainId }];
-
-  // 1. Standard provider.send (ethers)
+  method: string,
+  params: unknown[],
+  targetChainHex: string
+): Promise<unknown> {
   try {
-    await provider.send("wallet_switchEthereumChain", params);
-    return true;
-  } catch {
-    // Fall through
-  }
+    return await provider.send(method, params);
+  } catch (primaryError) {
+    const rawProvider = getRawProvider(provider);
+    if (!rawProvider?.request) {
+      throw primaryError;
+    }
 
-  // 2. Raw EIP-1193 request (bypasses ethers wrapper)
-  if (rawProvider?.request) {
     try {
-      await rawProvider.request({
-        method: "wallet_switchEthereumChain",
-        params
-      });
-      return true;
+      return await rawProvider.request({ method, params });
     } catch {
-      // Fall through
-    }
+      // WalletConnect mobile providers may require universal-provider shape:
+      // request({ chainId, request: { method, params } })
+      const chainCandidates = getWalletConnectChainCandidates(rawProvider, targetChainHex);
+      let lastError: unknown = primaryError;
 
-    // 3. WalletConnect universal format: { chainId, request: { method, params } }
-    const chainIdDecimal = Number.parseInt(config.chainId, 16);
-    const chainIdVariants = [
-      `eip155:${chainIdDecimal}`,
-      config.chainId,
-      String(chainIdDecimal)
-    ];
-    for (const chainId of chainIdVariants) {
-      try {
-        await rawProvider.request({
-          chainId,
-          request: { method: "wallet_switchEthereumChain", params }
-        } as unknown as { method: string; params?: unknown[] });
-        return true;
-      } catch {
-        // Try next variant
+      for (const chainId of chainCandidates) {
+        try {
+          return await rawProvider.request({
+            chainId,
+            request: { method, params }
+          });
+        } catch (error) {
+          lastError = error;
+        }
       }
+
+      throw lastError;
     }
   }
-
-  return false;
 }
 
 /**
@@ -390,40 +426,59 @@ export async function switchNetwork(chain: Chain, providerOverride?: ethers.Brow
     // Continue with explicit switch attempts below.
   }
 
-  const rawProvider = getRawEip1193Provider(provider);
+  const needsChainAdd = (error: unknown): boolean => {
+    const err = error as
+      | {
+          code?: number;
+          message?: string;
+          error?: { code?: number; message?: string };
+          info?: { error?: { code?: number; message?: string } };
+        }
+      | undefined;
+    const directCode = err?.code;
+    const nestedCode = err?.error?.code ?? err?.info?.error?.code;
+    const directMessage = err?.message ?? "";
+    const nestedMessage = err?.error?.message ?? err?.info?.error?.message ?? "";
+    const allMessage = `${directMessage} ${nestedMessage}`.toLowerCase();
+    return (
+      directCode === 4902 ||
+      nestedCode === 4902 ||
+      allMessage.includes("unrecognized chain id") ||
+      allMessage.includes("try adding the chain using wallet_addethereumchain")
+    );
+  };
 
-  if (await trySwitchChain(provider, config, rawProvider)) {
-    return;
-  }
-
-  // Chain may not be in wallet; try adding it then switching again
   try {
-    await provider.send("wallet_addEthereumChain", [
-      {
-        chainId: config.chainId,
-        chainName: config.chainName,
-        nativeCurrency: config.nativeCurrency,
-        rpcUrls: config.rpcUrls,
-        blockExplorerUrls: config.blockExplorerUrls
+    await sendWalletRpcWithFallback(provider, "wallet_switchEthereumChain", [{ chainId: config.chainId }], config.chainId);
+  } catch (switchError) {
+    if (!needsChainAdd(switchError)) {
+      throw switchError;
+    }
+
+    try {
+      await sendWalletRpcWithFallback(provider, "wallet_addEthereumChain", [
+        {
+          chainId: config.chainId,
+          chainName: config.chainName,
+          nativeCurrency: config.nativeCurrency,
+          rpcUrls: config.rpcUrls,
+          blockExplorerUrls: config.blockExplorerUrls
+        }
+      ], config.chainId);
+      // Some wallets require an explicit second switch after adding the chain.
+      await sendWalletRpcWithFallback(provider, "wallet_switchEthereumChain", [{ chainId: config.chainId }], config.chainId);
+    } catch {
+      try {
+        const currentChainId = await provider.send("eth_chainId", []);
+        if (typeof currentChainId === "string" && currentChainId.toLowerCase() === config.chainId.toLowerCase()) {
+          return;
+        }
+      } catch {
+        // Ignore and throw the user-facing error below.
       }
-    ]);
-    if (await trySwitchChain(provider, config, rawProvider)) {
-      return;
+      throw new Error(`Failed to add/switch to ${chain} network in wallet.`);
     }
-  } catch {
-    // Add failed or switch still failed; check if we're already on the right chain
   }
-
-  try {
-    const currentChainId = await provider.send("eth_chainId", []);
-    if (typeof currentChainId === "string" && currentChainId.toLowerCase() === config.chainId.toLowerCase()) {
-      return;
-    }
-  } catch {
-    // Ignore
-  }
-
-  throw new Error(`Failed to add/switch to ${chain} network in wallet.`);
 }
 
 /**
