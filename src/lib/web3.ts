@@ -221,13 +221,6 @@ async function createWalletConnectProvider(chain: Chain): Promise<Eip1193Provide
   return provider as unknown as Eip1193Provider;
 }
 
-function hasValidWalletConnectProjectId(): boolean {
-  const rawProjectId = (import.meta as { env?: Record<string, string | undefined> }).env
-    ?.VITE_WALLETCONNECT_PROJECT_ID;
-  const projectId = rawProjectId?.trim();
-  return Boolean(projectId && /^[a-fA-F0-9]{32}$/.test(projectId));
-}
-
 /**
  * Get Ethereum provider (MetaMask, etc.)
  */
@@ -251,92 +244,69 @@ async function signWithPersonalSign(
   address: string,
   chain: Chain
 ): Promise<string> {
-  const rawProvider = activeEip1193Provider as
-    | {
-        request?: (payload: {
-          method: string;
-          params?: unknown[];
-          chainId?: string | number;
-        }) => Promise<unknown>;
-      }
-    | null;
   const hexMessage = toHexMessage(message);
-  let lastError: unknown = null;
-
-  const personalSignParamCandidates: unknown[][] = [
-    [message, address],
-    [address, message],
-    [hexMessage, address],
-    [address, hexMessage]
-  ];
-
-  for (const params of personalSignParamCandidates) {
-    try {
-      return await browserProvider.send("personal_sign", params);
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  if (rawProvider?.request) {
-    for (const params of personalSignParamCandidates) {
-      try {
-        const maybeSig = await rawProvider.request({
-          method: "personal_sign",
-          params
-        });
-        if (typeof maybeSig === "string") {
-          return maybeSig;
-        }
-      } catch (error) {
-        lastError = error;
-      }
-    }
-
-    const caipChainId = `eip155:${Number.parseInt(CHAIN_CONFIGS[chain].chainId, 16)}`;
-    const hexChainId = CHAIN_CONFIGS[chain].chainId;
-    const decimalChainId = Number.parseInt(hexChainId, 16);
-    const chainIdCandidates: Array<string | number> = [caipChainId, hexChainId, decimalChainId];
-
-    for (const chainIdValue of chainIdCandidates) {
-      for (const params of personalSignParamCandidates) {
-        try {
-          const maybeSig = await rawProvider.request({
-            method: "personal_sign",
-            params,
-            chainId: chainIdValue
-          });
-          if (typeof maybeSig === "string") {
-            return maybeSig;
-          }
-        } catch (error) {
-          lastError = error;
-        }
-      }
-    }
-  }
-
   try {
-    return await browserProvider.send("eth_sign", [address, hexMessage]);
-  } catch (error) {
-    lastError = error;
-  }
+    return await browserProvider.send("personal_sign", [hexMessage, address]);
+  } catch (primaryError) {
+    const err = primaryError as { message?: string } | undefined;
+    const lowerMessage = (err?.message ?? "").toLowerCase();
+    const needsChainContext =
+      lowerMessage.includes("missing or invalid") &&
+      lowerMessage.includes("request() chainid");
 
-  if (rawProvider?.request) {
-    try {
-      const maybeSig = await rawProvider.request({
-        method: "eth_sign",
-        params: [address, hexMessage]
-      });
-      if (typeof maybeSig === "string") {
-        return maybeSig;
+    if (needsChainContext) {
+      const rawProvider = activeEip1193Provider as
+        | {
+            request?: (payload: {
+              method: string;
+              params?: unknown[];
+              chainId?: string | number;
+            }) => Promise<unknown>;
+          }
+        | null;
+      const caipChainId = `eip155:${Number.parseInt(CHAIN_CONFIGS[chain].chainId, 16)}`;
+      const hexChainId = CHAIN_CONFIGS[chain].chainId;
+      const decimalChainId = Number.parseInt(hexChainId, 16);
+
+      if (rawProvider?.request) {
+        const chainIdCandidates: Array<string | number> = [caipChainId, hexChainId, decimalChainId];
+        for (const chainIdValue of chainIdCandidates) {
+          try {
+            const chainAwareSig = await rawProvider.request({
+              method: "personal_sign",
+              params: [hexMessage, address],
+              chainId: chainIdValue
+            });
+            if (typeof chainAwareSig === "string") {
+              return chainAwareSig;
+            }
+          } catch {
+            // Try alternate parameter order and next chain format.
+          }
+          try {
+            const chainAwareSigAlt = await rawProvider.request({
+              method: "personal_sign",
+              params: [address, hexMessage],
+              chainId: chainIdValue
+            });
+            if (typeof chainAwareSigAlt === "string") {
+              return chainAwareSigAlt;
+            }
+          } catch {
+            // Continue trying additional formats.
+          }
+        }
       }
-    } catch (error) {
-      lastError = error;
+    }
+
+    // Some providers expect reversed params [address, message]
+    try {
+      return await browserProvider.send("personal_sign", [address, hexMessage]);
+    } catch {
+      // Legacy fallback for wallets that only support eth_sign.
+      return await browserProvider.send("eth_sign", [address, hexMessage]);
     }
   }
-
-  throw normalizeWalletError(lastError);
 }
 
 export async function signWalletMessage(message: string, addressHint?: string, chain: Chain = "ethereum"): Promise<string> {
@@ -474,10 +444,6 @@ export async function connectWallet(
   }
 
   if (method === "walletconnect") {
-    return await connectWithWalletConnect(chain);
-  }
-
-  if (method === "auto" && isMobileDevice() && hasValidWalletConnectProjectId()) {
     return await connectWithWalletConnect(chain);
   }
 
