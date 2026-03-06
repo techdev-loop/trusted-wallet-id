@@ -226,65 +226,6 @@ export function getEthereumProvider(): ethers.BrowserProvider | null {
   return new ethers.BrowserProvider(provider);
 }
 
-function toHexMessage(message: string): string {
-  return ethers.hexlify(ethers.toUtf8Bytes(message));
-}
-
-async function sleep(ms: number): Promise<void> {
-  await new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-async function signWithPersonalSign(
-  browserProvider: ethers.BrowserProvider,
-  message: string,
-  address: string
-): Promise<string> {
-  const hexMessage = toHexMessage(message);
-  try {
-    return await browserProvider.send("personal_sign", [hexMessage, address]);
-  } catch {
-    // Some providers expect reversed params [address, message]
-    return await browserProvider.send("personal_sign", [address, hexMessage]);
-  }
-}
-
-export async function signWalletMessage(message: string, addressHint?: string): Promise<string> {
-  const provider = getEthereumProvider();
-  if (!provider) {
-    throw new Error("Wallet provider not available for signing.");
-  }
-
-  const signer = await provider.getSigner();
-  const address = (addressHint ?? (await signer.getAddress())).toLowerCase();
-
-  const maxAttempts = isMobileDevice() ? 3 : 1;
-  let lastError: unknown = null;
-
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    try {
-      if (attempt > 0) {
-        await provider.send("eth_requestAccounts", []);
-      }
-      return await signer.signMessage(message);
-    } catch (error) {
-      lastError = error;
-      if (!isMobileDevice() || isUserRejectedError(error)) {
-        break;
-      }
-      await sleep(600);
-    }
-  }
-
-  try {
-    return await signWithPersonalSign(provider, message, address);
-  } catch (fallbackError) {
-    if (isUserRejectedError(fallbackError)) {
-      throw normalizeWalletError(fallbackError);
-    }
-    throw normalizeWalletError(lastError ?? fallbackError);
-  }
-}
-
 async function connectWithProvider(provider: Eip1193Provider, chain: Chain): Promise<string> {
   activeEip1193Provider = provider;
   const browserProvider = new ethers.BrowserProvider(provider);
