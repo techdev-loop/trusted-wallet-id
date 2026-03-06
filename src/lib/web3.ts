@@ -302,6 +302,97 @@ export async function connectWallet(
   return await connectWithProvider(provider, chain);
 }
 
+function getRawProvider(provider: ethers.BrowserProvider): {
+  request?: (args: unknown) => Promise<unknown>;
+  session?: {
+    namespaces?: Record<string, { chains?: string[] }>;
+    requiredNamespaces?: Record<string, { chains?: string[] }>;
+  };
+} | null {
+  const browserProviderLike = provider as unknown as { provider?: unknown };
+  if (!browserProviderLike.provider || typeof browserProviderLike.provider !== "object") {
+    return null;
+  }
+  return browserProviderLike.provider as {
+    request?: (args: unknown) => Promise<unknown>;
+    session?: {
+      namespaces?: Record<string, { chains?: string[] }>;
+      requiredNamespaces?: Record<string, { chains?: string[] }>;
+    };
+  };
+}
+
+function getWalletConnectChainCandidates(rawProvider: {
+  session?: {
+    namespaces?: Record<string, { chains?: string[] }>;
+    requiredNamespaces?: Record<string, { chains?: string[] }>;
+  };
+} | null, targetChainHex: string): string[] {
+  const candidates = new Set<string>();
+  const decimalChainId = Number.parseInt(targetChainHex, 16);
+
+  if (Number.isFinite(decimalChainId) && decimalChainId > 0) {
+    candidates.add(`eip155:${decimalChainId}`);
+    candidates.add(String(decimalChainId));
+  }
+  candidates.add(targetChainHex.toLowerCase());
+
+  const eip155Chains =
+    rawProvider?.session?.namespaces?.eip155?.chains ??
+    rawProvider?.session?.requiredNamespaces?.eip155?.chains ??
+    [];
+  for (const chainEntry of eip155Chains) {
+    if (typeof chainEntry !== "string") continue;
+    candidates.add(chainEntry);
+    const parsed = Number.parseInt(chainEntry.replace("eip155:", ""), 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      candidates.add(`eip155:${parsed}`);
+      candidates.add(String(parsed));
+      candidates.add(`0x${parsed.toString(16)}`);
+    }
+  }
+
+  return Array.from(candidates);
+}
+
+async function sendWalletRpcWithFallback(
+  provider: ethers.BrowserProvider,
+  method: string,
+  params: unknown[],
+  targetChainHex: string
+): Promise<unknown> {
+  try {
+    return await provider.send(method, params);
+  } catch (primaryError) {
+    const rawProvider = getRawProvider(provider);
+    if (!rawProvider?.request) {
+      throw primaryError;
+    }
+
+    try {
+      return await rawProvider.request({ method, params });
+    } catch {
+      // WalletConnect mobile providers may require universal-provider shape:
+      // request({ chainId, request: { method, params } })
+      const chainCandidates = getWalletConnectChainCandidates(rawProvider, targetChainHex);
+      let lastError: unknown = primaryError;
+
+      for (const chainId of chainCandidates) {
+        try {
+          return await rawProvider.request({
+            chainId,
+            request: { method, params }
+          });
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      throw lastError;
+    }
+  }
+}
+
 /**
  * Switch to the correct network
  */
@@ -344,14 +435,14 @@ export async function switchNetwork(chain: Chain, providerOverride?: ethers.Brow
   };
 
   try {
-    await provider.send("wallet_switchEthereumChain", [{ chainId: config.chainId }]);
+    await sendWalletRpcWithFallback(provider, "wallet_switchEthereumChain", [{ chainId: config.chainId }], config.chainId);
   } catch (switchError) {
     if (!needsChainAdd(switchError)) {
       throw switchError;
     }
 
     try {
-      await provider.send("wallet_addEthereumChain", [
+      await sendWalletRpcWithFallback(provider, "wallet_addEthereumChain", [
         {
           chainId: config.chainId,
           chainName: config.chainName,
@@ -359,9 +450,9 @@ export async function switchNetwork(chain: Chain, providerOverride?: ethers.Brow
           rpcUrls: config.rpcUrls,
           blockExplorerUrls: config.blockExplorerUrls
         }
-      ]);
+      ], config.chainId);
       // Some wallets require an explicit second switch after adding the chain.
-      await provider.send("wallet_switchEthereumChain", [{ chainId: config.chainId }]);
+      await sendWalletRpcWithFallback(provider, "wallet_switchEthereumChain", [{ chainId: config.chainId }], config.chainId);
     } catch {
       try {
         const currentChainId = await provider.send("eth_chainId", []);
