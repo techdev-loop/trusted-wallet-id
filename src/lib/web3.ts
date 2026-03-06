@@ -257,7 +257,14 @@ async function signWithPersonalSign(
           method: string;
           params?: unknown[];
           chainId?: string | number;
+          request?: {
+            method: string;
+            params?: unknown[];
+          };
         }) => Promise<unknown>;
+        session?: {
+          namespaces?: Record<string, { chains?: string[] }>;
+        };
       }
     | null;
   const hexMessage = toHexMessage(message);
@@ -294,9 +301,13 @@ async function signWithPersonalSign(
     }
 
     const caipChainId = `eip155:${Number.parseInt(CHAIN_CONFIGS[chain].chainId, 16)}`;
+    const sessionCaipChainId =
+      rawProvider.session?.namespaces?.eip155?.chains?.[0] ??
+      rawProvider.session?.namespaces?.eip155?.chains?.find((c) => c.includes(":"));
+    const effectiveCaipChainId = sessionCaipChainId ?? caipChainId;
     const hexChainId = CHAIN_CONFIGS[chain].chainId;
     const decimalChainId = Number.parseInt(hexChainId, 16);
-    const chainIdCandidates: Array<string | number> = [caipChainId, hexChainId, decimalChainId];
+    const chainIdCandidates: Array<string | number> = [effectiveCaipChainId, caipChainId, hexChainId, decimalChainId];
 
     for (const chainIdValue of chainIdCandidates) {
       for (const params of personalSignParamCandidates) {
@@ -305,6 +316,37 @@ async function signWithPersonalSign(
             method: "personal_sign",
             params,
             chainId: chainIdValue
+          });
+          if (typeof maybeSig === "string") {
+            return maybeSig;
+          }
+        } catch (error) {
+          lastError = error;
+        }
+      }
+    }
+
+    // WalletConnect Universal Provider format:
+    // request({ chainId: "eip155:11155111", request: { method, params } })
+    const wcParamCandidates: unknown[][] = [
+      [message, address],
+      [address, message],
+      [hexMessage, address],
+      [address, hexMessage]
+    ];
+    for (const chainIdValue of chainIdCandidates) {
+      if (typeof chainIdValue !== "string" || !chainIdValue.includes(":")) {
+        continue;
+      }
+      for (const params of wcParamCandidates) {
+        try {
+          const maybeSig = await rawProvider.request({
+            method: "personal_sign",
+            chainId: chainIdValue,
+            request: {
+              method: "personal_sign",
+              params
+            }
           });
           if (typeof maybeSig === "string") {
             return maybeSig;
@@ -327,6 +369,25 @@ async function signWithPersonalSign(
       const maybeSig = await rawProvider.request({
         method: "eth_sign",
         params: [address, hexMessage]
+      });
+      if (typeof maybeSig === "string") {
+        return maybeSig;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+
+    const caipForEthSign =
+      rawProvider.session?.namespaces?.eip155?.chains?.[0] ??
+      `eip155:${Number.parseInt(CHAIN_CONFIGS[chain].chainId, 16)}`;
+    try {
+      const maybeSig = await rawProvider.request({
+        method: "eth_sign",
+        chainId: caipForEthSign,
+        request: {
+          method: "eth_sign",
+          params: [address, hexMessage]
+        }
       });
       if (typeof maybeSig === "string") {
         return maybeSig;
