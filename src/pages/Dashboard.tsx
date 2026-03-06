@@ -87,7 +87,6 @@ const Dashboard = () => {
   const [paymentReadyToPay, setPaymentReadyToPay] = useState(false);
 
   const session = getSession();
-  const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
 
   const loadDashboard = async () => {
     try {
@@ -374,15 +373,12 @@ const Dashboard = () => {
           </Link>
 
           <div className="flex items-center gap-3">
-            {canAccessAdmin && (
-              <Button variant="outline" size="sm" asChild className="h-9 rounded-xl">
-                <Link to="/admin" className="inline-flex items-center gap-1.5">
-                  <span className="hidden sm:inline">Admin Panel</span>
-                  <span className="sm:hidden">Admin</span>
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                </Link>
-              </Button>
-            )}
+            <Button variant="outline" size="sm" asChild className="h-9 rounded-xl">
+              <Link to="/admin" className="inline-flex items-center gap-1.5">
+                Admin Panel
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </Link>
+            </Button>
             <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-muted/70 border border-border/50">
               <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
                 <User className="w-3.5 h-3.5 text-accent" />
