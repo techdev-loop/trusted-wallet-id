@@ -129,6 +129,58 @@ function normalizeWalletError(error: unknown): Error {
   return new Error("Wallet connection failed");
 }
 
+function isMobileDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || navigator.vendor || "";
+  return /android|iphone|ipad|ipod|mobile/i.test(ua);
+}
+
+function isUserRejectedError(error: unknown): boolean {
+  const err = error as
+    | {
+        code?: number | string;
+        message?: string;
+        error?: { code?: number | string; message?: string };
+        info?: { error?: { code?: number | string; message?: string } };
+      }
+    | undefined;
+
+  const codes = [err?.code, err?.error?.code, err?.info?.error?.code].filter(
+    (value): value is number | string => value !== undefined
+  );
+  const lowerMessage = `${err?.message ?? ""} ${err?.error?.message ?? ""} ${err?.info?.error?.message ?? ""}`
+    .toLowerCase();
+  return (
+    codes.includes(4001) ||
+    codes.includes("ACTION_REJECTED") ||
+    lowerMessage.includes("user rejected") ||
+    lowerMessage.includes("rejected the request")
+  );
+}
+
+function isRecoverableConnectionError(error: unknown): boolean {
+  if (isUserRejectedError(error)) {
+    return false;
+  }
+  const err = error as
+    | {
+        code?: number | string;
+        message?: string;
+        error?: { code?: number | string; message?: string };
+        info?: { error?: { code?: number | string; message?: string } };
+      }
+    | undefined;
+  const message = `${err?.message ?? ""} ${err?.error?.message ?? ""} ${err?.info?.error?.message ?? ""}`.toLowerCase();
+  return (
+    message.includes("provider") ||
+    message.includes("unsupported") ||
+    message.includes("disconnected") ||
+    message.includes("wallet") ||
+    message.includes("chain") ||
+    message.includes("network")
+  );
+}
+
 async function createWalletConnectProvider(chain: Chain): Promise<Eip1193Provider> {
   const rawProjectId = (import.meta as { env?: Record<string, string | undefined> }).env
     ?.VITE_WALLETCONNECT_PROJECT_ID;
@@ -210,6 +262,11 @@ export async function connectWallet(
         lastError = error;
       }
     }
+    if (isMobileDevice() && isRecoverableConnectionError(lastError)) {
+      const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
+      walletConnectProvider = provider;
+      return await connectWithProvider(provider, chain);
+    }
     throw normalizeWalletError(lastError);
   }
 
@@ -230,6 +287,12 @@ export async function connectWallet(
       }
     }
 
+    if (isMobileDevice() && isRecoverableConnectionError(lastInjectedError)) {
+      const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
+      walletConnectProvider = provider;
+      return await connectWithProvider(provider, chain);
+    }
+
     // If injected wallets are present but all failed, show that explicit error.
     throw normalizeWalletError(lastInjectedError);
   }
@@ -248,6 +311,15 @@ export async function switchNetwork(chain: Chain, providerOverride?: ethers.Brow
 
   const config = CHAIN_CONFIGS[chain];
   if (!config) return;
+
+  try {
+    const currentChainId = await provider.send("eth_chainId", []);
+    if (typeof currentChainId === "string" && currentChainId.toLowerCase() === config.chainId.toLowerCase()) {
+      return;
+    }
+  } catch {
+    // Continue with explicit switch attempts below.
+  }
 
   const needsChainAdd = (error: unknown): boolean => {
     const err = error as
@@ -291,6 +363,14 @@ export async function switchNetwork(chain: Chain, providerOverride?: ethers.Brow
       // Some wallets require an explicit second switch after adding the chain.
       await provider.send("wallet_switchEthereumChain", [{ chainId: config.chainId }]);
     } catch {
+      try {
+        const currentChainId = await provider.send("eth_chainId", []);
+        if (typeof currentChainId === "string" && currentChainId.toLowerCase() === config.chainId.toLowerCase()) {
+          return;
+        }
+      } catch {
+        // Ignore and throw the user-facing error below.
+      }
       throw new Error(`Failed to add/switch to ${chain} network in wallet.`);
     }
   }
