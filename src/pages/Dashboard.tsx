@@ -26,15 +26,9 @@ interface DashboardData {
   linkedWallets: Array<{
     id: string;
     walletAddress: string;
-    status: "Active" | "Unlinked";
+    status: "Active" | "Pending Verification" | "Unlinked";
     linkedAt: string | null;
     unlinkedAt: string | null;
-  }>;
-  paymentHistory: Array<{
-    txHash: string;
-    amountUsdt: number;
-    walletAddress: string;
-    paidAt: string;
   }>;
   disclosureHistory: Array<{
     id: string;
@@ -87,8 +81,6 @@ const Dashboard = () => {
   const [walletAddress, setWalletAddress] = useState("");
   const [messageToSign, setMessageToSign] = useState("");
   const [signature, setSignature] = useState("");
-  const [paymentTxHash, setPaymentTxHash] = useState("");
-  const [walletStep, setWalletStep] = useState<"init" | "sign" | "pay">("init");
 
   const session = getSession();
 
@@ -213,7 +205,6 @@ const Dashboard = () => {
         body: { walletAddress }
       });
       setMessageToSign(response.messageToSign);
-      setWalletStep("sign");
       toast.success("Challenge message generated. Sign it with your wallet.");
     } catch (error) {
       const message = error instanceof ApiError ? error.message : "Failed to initiate wallet linking";
@@ -294,8 +285,12 @@ const Dashboard = () => {
         body: { walletAddress: normalizedAddress, signature: signedMessage }
       });
 
-      setWalletStep("pay");
-      toast.success("Wallet connected and signature verified. Complete the 10 USDT payment.");
+      toast.success(
+        effectiveKycStatus === "verified"
+          ? "Wallet linked and active."
+          : "Wallet linked. It will become active once KYC is verified."
+      );
+      await loadDashboard();
     } catch (error) {
       const message = error instanceof ApiError ? error.message : "Failed to connect wallet and sign message";
       toast.error(message);
@@ -317,42 +312,14 @@ const Dashboard = () => {
         auth: true,
         body: { walletAddress, signature }
       });
-      setWalletStep("pay");
-      toast.success("Signature verified. Complete the 10 USDT payment.");
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Signature verification failed";
-      toast.error(message);
-    } finally {
-      setProcessingWallet(false);
-    }
-  };
-
-  const handleConfirmPayment = async () => {
-    if (!walletAddress || !paymentTxHash) {
-      toast.error("Wallet address and transaction hash are required.");
-      return;
-    }
-
-    try {
-      setProcessingWallet(true);
-      await apiRequest("/payments/confirm", {
-        method: "POST",
-        auth: true,
-        body: {
-          walletAddress,
-          txHash: paymentTxHash,
-          amountUsdt: 10
-        }
-      });
-      toast.success("Wallet is now identity-linked.");
-      setWalletAddress("");
-      setMessageToSign("");
-      setSignature("");
-      setPaymentTxHash("");
-      setWalletStep("init");
+      toast.success(
+        effectiveKycStatus === "verified"
+          ? "Wallet linked and active."
+          : "Wallet linked. It will become active once KYC is verified."
+      );
       await loadDashboard();
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Failed to confirm payment";
+      const message = error instanceof ApiError ? error.message : "Signature verification failed";
       toast.error(message);
     } finally {
       setProcessingWallet(false);
@@ -450,8 +417,8 @@ const Dashboard = () => {
               accent: "from-accent/10 to-accent/5",
             },
             {
-              label: "Total Payments",
-              value: `${dashboardData?.paymentHistory.length ?? 0} Transactions`,
+              label: "Verification Stage",
+              value: effectiveKycStatus === "verified" ? "Approved" : effectiveKycStatus === "pending" ? "Pending" : "Open",
               icon: FileText,
               iconClass: "text-accent",
               accent: "from-accent/10 to-accent/5",
@@ -479,7 +446,7 @@ const Dashboard = () => {
               <div>
                 <h3 className="font-display font-bold text-lg text-foreground">Onboarding Actions</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Complete KYC, sign your wallet verification challenge, then confirm 10 USDT payment.
+                  Complete KYC and connect wallets. Wallets linked during pending review become active once verified.
                 </p>
               </div>
 
@@ -578,7 +545,7 @@ const Dashboard = () => {
                 </div>
               )}
 
-              {effectiveKycStatus === "verified" && (
+              {(effectiveKycStatus === "pending" || effectiveKycStatus === "verified") && (
                 <div className="space-y-4">
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -587,15 +554,6 @@ const Dashboard = () => {
                         id="walletAddress"
                         value={walletAddress}
                         onChange={(event) => setWalletAddress(event.target.value)}
-                        placeholder="0x..."
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="paymentHash">Payment Transaction Hash</Label>
-                      <Input
-                        id="paymentHash"
-                        value={paymentTxHash}
-                        onChange={(event) => setPaymentTxHash(event.target.value)}
                         placeholder="0x..."
                       />
                     </div>
@@ -631,16 +589,9 @@ const Dashboard = () => {
                     <Button
                       variant="outline"
                       onClick={handleConfirmSignature}
-                      disabled={processingWallet || walletStep === "init"}
+                      disabled={processingWallet}
                     >
                       2) Verify Signature
-                    </Button>
-                    <Button
-                      variant="accent"
-                      onClick={handleConfirmPayment}
-                      disabled={processingWallet || walletStep !== "pay"}
-                    >
-                      3) Confirm 10 USDT Payment
                     </Button>
                   </div>
                 </div>
@@ -654,7 +605,6 @@ const Dashboard = () => {
           <Tabs defaultValue="wallets" className="space-y-6">
             <TabsList className="bg-muted/70 p-1.5 rounded-xl border border-border/50">
               <TabsTrigger value="wallets" className="rounded-lg font-medium">Wallets</TabsTrigger>
-              <TabsTrigger value="payments" className="rounded-lg font-medium">Payments</TabsTrigger>
               <TabsTrigger value="disclosures" className="rounded-lg font-medium">Disclosures</TabsTrigger>
             </TabsList>
 
@@ -664,7 +614,12 @@ const Dashboard = () => {
               </div>
               <div className="space-y-3">
                 {(dashboardData?.linkedWallets ?? []).map((wallet) => {
-                  const walletStatus = wallet.status === "Active" ? "active" : "unlinked";
+                  const walletStatus =
+                    wallet.status === "Active"
+                      ? "active"
+                      : wallet.status === "Pending Verification"
+                        ? "pending"
+                        : "unlinked";
                   const linkedDateLabel = wallet.linkedAt
                     ? new Date(wallet.linkedAt).toLocaleDateString()
                     : "N/A";
@@ -686,7 +641,7 @@ const Dashboard = () => {
                             <config.icon className="w-3 h-3 mr-1" />
                             {config.label}
                           </Badge>
-                          {walletStatus === "active" && (
+                          {(walletStatus === "active" || walletStatus === "pending") && (
                             <Button
                               variant="ghost"
                               size="icon"
@@ -705,39 +660,6 @@ const Dashboard = () => {
                   <Card className="glass-card rounded-xl">
                     <CardContent className="p-5 text-sm text-muted-foreground">
                       No wallets linked yet.
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="payments" className="space-y-5">
-              <h3 className="font-display font-bold text-lg text-foreground">Payment History</h3>
-              <div className="space-y-3">
-                {(dashboardData?.paymentHistory ?? []).map((payment) => (
-                  <Card key={payment.txHash} className="glass-card rounded-xl">
-                    <CardContent className="p-5 flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-11 h-11 rounded-xl bg-success/8 border border-success/10 flex items-center justify-center">
-                          <CheckCircle2 className="w-5 h-5 text-success" />
-                        </div>
-                        <div>
-                          <p className="font-mono text-sm font-semibold text-foreground">{payment.txHash}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {new Date(payment.paidAt).toLocaleDateString()} · {payment.amountUsdt} USDT
-                          </p>
-                        </div>
-                      </div>
-                      <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
-                        <ExternalLink className="w-4 h-4" />
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-                {(dashboardData?.paymentHistory.length ?? 0) === 0 && (
-                  <Card className="glass-card rounded-xl">
-                    <CardContent className="p-5 text-sm text-muted-foreground">
-                      No payment records yet.
                     </CardContent>
                   </Card>
                 )}

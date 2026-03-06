@@ -23,7 +23,7 @@ const steps = [
     icon: Shield,
     step: "03",
     title: "Identity Linked",
-    description: "Your wallet is now identity-linked. Pay the one-time 10 USDT fee to activate.",
+    description: "Your wallet becomes active once third-party identity verification is approved.",
   },
 ];
 
