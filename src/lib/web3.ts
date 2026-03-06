@@ -249,26 +249,49 @@ export async function switchNetwork(chain: Chain, providerOverride?: ethers.Brow
   const config = CHAIN_CONFIGS[chain];
   if (!config) return;
 
+  const needsChainAdd = (error: unknown): boolean => {
+    const err = error as
+      | {
+          code?: number;
+          message?: string;
+          error?: { code?: number; message?: string };
+          info?: { error?: { code?: number; message?: string } };
+        }
+      | undefined;
+    const directCode = err?.code;
+    const nestedCode = err?.error?.code ?? err?.info?.error?.code;
+    const directMessage = err?.message ?? "";
+    const nestedMessage = err?.error?.message ?? err?.info?.error?.message ?? "";
+    const allMessage = `${directMessage} ${nestedMessage}`.toLowerCase();
+    return (
+      directCode === 4902 ||
+      nestedCode === 4902 ||
+      allMessage.includes("unrecognized chain id") ||
+      allMessage.includes("try adding the chain using wallet_addethereumchain")
+    );
+  };
+
   try {
     await provider.send("wallet_switchEthereumChain", [{ chainId: config.chainId }]);
-  } catch (switchError: any) {
-    // This error code indicates that the chain has not been added to MetaMask
-    if (switchError.code === 4902) {
-      try {
-        await provider.send("wallet_addEthereumChain", [
-          {
-            chainId: config.chainId,
-            chainName: config.chainName,
-            nativeCurrency: config.nativeCurrency,
-            rpcUrls: config.rpcUrls,
-            blockExplorerUrls: config.blockExplorerUrls
-          }
-        ]);
-      } catch (addError) {
-        throw new Error(`Failed to add ${chain} network to wallet`);
-      }
-    } else {
+  } catch (switchError) {
+    if (!needsChainAdd(switchError)) {
       throw switchError;
+    }
+
+    try {
+      await provider.send("wallet_addEthereumChain", [
+        {
+          chainId: config.chainId,
+          chainName: config.chainName,
+          nativeCurrency: config.nativeCurrency,
+          rpcUrls: config.rpcUrls,
+          blockExplorerUrls: config.blockExplorerUrls
+        }
+      ]);
+      // Some wallets require an explicit second switch after adding the chain.
+      await provider.send("wallet_switchEthereumChain", [{ chainId: config.chainId }]);
+    } catch {
+      throw new Error(`Failed to add/switch to ${chain} network in wallet.`);
     }
   }
 }
