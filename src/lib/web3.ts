@@ -14,6 +14,11 @@ export interface ChainConfig {
   blockExplorerUrls: string[];
 }
 
+type Eip1193Provider = ethers.Eip1193Provider;
+
+let activeEip1193Provider: Eip1193Provider | null = null;
+let walletConnectProvider: Eip1193Provider | null = null;
+
 // Chain configurations for MetaMask
 // Note: For testnets, the frontend will use the network from backend config
 export const CHAIN_CONFIGS: Record<Chain, ChainConfig> = {
@@ -94,30 +99,70 @@ export const WALLET_REGISTRY_ABI = [
   "event WalletRegistered(address indexed wallet, uint256 amount, uint256 timestamp)"
 ];
 
+function getInjectedProvider(): Eip1193Provider | null {
+  if (typeof window === "undefined") return null;
+  const ethereum = (window as Window & { ethereum?: Eip1193Provider }).ethereum;
+  return ethereum ?? null;
+}
+
+async function createWalletConnectProvider(chain: Chain): Promise<Eip1193Provider> {
+  const projectId = (import.meta as { env?: Record<string, string | undefined> }).env
+    ?.VITE_WALLETCONNECT_PROJECT_ID;
+  if (!projectId) {
+    throw new Error(
+      "WalletConnect is not configured. Set VITE_WALLETCONNECT_PROJECT_ID to enable Trust Wallet, OKX Wallet, and SafePal connections."
+    );
+  }
+
+  const { default: EthereumProvider } = await import("@walletconnect/ethereum-provider");
+  const selectedConfig = CHAIN_CONFIGS[chain];
+  const selectedChainId = Number.parseInt(selectedConfig.chainId, 16);
+
+  const provider = (await EthereumProvider.init({
+    projectId,
+    showQrModal: true,
+    chains: [selectedChainId],
+    optionalChains: [11155111, 56, 1],
+    methods: [
+      "eth_requestAccounts",
+      "eth_accounts",
+      "eth_sendTransaction",
+      "personal_sign",
+      "wallet_switchEthereumChain",
+      "wallet_addEthereumChain"
+    ]
+  })) as { enable: () => Promise<unknown> };
+
+  await provider.enable();
+  return provider as unknown as Eip1193Provider;
+}
+
 /**
  * Get Ethereum provider (MetaMask, etc.)
  */
 export function getEthereumProvider(): ethers.BrowserProvider | null {
-  if (typeof window === "undefined") return null;
-  const ethereum = (window as Window & { ethereum?: ethers.Eip1193Provider }).ethereum;
-  if (!ethereum) return null;
-  return new ethers.BrowserProvider(ethereum);
+  const provider = activeEip1193Provider ?? getInjectedProvider();
+  if (!provider) return null;
+  return new ethers.BrowserProvider(provider);
 }
 
 /**
  * Connect to wallet and get address
  */
 export async function connectWallet(chain: Chain): Promise<string> {
-  const provider = getEthereumProvider();
+  let provider = getInjectedProvider();
   if (!provider) {
-    throw new Error("No Ethereum wallet detected. Please install MetaMask.");
+    provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
+    walletConnectProvider = provider;
   }
+  activeEip1193Provider = provider;
+  const browserProvider = new ethers.BrowserProvider(provider);
 
   // Request account access
-  await provider.send("eth_requestAccounts", []);
+  await browserProvider.send("eth_requestAccounts", []);
 
   // Get signer
-  const signer = await provider.getSigner();
+  const signer = await browserProvider.getSigner();
   const address = await signer.getAddress();
 
   // Switch to correct network if needed
@@ -188,7 +233,9 @@ export async function getUSDTBalance(chain: Chain, address: string): Promise<big
   if (!provider) throw new Error("No provider");
 
   const signer = await provider.getSigner();
-  const contractWithSigner = contract.connect(signer);
+  const contractWithSigner = contract.connect(signer) as unknown as {
+    balanceOf: (account: string) => Promise<bigint>;
+  };
 
   return await contractWithSigner.balanceOf(address);
 }
@@ -212,7 +259,9 @@ export async function approveUSDT(
   if (!provider) throw new Error("No provider");
 
   const signer = await provider.getSigner();
-  const contractWithSigner = contract.connect(signer);
+  const contractWithSigner = contract.connect(signer) as unknown as {
+    approve: (spender: string, value: bigint) => Promise<{ wait: () => Promise<unknown>; hash: string }>;
+  };
 
   // If amount not specified, approve max (2^256 - 1)
   const approvalAmount = amount || ethers.MaxUint256;
@@ -238,7 +287,11 @@ export async function checkUSDTAllowance(
   const contract = getUSDTContract(chain);
   if (!contract) throw new Error("Failed to get USDT contract");
 
-  return await contract.allowance(ownerAddress, spenderAddress);
+  const allowanceReader = contract as unknown as {
+    allowance: (owner: string, spender: string) => Promise<bigint>;
+  };
+
+  return await allowanceReader.allowance(ownerAddress, spenderAddress);
 }
 
 /**
@@ -256,7 +309,9 @@ export async function registerWalletViaContract(
   if (!provider) throw new Error("No provider");
 
   const signer = await provider.getSigner();
-  const contract = new ethers.Contract(contractAddress, WALLET_REGISTRY_ABI, signer);
+  const contract = new ethers.Contract(contractAddress, WALLET_REGISTRY_ABI, signer) as unknown as {
+    registerWallet: () => Promise<{ wait: () => Promise<{ hash?: string } | null>; hash: string }>;
+  };
 
   // Call registerWallet() function (no parameters)
   const tx = await contract.registerWallet();
