@@ -107,12 +107,16 @@ function getInjectedProvider(): Eip1193Provider | null {
 }
 
 async function createWalletConnectProvider(chain: Chain): Promise<Eip1193Provider> {
-  const projectId = (import.meta as { env?: Record<string, string | undefined> }).env
+  const rawProjectId = (import.meta as { env?: Record<string, string | undefined> }).env
     ?.VITE_WALLETCONNECT_PROJECT_ID;
+  const projectId = rawProjectId?.trim();
   if (!projectId) {
     throw new Error(
       "WalletConnect is not configured. Set VITE_WALLETCONNECT_PROJECT_ID to enable Trust Wallet, OKX Wallet, and SafePal connections."
     );
+  }
+  if (!/^[a-fA-F0-9]{32}$/.test(projectId)) {
+    throw new Error("Invalid WalletConnect project ID format. Check VITE_WALLETCONNECT_PROJECT_ID.");
   }
 
   const { default: EthereumProvider } = await import("@walletconnect/ethereum-provider");
