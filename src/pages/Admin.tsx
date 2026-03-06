@@ -233,7 +233,8 @@ const Admin = () => {
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm" asChild className="h-9 rounded-xl">
               <Link to="/dashboard" className="inline-flex items-center gap-1.5">
-                User Dashboard
+                <span className="hidden sm:inline">User Dashboard</span>
+                <span className="sm:hidden">Dashboard</span>
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </Link>
             </Button>
