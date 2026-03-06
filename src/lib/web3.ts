@@ -16,6 +16,9 @@ export interface ChainConfig {
 }
 
 type Eip1193Provider = ethers.Eip1193Provider;
+type Eip1193ProviderWithSession = Eip1193Provider & {
+  disconnect?: () => Promise<void>;
+};
 
 let activeEip1193Provider: Eip1193Provider | null = null;
 let walletConnectProvider: Eip1193Provider | null = null;
@@ -206,6 +209,7 @@ async function createWalletConnectProvider(chain: Chain): Promise<Eip1193Provide
     methods: [
       "eth_requestAccounts",
       "eth_accounts",
+      "eth_chainId",
       "eth_sendTransaction",
       "personal_sign",
       "wallet_switchEthereumChain",
@@ -289,15 +293,61 @@ async function connectWithProvider(provider: Eip1193Provider, chain: Chain): Pro
   activeEip1193Provider = provider;
   const browserProvider = new ethers.BrowserProvider(provider);
 
-  await browserProvider.send("eth_requestAccounts", []);
-  const signer = await browserProvider.getSigner();
-  const address = await signer.getAddress();
+  const requestedAccounts = (await browserProvider.send("eth_requestAccounts", [])) as string[] | undefined;
+  const selectedAccount =
+    requestedAccounts?.find((account): account is string => typeof account === "string") ?? null;
+
+  let address = selectedAccount;
+  if (!address) {
+    const availableAccounts = (await browserProvider.send("eth_accounts", [])) as string[] | undefined;
+    address = availableAccounts?.find((account): account is string => typeof account === "string") ?? null;
+  }
+  if (!address) {
+    const signer = await browserProvider.getSigner();
+    address = await signer.getAddress();
+  }
+  if (!address) {
+    throw new Error("No wallet account returned by provider.");
+  }
 
   if (chain === "ethereum" || chain === "bsc") {
     await switchNetwork(chain, browserProvider);
   }
 
   return address.toLowerCase();
+}
+
+async function resetWalletConnectProvider(): Promise<void> {
+  if (!walletConnectProvider) {
+    return;
+  }
+  const provider = walletConnectProvider as Eip1193ProviderWithSession;
+  walletConnectProvider = null;
+  activeEip1193Provider = null;
+  if (typeof provider.disconnect === "function") {
+    try {
+      await provider.disconnect();
+    } catch {
+      // Ignore disconnect errors; we'll recreate a new session anyway.
+    }
+  }
+}
+
+async function connectWithWalletConnect(chain: Chain): Promise<string> {
+  try {
+    const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
+    walletConnectProvider = provider;
+    return await connectWithProvider(provider, chain);
+  } catch (error) {
+    // Mobile wallets can keep stale WC sessions; reset once and retry.
+    if (isUserRejectedError(error)) {
+      throw normalizeWalletError(error);
+    }
+    await resetWalletConnectProvider();
+    const provider = await createWalletConnectProvider(chain);
+    walletConnectProvider = provider;
+    return await connectWithProvider(provider, chain);
+  }
 }
 
 /**
@@ -322,17 +372,13 @@ export async function connectWallet(
       }
     }
     if (isMobileDevice() && isRecoverableConnectionError(lastError)) {
-      const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
-      walletConnectProvider = provider;
-      return await connectWithProvider(provider, chain);
+      return await connectWithWalletConnect(chain);
     }
     throw normalizeWalletError(lastError);
   }
 
   if (method === "walletconnect") {
-    const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
-    walletConnectProvider = provider;
-    return await connectWithProvider(provider, chain);
+    return await connectWithWalletConnect(chain);
   }
 
   const injectedProviders = getInjectedProviders();
@@ -347,18 +393,14 @@ export async function connectWallet(
     }
 
     if (isMobileDevice() && isRecoverableConnectionError(lastInjectedError)) {
-      const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
-      walletConnectProvider = provider;
-      return await connectWithProvider(provider, chain);
+      return await connectWithWalletConnect(chain);
     }
 
     // If injected wallets are present but all failed, show that explicit error.
     throw normalizeWalletError(lastInjectedError);
   }
 
-  const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
-  walletConnectProvider = provider;
-  return await connectWithProvider(provider, chain);
+  return await connectWithWalletConnect(chain);
 }
 
 /**

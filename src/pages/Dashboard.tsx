@@ -600,11 +600,11 @@ const Dashboard = () => {
                   <div className="grid sm:flex gap-3">
                     <Button
                       variant="accent"
-                      onClick={() => void handleConnectAndSignWallet("injected")}
+                      onClick={() => void handleConnectAndSignWallet("auto")}
                       disabled={processingWallet}
                       className="w-full sm:w-auto"
                     >
-                      Connect Browser Wallet & Sign
+                      Connect Wallet & Sign
                     </Button>
                     <Button
                       variant="outline"
@@ -612,7 +612,7 @@ const Dashboard = () => {
                       disabled={processingWallet}
                       className="w-full sm:w-auto"
                     >
-                      Connect via WalletConnect & Sign
+                      Use WalletConnect
                     </Button>
                     <Button variant="outline" onClick={handleInitiateWallet} disabled={processingWallet} className="w-full sm:w-auto">
                       1) Generate Challenge

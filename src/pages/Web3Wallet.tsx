@@ -119,7 +119,7 @@ const Web3Wallet = () => {
                 </div>
 
                 <Button
-                  onClick={() => void handleConnectWallet("injected")}
+                  onClick={() => void handleConnectWallet("auto")}
                   disabled={isProcessing}
                   className="w-full"
                   size="lg"
@@ -132,7 +132,7 @@ const Web3Wallet = () => {
                   ) : (
                     <>
                       <Wallet className="w-4 h-4 mr-2" />
-                      Connect Browser Wallet
+                      Connect Wallet (Auto)
                     </>
                   )}
                 </Button>
@@ -151,7 +151,7 @@ const Web3Wallet = () => {
                   ) : (
                     <>
                       <Wallet className="w-4 h-4 mr-2" />
-                      Connect via WalletConnect
+                      Use WalletConnect
                     </>
                   )}
                 </Button>
