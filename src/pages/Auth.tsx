@@ -79,7 +79,7 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="page-shell flex">
       {/* Left panel */}
       <div className="hidden lg:flex lg:w-1/2 gradient-hero relative items-center justify-center p-16 overflow-hidden">
         <div className="absolute inset-0 grid-pattern opacity-15" />
@@ -112,20 +112,20 @@ const Auth = () => {
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 flex items-center justify-center p-8">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-8">
         <motion.div
-          className="w-full max-w-md"
+          className="w-full max-w-md rounded-2xl border border-border/60 bg-card/75 backdrop-blur-sm shadow-[var(--shadow-md)] p-5 sm:p-8"
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
-          <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-10 transition-colors group">
+          <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors group">
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
             Back to home
           </Link>
 
-          <div className="mb-10">
-            <h2 className="font-display text-3xl font-bold text-foreground">
+          <div className="mb-8">
+            <h2 className="font-display text-2xl sm:text-3xl font-bold text-foreground">
               {mode === "signin" ? "Welcome back" : "Create your account"}
             </h2>
             <p className="text-muted-foreground mt-3 text-base">
@@ -170,7 +170,7 @@ const Auth = () => {
               <div className="space-y-3">
                 <Label className="text-sm font-medium">Verification code</Label>
                 <InputOTP maxLength={6} value={otp} onChange={setOtp}>
-                  <InputOTPGroup>
+                  <InputOTPGroup className="w-full justify-between">
                     <InputOTPSlot index={0} />
                     <InputOTPSlot index={1} />
                     <InputOTPSlot index={2} />

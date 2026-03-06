@@ -219,9 +219,9 @@ const Admin = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="page-shell">
       <header className="sticky top-0 z-50 bg-card/85 backdrop-blur-xl border-b border-border/50 shadow-[var(--shadow-xs)]">
-        <div className="container mx-auto flex items-center justify-between h-16 px-4">
+        <div className="page-container flex items-center justify-between h-16">
           <Link to="/" className="flex items-center gap-2.5 group">
             <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
               <Shield className="w-4 h-4 text-accent-foreground" />
@@ -248,7 +248,7 @@ const Admin = () => {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-10 max-w-6xl">
+      <div className="page-container py-8 md:py-10 max-w-6xl">
         {!canAccessAdmin && (
           <Card className="glass-card rounded-2xl mb-8">
             <CardContent className="p-6">
@@ -296,10 +296,10 @@ const Admin = () => {
 
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={5}>
           <Tabs defaultValue="users" className="space-y-6">
-            <TabsList className="bg-muted/70 p-1.5 rounded-xl border border-border/50">
-              <TabsTrigger value="users" className="rounded-lg font-medium">Users</TabsTrigger>
-              <TabsTrigger value="disclosures" className="rounded-lg font-medium">Disclosure Requests</TabsTrigger>
-              <TabsTrigger value="audit" className="rounded-lg font-medium">Audit Logs</TabsTrigger>
+            <TabsList className="bg-muted/70 p-1.5 rounded-xl border border-border/50 w-full sm:w-auto overflow-x-auto">
+              <TabsTrigger value="users" className="rounded-lg font-medium shrink-0">Users</TabsTrigger>
+              <TabsTrigger value="disclosures" className="rounded-lg font-medium shrink-0">Disclosure Requests</TabsTrigger>
+              <TabsTrigger value="audit" className="rounded-lg font-medium shrink-0">Audit Logs</TabsTrigger>
             </TabsList>
 
             <TabsContent value="users" className="space-y-5">
@@ -318,21 +318,21 @@ const Admin = () => {
               <div className="space-y-3">
                 {walletLookupResult && (
                   <Card key={walletLookupResult.userId} className="glass-card rounded-xl">
-                    <CardContent className="p-5 flex items-center justify-between">
-                      <div className="flex items-center gap-4">
+                    <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                      <div className="flex items-center gap-4 min-w-0">
                         <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
                           <User className="w-5 h-5 text-accent" />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <p className="text-sm font-semibold text-foreground">
                             {walletLookupResult.userId} - {walletLookupResult.email ?? "No email"}
                           </p>
-                          <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                          <p className="text-xs text-muted-foreground font-mono mt-0.5 break-all">
                             {walletLookupResult.walletAddress} · {walletLookupResult.walletStatus}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 self-start sm:self-auto">
                         <Badge
                           variant="outline"
                           className={`rounded-lg px-2.5 ${
@@ -452,14 +452,14 @@ const Admin = () => {
                 {disclosureRequests.map((req) => (
                   <Card key={req.id} className="glass-card rounded-xl">
                     <CardContent className="p-5">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-4 min-w-0">
                           <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
                             <FileText className="w-5 h-5 text-accent" />
                           </div>
-                          <div>
-                            <p className="text-sm font-semibold text-foreground">{req.id}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground break-all">{req.id}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5 break-all">
                               User: {req.userId} · Wallet: {req.walletAddress}
                             </p>
                           </div>
@@ -479,7 +479,7 @@ const Admin = () => {
                           )}
                         </Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground ml-[60px]">{req.lawfulRequestReference}</p>
+                      <p className="text-sm text-muted-foreground sm:ml-[60px] break-words">{req.lawfulRequestReference}</p>
                     </CardContent>
                   </Card>
                 ))}
@@ -498,8 +498,8 @@ const Admin = () => {
               <div className="space-y-3">
                 {auditLogs.map((log) => (
                   <Card key={log.id} className="glass-card rounded-xl">
-                    <CardContent className="p-5 flex items-center justify-between">
-                      <div className="flex items-center gap-4">
+                    <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                      <div className="flex items-center gap-4 min-w-0">
                         <div className={`w-11 h-11 rounded-xl border flex items-center justify-center ${
                           log.action.includes("DISCLOSURE")
                             ? "bg-warning/8 border-warning/10"
@@ -510,15 +510,15 @@ const Admin = () => {
                             : <FileText className="w-5 h-5 text-accent" />
                           }
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <p className="text-sm font-semibold text-foreground">{log.action.replaceAll("_", " ")}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
+                          <p className="text-xs text-muted-foreground mt-0.5 break-all">
                             {log.actor_role} · {log.actor_user_id} → {log.target_user_id ?? "n/a"} ·{" "}
                             {new Date(log.created_at).toLocaleString()}
                           </p>
                         </div>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                      <ChevronRight className="w-4 h-4 text-muted-foreground self-start sm:self-auto" />
                     </CardContent>
                   </Card>
                 ))}

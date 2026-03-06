@@ -78,11 +78,11 @@ const fadeUp = {
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="page-shell">
       <Navbar />
 
       {/* Hero */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
+      <section className="relative min-h-[92vh] md:min-h-screen flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0">
           <img src={heroBg} alt="" className="w-full h-full object-cover scale-105" />
           <div className="absolute inset-0 gradient-hero opacity-90" />
@@ -93,7 +93,7 @@ const Index = () => {
         <div className="hero-glow -top-20 -right-40 animate-pulse-slow" />
         <div className="hero-glow -bottom-40 -left-20 animate-pulse-slow" style={{ animationDelay: '2s' }} />
 
-        <div className="relative container mx-auto px-4 py-32 text-center">
+        <div className="relative page-container py-28 md:py-32 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -116,7 +116,7 @@ const Index = () => {
           </motion.h1>
 
           <motion.p
-            className="text-lg md:text-xl text-primary-foreground/60 max-w-2xl mx-auto mb-12 leading-relaxed"
+            className="text-base sm:text-lg md:text-xl text-primary-foreground/70 max-w-2xl mx-auto mb-10 md:mb-12 leading-relaxed"
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
@@ -144,7 +144,7 @@ const Index = () => {
 
           {/* Stats bar */}
           <motion.div
-            className="mt-20 grid grid-cols-2 md:grid-cols-4 gap-6 max-w-3xl mx-auto"
+            className="mt-14 md:mt-20 grid grid-cols-2 md:grid-cols-4 gap-5 md:gap-6 max-w-3xl mx-auto"
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.5, ease: [0.16, 1, 0.3, 1] }}
@@ -163,8 +163,8 @@ const Index = () => {
       </section>
 
       {/* How It Works */}
-      <section id="how-it-works" className="py-28 bg-background relative">
-        <div className="container mx-auto px-4">
+      <section id="how-it-works" className="section-pad bg-background relative">
+        <div className="page-container">
           <motion.div
             className="text-center mb-20"
             initial="hidden"
@@ -211,9 +211,9 @@ const Index = () => {
       </section>
 
       {/* Features */}
-      <section id="features" className="py-28 bg-muted/40 relative overflow-hidden">
+      <section id="features" className="section-pad bg-muted/40 relative overflow-hidden">
         <div className="absolute inset-0 grid-pattern opacity-40" />
-        <div className="container mx-auto px-4 relative">
+        <div className="page-container relative">
           <motion.div
             className="text-center mb-20"
             initial="hidden"
@@ -256,10 +256,10 @@ const Index = () => {
       </section>
 
       {/* CTA */}
-      <section className="py-28 bg-background">
-        <div className="container mx-auto px-4">
+      <section className="section-pad bg-background">
+        <div className="page-container">
           <motion.div
-            className="gradient-hero rounded-3xl p-12 md:p-20 text-center max-w-5xl mx-auto relative overflow-hidden"
+            className="gradient-hero rounded-3xl p-8 sm:p-10 md:p-20 text-center max-w-5xl mx-auto relative overflow-hidden"
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true }}

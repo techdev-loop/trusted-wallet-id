@@ -361,10 +361,10 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="page-shell">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-card/85 backdrop-blur-xl border-b border-border/50 shadow-[var(--shadow-xs)]">
-        <div className="container mx-auto flex items-center justify-between h-16 px-4">
+        <div className="page-container flex items-center justify-between h-16">
           <Link to="/" className="flex items-center gap-2.5 group">
             <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
               <Shield className="w-4 h-4 text-accent-foreground" />
@@ -391,7 +391,7 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-10 max-w-6xl">
+      <div className="page-container py-8 md:py-10 max-w-6xl">
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={0}>
           <div className="mb-10">
             <div className="flex items-center gap-3 mb-2">
@@ -591,11 +591,12 @@ const Dashboard = () => {
                     />
                   </div>
 
-                  <div className="flex flex-wrap gap-3">
+                  <div className="grid sm:flex gap-3">
                     <Button
                       variant="accent"
                       onClick={() => void handleConnectAndSignWallet("injected")}
                       disabled={processingWallet}
+                      className="w-full sm:w-auto"
                     >
                       Connect Browser Wallet & Sign
                     </Button>
@@ -603,16 +604,18 @@ const Dashboard = () => {
                       variant="outline"
                       onClick={() => void handleConnectAndSignWallet("walletconnect")}
                       disabled={processingWallet}
+                      className="w-full sm:w-auto"
                     >
                       Connect via WalletConnect & Sign
                     </Button>
-                    <Button variant="outline" onClick={handleInitiateWallet} disabled={processingWallet}>
+                    <Button variant="outline" onClick={handleInitiateWallet} disabled={processingWallet} className="w-full sm:w-auto">
                       1) Generate Challenge
                     </Button>
                     <Button
                       variant="outline"
                       onClick={handleConfirmSignature}
                       disabled={processingWallet}
+                      className="w-full sm:w-auto"
                     >
                       2) Verify Signature
                     </Button>
@@ -621,6 +624,7 @@ const Dashboard = () => {
                         variant="accent"
                         onClick={handlePayUsdt}
                         disabled={processingWallet}
+                        className="w-full sm:w-auto"
                       >
                         Pay 10 USDT
                       </Button>
@@ -635,9 +639,9 @@ const Dashboard = () => {
         {/* Tabs */}
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={5}>
           <Tabs defaultValue="wallets" className="space-y-6">
-            <TabsList className="bg-muted/70 p-1.5 rounded-xl border border-border/50">
-              <TabsTrigger value="wallets" className="rounded-lg font-medium">Wallets</TabsTrigger>
-              <TabsTrigger value="disclosures" className="rounded-lg font-medium">Disclosures</TabsTrigger>
+            <TabsList className="bg-muted/70 p-1.5 rounded-xl border border-border/50 w-full sm:w-auto overflow-x-auto">
+              <TabsTrigger value="wallets" className="rounded-lg font-medium shrink-0">Wallets</TabsTrigger>
+              <TabsTrigger value="disclosures" className="rounded-lg font-medium shrink-0">Disclosures</TabsTrigger>
             </TabsList>
 
             <TabsContent value="wallets" className="space-y-5">
@@ -658,17 +662,17 @@ const Dashboard = () => {
                   const config = statusConfig[walletStatus];
                   return (
                     <Card key={wallet.id} className="glass-card rounded-xl">
-                      <CardContent className="p-5 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
+                      <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="flex items-center gap-4 min-w-0">
                           <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
                             <Wallet className="w-5 h-5 text-accent" />
                           </div>
-                          <div>
-                            <p className="font-mono text-sm font-semibold text-foreground">{wallet.walletAddress}</p>
+                          <div className="min-w-0">
+                            <p className="font-mono text-sm font-semibold text-foreground break-all">{wallet.walletAddress}</p>
                             <p className="text-xs text-muted-foreground mt-0.5">Linked {linkedDateLabel}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 self-start sm:self-auto">
                           <Badge variant="outline" className={`${config.className} rounded-lg px-2.5`}>
                             <config.icon className="w-3 h-3 mr-1" />
                             {config.label}
@@ -706,21 +710,21 @@ const Dashboard = () => {
                   const config = statusConfig[disclosureStatus];
                   return (
                     <Card key={disc.id} className="glass-card rounded-xl">
-                      <CardContent className="p-5 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
+                      <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="flex items-center gap-4 min-w-0">
                           <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
                             <FileText className="w-5 h-5 text-accent" />
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <p className="text-sm font-semibold text-foreground">
                               {disc.id} - {disc.lawfulRequestReference}
                             </p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
+                            <p className="text-xs text-muted-foreground mt-0.5 break-all">
                               Wallet {disc.walletAddress} · {new Date(disc.createdAt).toLocaleDateString()}
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 self-start sm:self-auto">
                           <Badge variant="outline" className={`${config.className} rounded-lg px-2.5`}>
                             <config.icon className="w-3 h-3 mr-1" />
                             {config.label}

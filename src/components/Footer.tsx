@@ -32,8 +32,8 @@ const Footer = () => {
   return (
     <footer className="bg-primary text-primary-foreground relative overflow-hidden">
       <div className="absolute inset-0 grid-pattern opacity-5" />
-      <div className="container mx-auto px-4 py-20 relative">
-        <div className="grid md:grid-cols-12 gap-12 mb-16">
+      <div className="page-container py-14 md:py-20 relative">
+        <div className="grid md:grid-cols-12 gap-10 md:gap-12 mb-12 md:mb-16">
           <div className="md:col-span-5">
             <Link to="/" className="flex items-center gap-2.5 mb-5 group">
               <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
@@ -89,11 +89,11 @@ const Footer = () => {
           </div>
         </div>
 
-        <div className="border-t border-primary-foreground/8 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-xs text-primary-foreground/30">
+        <div className="border-t border-primary-foreground/8 pt-6 md:pt-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 md:gap-4">
+          <p className="text-xs text-primary-foreground/30 text-left sm:text-center">
             © {new Date().getFullYear()} FIUlink. All rights reserved.
           </p>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-5">
             <a href="#" className="text-xs text-primary-foreground/30 hover:text-primary-foreground/60 transition-colors">Status</a>
             <a href="#" className="text-xs text-primary-foreground/30 hover:text-primary-foreground/60 transition-colors">Contact</a>
           </div>

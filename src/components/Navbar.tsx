@@ -19,7 +19,7 @@ const Navbar = () => {
         ? "bg-card/90 backdrop-blur-xl border-b border-border/50 shadow-[var(--shadow-sm)]" 
         : "bg-transparent border-b border-transparent"
     }`}>
-      <div className="container mx-auto flex items-center justify-between h-16 px-4">
+      <div className="page-container flex items-center justify-between h-16">
         <Link to="/" className="flex items-center gap-2.5 group">
           <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow duration-300">
             <Shield className="w-4.5 h-4.5 text-accent-foreground" />
@@ -57,7 +57,8 @@ const Navbar = () => {
       </div>
 
       {mobileOpen && (
-        <div className="md:hidden bg-card/95 backdrop-blur-xl border-b border-border px-4 pb-5 pt-2 space-y-1 animate-slide-up">
+        <div className="md:hidden bg-card/95 backdrop-blur-xl border-b border-border animate-slide-up">
+          <div className="page-container pb-5 pt-2 space-y-1">
           {["How It Works", "Features", "Security"].map((item) => (
             <a
               key={item}
@@ -75,6 +76,7 @@ const Navbar = () => {
             <Button variant="accent" asChild className="flex-1">
               <Link to="/auth?mode=signup">Get Started</Link>
             </Button>
+          </div>
           </div>
         </div>
       )}

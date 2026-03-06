@@ -74,21 +74,21 @@ const Web3Wallet = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="page-shell">
       <Navbar />
 
-      <div className="container mx-auto px-4 py-16 max-w-4xl">
+      <div className="page-container py-14 md:py-16 max-w-4xl">
         <motion.div
           initial="hidden"
           animate="visible"
           variants={fadeIn}
-          className="text-center mb-12"
+          className="text-center mb-10 md:mb-12"
         >
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent/10 border border-accent/20 mb-6">
             <Zap className="w-4 h-4 text-accent" />
             <span className="text-sm font-medium text-accent">Web3 Wallet Verification</span>
           </div>
-          <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
+          <h1 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-foreground mb-4">
             Connect & Verify Your Wallet
           </h1>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
@@ -99,13 +99,13 @@ const Web3Wallet = () => {
         {/* Chain Selection */}
         {currentStep === "connect" && (
           <motion.div initial="hidden" animate="visible" variants={fadeIn}>
-            <Card>
+            <Card className="glass-card rounded-2xl">
               <CardHeader>
                 <CardTitle>Select Blockchain</CardTitle>
                 <CardDescription>Choose the blockchain network for your wallet</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
                   {chains.map((chain) => (
                     <Button
                       key={chain}
@@ -163,7 +163,7 @@ const Web3Wallet = () => {
         {/* Complete Step */}
         {currentStep === "complete" && (
           <motion.div initial="hidden" animate="visible" variants={fadeIn}>
-            <Card>
+            <Card className="glass-card rounded-2xl">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <CheckCircle2 className="w-6 h-6 text-success" />
@@ -184,10 +184,10 @@ const Web3Wallet = () => {
                   </p>
                 </div>
 
-                <div className="flex gap-4">
+                <div className="grid sm:flex gap-3 sm:gap-4">
                   <Button
                     onClick={() => navigate("/dashboard")}
-                    className="flex-1"
+                    className="w-full sm:flex-1"
                     size="lg"
                   >
                     Go to Dashboard
@@ -199,7 +199,7 @@ const Web3Wallet = () => {
                       setWalletAddress("");
                     }}
                     variant="outline"
-                    className="flex-1"
+                    className="w-full sm:flex-1"
                     size="lg"
                   >
                     Verify Another Wallet
