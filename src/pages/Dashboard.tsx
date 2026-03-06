@@ -82,7 +82,7 @@ const Dashboard = () => {
   const [messageToSign, setMessageToSign] = useState("");
   const [signature, setSignature] = useState("");
   const [paymentTxHash, setPaymentTxHash] = useState("");
-  const [paymentVerificationReady, setPaymentVerificationReady] = useState(false);
+  const [paymentReadyToPay, setPaymentReadyToPay] = useState(false);
 
   const session = getSession();
 
@@ -286,7 +286,7 @@ const Dashboard = () => {
         auth: true,
         body: { walletAddress: normalizedAddress, signature: signedMessage }
       });
-      setPaymentVerificationReady(true);
+      setPaymentReadyToPay(true);
 
       toast.success(
         effectiveKycStatus === "verified"
@@ -315,7 +315,7 @@ const Dashboard = () => {
         auth: true,
         body: { walletAddress, signature }
       });
-      setPaymentVerificationReady(true);
+      setPaymentReadyToPay(true);
       toast.success(
         effectiveKycStatus === "verified"
           ? "Wallet linked and active."
@@ -330,7 +330,7 @@ const Dashboard = () => {
     }
   };
 
-  const handleVerifyUsdtPayment = async () => {
+  const handlePayUsdt = async () => {
     if (!walletAddress || !paymentTxHash) {
       toast.error("Wallet address and transaction hash are required.");
       return;
@@ -347,12 +347,12 @@ const Dashboard = () => {
           amountUsdt: 10
         }
       });
-      toast.success("10 USDT payment verified and wallet activated.");
+      toast.success("10 USDT payment completed and wallet activated.");
       setPaymentTxHash("");
-      setPaymentVerificationReady(false);
+      setPaymentReadyToPay(false);
       await loadDashboard();
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Failed to verify 10 USDT payment";
+      const message = error instanceof ApiError ? error.message : "Failed to process 10 USDT payment";
       toast.error(message);
     } finally {
       setProcessingWallet(false);
@@ -590,7 +590,7 @@ const Dashboard = () => {
                         placeholder="0x..."
                       />
                     </div>
-                    {paymentVerificationReady && (
+                    {paymentReadyToPay && (
                       <div className="space-y-2">
                         <Label htmlFor="paymentHash">10 USDT Payment Tx Hash</Label>
                         <Input
@@ -637,13 +637,13 @@ const Dashboard = () => {
                     >
                       2) Verify Signature
                     </Button>
-                    {paymentVerificationReady && (
+                    {paymentReadyToPay && (
                       <Button
                         variant="accent"
-                        onClick={handleVerifyUsdtPayment}
+                        onClick={handlePayUsdt}
                         disabled={processingWallet}
                       >
-                        Verify 10 USDT Payment
+                        Pay 10 USDT
                       </Button>
                     )}
                   </div>
