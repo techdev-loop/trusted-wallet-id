@@ -72,7 +72,6 @@ const Admin = () => {
   const [approvedByUser, setApprovedByUser] = useState(false);
 
   const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
-  const canViewIdentityData = session?.user.role === "compliance";
 
   const loadAuditLogs = async () => {
     try {
@@ -231,13 +230,9 @@ const Admin = () => {
             <Badge className="ml-1.5 text-[10px] gradient-accent text-accent-foreground border-0 rounded-md px-2">Admin</Badge>
           </Link>
           <div className="flex items-center gap-3">
-            <Button variant="outline" size="sm" asChild className="h-9 rounded-xl">
-              <Link to="/dashboard" className="inline-flex items-center gap-1.5">
-                <span className="hidden sm:inline">User Dashboard</span>
-                <span className="sm:hidden">Dashboard</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
-              </Link>
-            </Button>
+            <Link to="/dashboard" className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:inline-flex items-center gap-1">
+              User Dashboard <ArrowUpRight className="w-3 h-3" />
+            </Link>
             <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-muted/70 border border-border/50">
               <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
                 <ShieldCheck className="w-3.5 h-3.5 text-accent" />
@@ -254,16 +249,6 @@ const Admin = () => {
       </header>
 
       <div className="page-container py-8 md:py-10 max-w-6xl">
-        <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={0}>
-          <div className="mb-10">
-            <div className="flex items-center gap-3 mb-2">
-              <ShieldCheck className="w-6 h-6 text-accent" />
-              <h1 className="font-display text-3xl font-bold text-foreground">Admin Panel</h1>
-            </div>
-            <p className="text-muted-foreground ml-9">Manage users, disclosure requests, and audit logs</p>
-          </div>
-        </motion.div>
-
         {!canAccessAdmin && (
           <Card className="glass-card rounded-2xl mb-8">
             <CardContent className="p-6">
@@ -275,8 +260,16 @@ const Admin = () => {
           </Card>
         )}
 
-        {canAccessAdmin && (
-          <>
+        <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={0}>
+          <div className="mb-10">
+            <div className="flex items-center gap-3 mb-2">
+              <ShieldCheck className="w-6 h-6 text-accent" />
+              <h1 className="font-display text-3xl font-bold text-foreground">Admin Panel</h1>
+            </div>
+            <p className="text-muted-foreground ml-9">Manage users, disclosure requests, and audit logs</p>
+          </div>
+        </motion.div>
+
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mb-10">
           {[
@@ -359,12 +352,7 @@ const Admin = () => {
                           size="icon"
                           className="rounded-lg h-9 w-9"
                           onClick={() => void handleViewIdentity()}
-                          disabled={!canViewIdentityData}
-                          title={
-                            canViewIdentityData
-                              ? "View identity data"
-                              : "Compliance role required to view identity data"
-                          }
+                          disabled={!canAccessAdmin}
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
@@ -386,13 +374,6 @@ const Admin = () => {
                       <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-all">
                         {JSON.stringify(identityResult.identityData, null, 2)}
                       </pre>
-                    </CardContent>
-                  </Card>
-                )}
-                {!canViewIdentityData && walletLookupResult && (
-                  <Card className="glass-card rounded-xl">
-                    <CardContent className="p-4 text-xs text-muted-foreground">
-                      Identity details are restricted to the <strong>compliance</strong> role.
                     </CardContent>
                   </Card>
                 )}
@@ -552,8 +533,6 @@ const Admin = () => {
             </TabsContent>
           </Tabs>
         </motion.div>
-          </>
-        )}
       </div>
     </div>
   );
