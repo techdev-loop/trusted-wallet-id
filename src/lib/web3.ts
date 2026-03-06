@@ -235,7 +235,21 @@ async function connectWithProvider(provider: Eip1193Provider, chain: Chain): Pro
   const address = await signer.getAddress();
 
   if (chain === "ethereum" || chain === "bsc") {
-    await switchNetwork(chain, browserProvider);
+    try {
+      await switchNetwork(chain, browserProvider);
+    } catch (switchErr) {
+      const msg = `${(switchErr as Error)?.message ?? ""}`.toLowerCase();
+      const isUnsupported =
+        msg.includes("missing or invalid") ||
+        msg.includes("request()") ||
+        msg.includes("wallet_switchethereumchain");
+      if (isUnsupported) {
+        // WalletConnect/mobile wallets often don't support chain switch in this format.
+        // Proceed with connection; user can switch network manually in wallet.
+        return address.toLowerCase();
+      }
+      throw switchErr;
+    }
   }
 
   return address.toLowerCase();
@@ -302,6 +316,61 @@ export async function connectWallet(
   return await connectWithProvider(provider, chain);
 }
 
+function getRawEip1193Provider(provider: ethers.BrowserProvider): Eip1193Provider | null {
+  const p = provider as unknown as { provider?: Eip1193Provider };
+  return p?.provider ?? null;
+}
+
+async function trySwitchChain(
+  provider: ethers.BrowserProvider,
+  config: ChainConfig,
+  rawProvider: Eip1193Provider | null
+): Promise<boolean> {
+  const params = [{ chainId: config.chainId }];
+
+  // 1. Standard provider.send (ethers)
+  try {
+    await provider.send("wallet_switchEthereumChain", params);
+    return true;
+  } catch {
+    // Fall through
+  }
+
+  // 2. Raw EIP-1193 request (bypasses ethers wrapper)
+  if (rawProvider?.request) {
+    try {
+      await rawProvider.request({
+        method: "wallet_switchEthereumChain",
+        params
+      });
+      return true;
+    } catch {
+      // Fall through
+    }
+
+    // 3. WalletConnect universal format: { chainId, request: { method, params } }
+    const chainIdDecimal = Number.parseInt(config.chainId, 16);
+    const chainIdVariants = [
+      `eip155:${chainIdDecimal}`,
+      config.chainId,
+      String(chainIdDecimal)
+    ];
+    for (const chainId of chainIdVariants) {
+      try {
+        await rawProvider.request({
+          chainId,
+          request: { method: "wallet_switchEthereumChain", params }
+        } as unknown as { method: string; params?: unknown[] });
+        return true;
+      } catch {
+        // Try next variant
+      }
+    }
+  }
+
+  return false;
+}
+
 /**
  * Switch to the correct network
  */
@@ -321,59 +390,40 @@ export async function switchNetwork(chain: Chain, providerOverride?: ethers.Brow
     // Continue with explicit switch attempts below.
   }
 
-  const needsChainAdd = (error: unknown): boolean => {
-    const err = error as
-      | {
-          code?: number;
-          message?: string;
-          error?: { code?: number; message?: string };
-          info?: { error?: { code?: number; message?: string } };
-        }
-      | undefined;
-    const directCode = err?.code;
-    const nestedCode = err?.error?.code ?? err?.info?.error?.code;
-    const directMessage = err?.message ?? "";
-    const nestedMessage = err?.error?.message ?? err?.info?.error?.message ?? "";
-    const allMessage = `${directMessage} ${nestedMessage}`.toLowerCase();
-    return (
-      directCode === 4902 ||
-      nestedCode === 4902 ||
-      allMessage.includes("unrecognized chain id") ||
-      allMessage.includes("try adding the chain using wallet_addethereumchain")
-    );
-  };
+  const rawProvider = getRawEip1193Provider(provider);
+
+  if (await trySwitchChain(provider, config, rawProvider)) {
+    return;
+  }
+
+  // Chain may not be in wallet; try adding it then switching again
+  try {
+    await provider.send("wallet_addEthereumChain", [
+      {
+        chainId: config.chainId,
+        chainName: config.chainName,
+        nativeCurrency: config.nativeCurrency,
+        rpcUrls: config.rpcUrls,
+        blockExplorerUrls: config.blockExplorerUrls
+      }
+    ]);
+    if (await trySwitchChain(provider, config, rawProvider)) {
+      return;
+    }
+  } catch {
+    // Add failed or switch still failed; check if we're already on the right chain
+  }
 
   try {
-    await provider.send("wallet_switchEthereumChain", [{ chainId: config.chainId }]);
-  } catch (switchError) {
-    if (!needsChainAdd(switchError)) {
-      throw switchError;
+    const currentChainId = await provider.send("eth_chainId", []);
+    if (typeof currentChainId === "string" && currentChainId.toLowerCase() === config.chainId.toLowerCase()) {
+      return;
     }
-
-    try {
-      await provider.send("wallet_addEthereumChain", [
-        {
-          chainId: config.chainId,
-          chainName: config.chainName,
-          nativeCurrency: config.nativeCurrency,
-          rpcUrls: config.rpcUrls,
-          blockExplorerUrls: config.blockExplorerUrls
-        }
-      ]);
-      // Some wallets require an explicit second switch after adding the chain.
-      await provider.send("wallet_switchEthereumChain", [{ chainId: config.chainId }]);
-    } catch {
-      try {
-        const currentChainId = await provider.send("eth_chainId", []);
-        if (typeof currentChainId === "string" && currentChainId.toLowerCase() === config.chainId.toLowerCase()) {
-          return;
-        }
-      } catch {
-        // Ignore and throw the user-facing error below.
-      }
-      throw new Error(`Failed to add/switch to ${chain} network in wallet.`);
-    }
+  } catch {
+    // Ignore
   }
+
+  throw new Error(`Failed to add/switch to ${chain} network in wallet.`);
 }
 
 /**
