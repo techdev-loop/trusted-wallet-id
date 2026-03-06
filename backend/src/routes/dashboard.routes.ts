@@ -3,6 +3,7 @@ import { StatusCodes } from "http-status-codes";
 import { identityDb, walletDb } from "../db/pool.js";
 import { HttpError } from "../lib/http-error.js";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
+import { isWalletVerified } from "../services/blockchain.service.js";
 
 const router = Router();
 
@@ -24,12 +25,13 @@ router.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
     walletDb.query<{
       id: string;
       wallet_address: string;
+      chain: string | null;
       link_status: string;
       linked_at: Date | null;
       unlinked_at: Date | null;
     }>(
       `
-        SELECT id, wallet_address, link_status, linked_at, unlinked_at
+        SELECT id, wallet_address, chain, link_status, linked_at, unlinked_at
         FROM wallet_links
         WHERE user_id = $1
         ORDER BY created_at DESC
@@ -53,15 +55,26 @@ router.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
     )
   ]);
 
+  const walletsWithOnchainStatus = await Promise.all(
+    walletResult.rows.map(async (wallet) => {
+      const chain = wallet.chain === "bsc" || wallet.chain === "tron" || wallet.chain === "solana" ? wallet.chain : "ethereum";
+      const onchainVerified = await isWalletVerified(wallet.wallet_address, chain);
+      return {
+        ...wallet,
+        onchainVerified
+      };
+    })
+  );
+
   res.status(StatusCodes.OK).json({
     identityVerificationStatus: kycResult.rows[0]?.verification_status ?? "not_started",
-    linkedWallets: walletResult.rows.map((wallet) => ({
+    linkedWallets: walletsWithOnchainStatus.map((wallet) => ({
       id: wallet.id,
       walletAddress: wallet.wallet_address,
       status:
-        wallet.link_status === "active"
+        wallet.onchainVerified
           ? "Active"
-          : wallet.link_status === "pending_verification"
+          : wallet.link_status === "pending_verification" || wallet.link_status === "pending_signature"
             ? "Pending Verification"
             : "Unlinked",
       linkedAt: wallet.linked_at,

@@ -23,6 +23,8 @@ export interface TransactionVerification {
   blockHash?: string;
 }
 
+const WALLET_REGISTRY_ABI = ["function isWalletVerified(address wallet) view returns (bool)"];
+
 /**
  * Get contract configuration for a chain
  */
@@ -204,15 +206,18 @@ export async function registerWalletPayment(verification: TransactionVerificatio
  * Check if wallet is verified
  */
 export async function isWalletVerified(walletAddress: string, chain: Chain): Promise<boolean> {
-  const result = await walletDb.query<{ is_verified: boolean }>(
-    `
-      SELECT is_verified
-      FROM wallet_users
-      WHERE wallet_address = $1 AND chain = $2
-      LIMIT 1
-    `,
-    [walletAddress.toLowerCase(), chain]
-  );
+  const normalizedAddress = walletAddress.toLowerCase();
+  const config = await getContractConfig(chain);
+  if (!config) {
+    return false;
+  }
 
-  return result.rows[0]?.is_verified ?? false;
+  try {
+    const provider = new ethers.JsonRpcProvider(config.rpcUrl);
+    const contract = new ethers.Contract(config.contractAddress, WALLET_REGISTRY_ABI, provider);
+    const verified = await contract.isWalletVerified(normalizedAddress);
+    return Boolean(verified);
+  } catch {
+    return false;
+  }
 }
