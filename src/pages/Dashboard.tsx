@@ -21,6 +21,7 @@ import {
   connectWallet,
   getEthereumProvider,
   registerWalletViaContract,
+  signWalletMessage,
   type WalletConnectionMethod
 } from "@/lib/web3";
 
@@ -238,8 +239,7 @@ const Dashboard = () => {
       if (!provider) {
         throw new Error("Wallet provider not available after connection.");
       }
-      const signer = await provider.getSigner();
-      const signedMessage = await signer.signMessage(challengeMessage);
+      const signedMessage = await signWalletMessage(challengeMessage, normalizedAddress);
       setSignature(signedMessage);
 
       await apiRequest("/wallet/link/confirm", {
