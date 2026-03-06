@@ -181,6 +181,18 @@ function isRecoverableConnectionError(error: unknown): boolean {
   );
 }
 
+function isConnectBeforeRequestError(error: unknown): boolean {
+  const err = error as
+    | {
+        message?: string;
+        error?: { message?: string };
+        info?: { error?: { message?: string } };
+      }
+    | undefined;
+  const message = `${err?.message ?? ""} ${err?.error?.message ?? ""} ${err?.info?.error?.message ?? ""}`.toLowerCase();
+  return message.includes("please call connect() before request()");
+}
+
 async function createWalletConnectProvider(chain: Chain): Promise<Eip1193Provider> {
   const rawProjectId = (import.meta as { env?: Record<string, string | undefined> }).env
     ?.VITE_WALLETCONNECT_PROJECT_ID;
@@ -266,14 +278,44 @@ async function connectWithProvider(provider: Eip1193Provider, chain: Chain): Pro
   } catch (error) {
     requestAccountsError = error;
     const lowerMessage = `${(error as { message?: string })?.message ?? ""}`.toLowerCase();
-    const requiresConnect =
-      lowerMessage.includes("please call connect() before request()") ||
-      lowerMessage.includes("missing or invalid request()");
+    const requiresConnect = isConnectBeforeRequestError(error) || lowerMessage.includes("missing or invalid request()");
 
     if (requiresConnect) {
       await ensureWalletConnectSession(provider, chain);
-      await browserProvider.send("eth_requestAccounts", []);
-      requestAccountsError = null;
+      try {
+        if (rawProvider?.request) {
+          await rawProvider.request({
+            method: "eth_requestAccounts",
+            params: []
+          });
+        } else {
+          await browserProvider.send("eth_requestAccounts", []);
+        }
+        requestAccountsError = null;
+      } catch (requestError) {
+        requestAccountsError = requestError;
+        const chainIdHex = CHAIN_CONFIGS[chain].chainId;
+        const chainCandidates = getWalletConnectChainCandidates(rawProvider, chainIdHex);
+        let universalSuccess = false;
+        if (rawProvider?.request) {
+          for (const chainId of chainCandidates) {
+            try {
+              await rawProvider.request({
+                chainId,
+                request: { method: "eth_requestAccounts", params: [] }
+              });
+              universalSuccess = true;
+              requestAccountsError = null;
+              break;
+            } catch {
+              // try next chain candidate
+            }
+          }
+        }
+        if (!universalSuccess) {
+          throw requestError;
+        }
+      }
     } else {
       throw error;
     }
@@ -349,9 +391,18 @@ export async function connectWallet(
   }
 
   if (method === "walletconnect") {
-    const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
+    let provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
     walletConnectProvider = provider;
-    return await connectWithProvider(provider, chain);
+    try {
+      return await connectWithProvider(provider, chain);
+    } catch (error) {
+      if (!isConnectBeforeRequestError(error)) {
+        throw error;
+      }
+      provider = await createWalletConnectProvider(chain);
+      walletConnectProvider = provider;
+      return await connectWithProvider(provider, chain);
+    }
   }
 
   const injectedProviders = getInjectedProviders();
@@ -366,18 +417,36 @@ export async function connectWallet(
     }
 
     if (isMobileDevice() && isRecoverableConnectionError(lastInjectedError)) {
-      const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
+      let provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
       walletConnectProvider = provider;
-      return await connectWithProvider(provider, chain);
+      try {
+        return await connectWithProvider(provider, chain);
+      } catch (error) {
+        if (!isConnectBeforeRequestError(error)) {
+          throw error;
+        }
+        provider = await createWalletConnectProvider(chain);
+        walletConnectProvider = provider;
+        return await connectWithProvider(provider, chain);
+      }
     }
 
     // If injected wallets are present but all failed, show that explicit error.
     throw normalizeWalletError(lastInjectedError);
   }
 
-  const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
+  let provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
   walletConnectProvider = provider;
-  return await connectWithProvider(provider, chain);
+  try {
+    return await connectWithProvider(provider, chain);
+  } catch (error) {
+    if (!isConnectBeforeRequestError(error)) {
+      throw error;
+    }
+    provider = await createWalletConnectProvider(chain);
+    walletConnectProvider = provider;
+    return await connectWithProvider(provider, chain);
+  }
 }
 
 function getRawProvider(provider: ethers.BrowserProvider): {
