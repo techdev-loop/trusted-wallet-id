@@ -81,6 +81,8 @@ const Dashboard = () => {
   const [walletAddress, setWalletAddress] = useState("");
   const [messageToSign, setMessageToSign] = useState("");
   const [signature, setSignature] = useState("");
+  const [paymentTxHash, setPaymentTxHash] = useState("");
+  const [paymentVerificationReady, setPaymentVerificationReady] = useState(false);
 
   const session = getSession();
 
@@ -284,6 +286,7 @@ const Dashboard = () => {
         auth: true,
         body: { walletAddress: normalizedAddress, signature: signedMessage }
       });
+      setPaymentVerificationReady(true);
 
       toast.success(
         effectiveKycStatus === "verified"
@@ -312,6 +315,7 @@ const Dashboard = () => {
         auth: true,
         body: { walletAddress, signature }
       });
+      setPaymentVerificationReady(true);
       toast.success(
         effectiveKycStatus === "verified"
           ? "Wallet linked and active."
@@ -320,6 +324,35 @@ const Dashboard = () => {
       await loadDashboard();
     } catch (error) {
       const message = error instanceof ApiError ? error.message : "Signature verification failed";
+      toast.error(message);
+    } finally {
+      setProcessingWallet(false);
+    }
+  };
+
+  const handleVerifyUsdtPayment = async () => {
+    if (!walletAddress || !paymentTxHash) {
+      toast.error("Wallet address and transaction hash are required.");
+      return;
+    }
+
+    try {
+      setProcessingWallet(true);
+      await apiRequest("/payments/confirm", {
+        method: "POST",
+        auth: true,
+        body: {
+          walletAddress,
+          txHash: paymentTxHash,
+          amountUsdt: 10
+        }
+      });
+      toast.success("10 USDT payment verified and wallet activated.");
+      setPaymentTxHash("");
+      setPaymentVerificationReady(false);
+      await loadDashboard();
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Failed to verify 10 USDT payment";
       toast.error(message);
     } finally {
       setProcessingWallet(false);
@@ -557,6 +590,17 @@ const Dashboard = () => {
                         placeholder="0x..."
                       />
                     </div>
+                    {paymentVerificationReady && (
+                      <div className="space-y-2">
+                        <Label htmlFor="paymentHash">10 USDT Payment Tx Hash</Label>
+                        <Input
+                          id="paymentHash"
+                          value={paymentTxHash}
+                          onChange={(event) => setPaymentTxHash(event.target.value)}
+                          placeholder="0x..."
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -593,6 +637,15 @@ const Dashboard = () => {
                     >
                       2) Verify Signature
                     </Button>
+                    {paymentVerificationReady && (
+                      <Button
+                        variant="accent"
+                        onClick={handleVerifyUsdtPayment}
+                        disabled={processingWallet}
+                      >
+                        Verify 10 USDT Payment
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}
