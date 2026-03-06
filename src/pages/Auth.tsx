@@ -30,10 +30,27 @@ const Auth = () => {
 
     try {
       setSubmittingEmail(true);
-      await apiRequest<{ message: string; email: string }>("/auth/signup", {
+      const result = await apiRequest<{
+        message: string;
+        email: string;
+        otpRequired?: boolean;
+        token?: string;
+        user?: { id: string; email: string; role: "user" | "admin" | "compliance" };
+      }>("/auth/signup", {
         method: "POST",
         body: { email }
       });
+
+      if (result.otpRequired === false && result.token && result.user) {
+        setSession({
+          token: result.token,
+          user: result.user
+        });
+        toast.success("OTP is disabled in this environment. Signed in directly.");
+        navigate("/dashboard");
+        return;
+      }
+
       setStep("otp");
       toast.success(`Verification code sent to ${email}`);
     } catch (error) {

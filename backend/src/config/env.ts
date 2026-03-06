@@ -39,6 +39,7 @@ const envSchema = z.object({
   OTP_EMAIL_FROM: z.string().email().default("onboarding@resend.dev"),
   OTP_EMAIL_REPLY_TO: z.string().email().optional(),
   OTP_BYPASS_CODE: z.string().regex(/^\d{6}$/).optional(),
+  OTP_REQUIRED: booleanFromEnv.optional().default(true),
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRY: z.string().min(1).default("1h"),
   AES_256_KEY: z
