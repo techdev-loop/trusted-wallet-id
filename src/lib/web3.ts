@@ -68,14 +68,14 @@ export const CHAIN_CONFIGS: Record<Chain, ChainConfig> = {
 // USDT token addresses per chain
 // Note: For testnets, these should be testnet token addresses
 export const USDT_ADDRESSES: Record<Chain, string> = {
-  ethereum: "0xdAC17F958D2ee523a2206206994597C13D831ec7", // Mainnet
+  ethereum: "0xFD311848AE9dD8ffaC8bCd862bC14D38aA77F946", // Sepolia testnet
   bsc: "0x55d398326f99059fF775485246999027B3197955",
   tron: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
   solana: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" // USDT on Solana
 };
 
 // Sepolia testnet USDT (mock/test token)
-export const SEPOLIA_USDT_ADDRESS = "0xfd311848ae9dd8ffac8bcd862bc14d38aa77f946";
+export const SEPOLIA_USDT_ADDRESS = "0xFD311848AE9dD8ffaC8bCd862bC14D38aA77F946";
 
 // ERC20 ABI for USDT
 export const ERC20_ABI = [
