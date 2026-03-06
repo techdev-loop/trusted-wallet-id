@@ -311,15 +311,7 @@ async function connectWithProvider(provider: Eip1193Provider, chain: Chain): Pro
   }
 
   if (chain === "ethereum" || chain === "bsc") {
-    try {
-      await switchNetwork(chain, browserProvider);
-    } catch (networkError) {
-      // Mobile wallets sometimes reject/skip programmatic chain switch.
-      // Continue with the connected account so signature workflow can proceed.
-      if (!isMobileDevice() && !isRecoverableConnectionError(networkError)) {
-        throw networkError;
-      }
-    }
+    await switchNetwork(chain, browserProvider);
   }
 
   return address.toLowerCase();

@@ -235,6 +235,10 @@ const Dashboard = () => {
       const challengeMessage = initiateResponse.messageToSign;
       setMessageToSign(challengeMessage);
 
+      const provider = getEthereumProvider();
+      if (!provider) {
+        throw new Error("Wallet provider not available after connection.");
+      }
       const signedMessage = await signWalletMessage(challengeMessage, normalizedAddress);
       setSignature(signedMessage);
 
