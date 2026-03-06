@@ -16,11 +16,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
-import { approveUSDT, registerWalletViaContract } from "@/lib/web3";
-
-interface EthereumProvider {
-  request: (args: { method: string; params?: unknown[] | object }) => Promise<unknown>;
-}
+import {
+  approveUSDT,
+  connectWallet,
+  getEthereumProvider,
+  registerWalletViaContract,
+  type WalletConnectionMethod
+} from "@/lib/web3";
 
 interface DashboardData {
   identityVerificationStatus: "verified" | "pending" | "not_started" | "rejected" | "error";
@@ -216,57 +218,10 @@ const Dashboard = () => {
     }
   };
 
-  const getEthereumProvider = (): EthereumProvider | null => {
-    const provider = (window as Window & { ethereum?: EthereumProvider }).ethereum;
-    return provider ?? null;
-  };
-
-  const signMessageWithWallet = async (
-    provider: EthereumProvider,
-    account: string,
-    message: string
-  ): Promise<string> => {
-    try {
-      const primary = await provider.request({
-        method: "personal_sign",
-        params: [message, account]
-      });
-      if (typeof primary === "string" && primary.length > 0) {
-        return primary;
-      }
-    } catch {
-      // Some wallets use reversed params for personal_sign.
-    }
-
-    const fallback = await provider.request({
-      method: "personal_sign",
-      params: [account, message]
-    });
-    if (typeof fallback !== "string" || fallback.length === 0) {
-      throw new Error("Wallet did not return a valid signature.");
-    }
-    return fallback;
-  };
-
-  const handleConnectAndSignWallet = async () => {
-    const provider = getEthereumProvider();
-    if (!provider) {
-      toast.error("No EVM wallet detected. Install MetaMask or another wallet.");
-      return;
-    }
-
+  const handleConnectAndSignWallet = async (method: WalletConnectionMethod) => {
     try {
       setProcessingWallet(true);
-      const accountsRaw = await provider.request({ method: "eth_requestAccounts" });
-      const accounts = Array.isArray(accountsRaw)
-        ? accountsRaw.filter((value): value is string => typeof value === "string")
-        : [];
-      const connectedAccount = accounts[0];
-      if (!connectedAccount) {
-        throw new Error("No wallet account was returned by the provider.");
-      }
-
-      const normalizedAddress = connectedAccount.toLowerCase();
+      const normalizedAddress = await connectWallet("ethereum", method);
       setWalletAddress(normalizedAddress);
 
       const initiateResponse = await apiRequest<{ messageToSign: string }>("/wallet/link/initiate", {
@@ -278,7 +233,12 @@ const Dashboard = () => {
       const challengeMessage = initiateResponse.messageToSign;
       setMessageToSign(challengeMessage);
 
-      const signedMessage = await signMessageWithWallet(provider, normalizedAddress, challengeMessage);
+      const provider = getEthereumProvider();
+      if (!provider) {
+        throw new Error("Wallet provider not available after connection.");
+      }
+      const signer = await provider.getSigner();
+      const signedMessage = await signer.signMessage(challengeMessage);
       setSignature(signedMessage);
 
       await apiRequest("/wallet/link/confirm", {
@@ -627,8 +587,19 @@ const Dashboard = () => {
                   </div>
 
                   <div className="flex flex-wrap gap-3">
-                    <Button variant="accent" onClick={handleConnectAndSignWallet} disabled={processingWallet}>
-                      Connect Wallet & Sign Message
+                    <Button
+                      variant="accent"
+                      onClick={() => void handleConnectAndSignWallet("injected")}
+                      disabled={processingWallet}
+                    >
+                      Connect Browser Wallet & Sign
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => void handleConnectAndSignWallet("walletconnect")}
+                      disabled={processingWallet}
+                    >
+                      Connect via WalletConnect & Sign
                     </Button>
                     <Button variant="outline" onClick={handleInitiateWallet} disabled={processingWallet}>
                       1) Generate Challenge

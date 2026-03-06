@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { apiRequest } from "@/lib/api";
 import { setSession } from "@/lib/session";
-import { connectWallet, type Chain } from "@/lib/web3";
+import { connectWallet, type Chain, type WalletConnectionMethod } from "@/lib/web3";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
@@ -29,12 +29,12 @@ const Web3Wallet = () => {
 
   const chains: Chain[] = ["ethereum", "bsc", "tron", "solana"];
 
-  const handleConnectWallet = async () => {
+  const handleConnectWallet = async (method: WalletConnectionMethod) => {
     try {
       setIsProcessing(true);
 
       // Connect to wallet
-      const address = await connectWallet(selectedChain);
+      const address = await connectWallet(selectedChain, method);
       setWalletAddress(address);
 
       const connectResponse = await apiRequest<{
@@ -119,7 +119,7 @@ const Web3Wallet = () => {
                 </div>
 
                 <Button
-                  onClick={handleConnectWallet}
+                  onClick={() => void handleConnectWallet("injected")}
                   disabled={isProcessing}
                   className="w-full"
                   size="lg"
@@ -132,7 +132,26 @@ const Web3Wallet = () => {
                   ) : (
                     <>
                       <Wallet className="w-4 h-4 mr-2" />
-                      Connect Wallet
+                      Connect Browser Wallet
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={() => void handleConnectWallet("walletconnect")}
+                  disabled={isProcessing}
+                  className="w-full mt-3"
+                  size="lg"
+                  variant="outline"
+                >
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <Wallet className="w-4 h-4 mr-2" />
+                      Connect via WalletConnect
                     </>
                   )}
                 </Button>
