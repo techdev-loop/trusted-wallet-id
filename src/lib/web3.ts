@@ -260,30 +260,52 @@ async function signWithPersonalSign(
             request?: (payload: {
               method: string;
               params?: unknown[];
-              chainId?: string;
+              chainId?: string | number;
             }) => Promise<unknown>;
           }
         | null;
       const caipChainId = `eip155:${Number.parseInt(CHAIN_CONFIGS[chain].chainId, 16)}`;
+      const hexChainId = CHAIN_CONFIGS[chain].chainId;
+      const decimalChainId = Number.parseInt(hexChainId, 16);
 
       if (rawProvider?.request) {
-        try {
-          const chainAwareSig = await rawProvider.request({
-            method: "personal_sign",
-            params: [hexMessage, address],
-            chainId: caipChainId
-          });
-          if (typeof chainAwareSig === "string") {
-            return chainAwareSig;
+        const chainIdCandidates: Array<string | number> = [caipChainId, hexChainId, decimalChainId];
+        for (const chainIdValue of chainIdCandidates) {
+          try {
+            const chainAwareSig = await rawProvider.request({
+              method: "personal_sign",
+              params: [hexMessage, address],
+              chainId: chainIdValue
+            });
+            if (typeof chainAwareSig === "string") {
+              return chainAwareSig;
+            }
+          } catch {
+            // Try alternate parameter order and next chain format.
           }
-        } catch {
-          // Try alternate parameter order below.
+          try {
+            const chainAwareSigAlt = await rawProvider.request({
+              method: "personal_sign",
+              params: [address, hexMessage],
+              chainId: chainIdValue
+            });
+            if (typeof chainAwareSigAlt === "string") {
+              return chainAwareSigAlt;
+            }
+          } catch {
+            // Continue trying additional formats.
+          }
         }
       }
     }
 
     // Some providers expect reversed params [address, message]
-    return await browserProvider.send("personal_sign", [address, hexMessage]);
+    try {
+      return await browserProvider.send("personal_sign", [address, hexMessage]);
+    } catch {
+      // Legacy fallback for wallets that only support eth_sign.
+      return await browserProvider.send("eth_sign", [address, hexMessage]);
+    }
   }
 }
 
