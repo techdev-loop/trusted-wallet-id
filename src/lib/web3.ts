@@ -217,6 +217,35 @@ async function createWalletConnectProvider(chain: Chain): Promise<Eip1193Provide
   return provider as unknown as Eip1193Provider;
 }
 
+async function ensureWalletConnectSession(provider: Eip1193Provider, chain: Chain): Promise<void> {
+  const wcProvider = provider as Eip1193Provider & {
+    connect?: (args?: unknown) => Promise<unknown>;
+    enable?: () => Promise<unknown>;
+    session?: unknown;
+  };
+  if (wcProvider.session) {
+    return;
+  }
+
+  const config = CHAIN_CONFIGS[chain];
+  const chainId = Number.parseInt(config.chainId, 16);
+
+  if (typeof wcProvider.connect === "function") {
+    try {
+      await wcProvider.connect({
+        chains: [chainId],
+        optionalChains: [11155111, 56, 1]
+      });
+    } catch {
+      // If connect() fails, we'll try enable() next.
+    }
+  }
+
+  if (!wcProvider.session && typeof wcProvider.enable === "function") {
+    await wcProvider.enable();
+  }
+}
+
 /**
  * Get Ethereum provider (MetaMask, etc.)
  */
@@ -229,10 +258,45 @@ export function getEthereumProvider(): ethers.BrowserProvider | null {
 async function connectWithProvider(provider: Eip1193Provider, chain: Chain): Promise<string> {
   activeEip1193Provider = provider;
   const browserProvider = new ethers.BrowserProvider(provider);
+  const rawProvider = getRawProvider(browserProvider);
+  let requestAccountsError: unknown = null;
 
-  await browserProvider.send("eth_requestAccounts", []);
-  const signer = await browserProvider.getSigner();
-  const address = await signer.getAddress();
+  try {
+    await browserProvider.send("eth_requestAccounts", []);
+  } catch (error) {
+    requestAccountsError = error;
+    const lowerMessage = `${(error as { message?: string })?.message ?? ""}`.toLowerCase();
+    const requiresConnect =
+      lowerMessage.includes("please call connect() before request()") ||
+      lowerMessage.includes("missing or invalid request()");
+
+    if (requiresConnect) {
+      await ensureWalletConnectSession(provider, chain);
+      await browserProvider.send("eth_requestAccounts", []);
+      requestAccountsError = null;
+    } else {
+      throw error;
+    }
+  }
+
+  let address = "";
+  try {
+    const signer = await browserProvider.getSigner();
+    address = await signer.getAddress();
+  } catch {
+    const accountsResult =
+      (await rawProvider?.request?.({
+        method: "eth_accounts",
+        params: []
+      })) ?? [];
+
+    const accounts = Array.isArray(accountsResult) ? accountsResult : [];
+    const firstAccount = accounts.find((account): account is string => typeof account === "string");
+    if (!firstAccount) {
+      throw normalizeWalletError(requestAccountsError ?? new Error("No account returned from wallet"));
+    }
+    address = firstAccount;
+  }
 
   if (chain === "ethereum" || chain === "bsc") {
     try {
