@@ -241,25 +241,61 @@ async function sleep(ms: number): Promise<void> {
 async function signWithPersonalSign(
   browserProvider: ethers.BrowserProvider,
   message: string,
-  address: string
+  address: string,
+  chain: Chain
 ): Promise<string> {
   const hexMessage = toHexMessage(message);
   try {
     return await browserProvider.send("personal_sign", [hexMessage, address]);
-  } catch {
+  } catch (primaryError) {
+    const err = primaryError as { message?: string } | undefined;
+    const lowerMessage = (err?.message ?? "").toLowerCase();
+    const needsChainContext =
+      lowerMessage.includes("missing or invalid") &&
+      lowerMessage.includes("request() chainid");
+
+    if (needsChainContext) {
+      const rawProvider = activeEip1193Provider as
+        | {
+            request?: (payload: {
+              method: string;
+              params?: unknown[];
+              chainId?: string;
+            }) => Promise<unknown>;
+          }
+        | null;
+      const caipChainId = `eip155:${Number.parseInt(CHAIN_CONFIGS[chain].chainId, 16)}`;
+
+      if (rawProvider?.request) {
+        try {
+          const chainAwareSig = await rawProvider.request({
+            method: "personal_sign",
+            params: [hexMessage, address],
+            chainId: caipChainId
+          });
+          if (typeof chainAwareSig === "string") {
+            return chainAwareSig;
+          }
+        } catch {
+          // Try alternate parameter order below.
+        }
+      }
+    }
+
     // Some providers expect reversed params [address, message]
     return await browserProvider.send("personal_sign", [address, hexMessage]);
   }
 }
 
-export async function signWalletMessage(message: string, addressHint?: string): Promise<string> {
+export async function signWalletMessage(message: string, addressHint?: string, chain: Chain = "ethereum"): Promise<string> {
   const provider = getEthereumProvider();
   if (!provider) {
     throw new Error("Wallet provider not available for signing.");
   }
 
   const signer = await provider.getSigner();
-  const address = (addressHint ?? (await signer.getAddress())).toLowerCase();
+  const resolvedAddress = addressHint ?? (await signer.getAddress());
+  const address = ethers.getAddress(resolvedAddress);
 
   const maxAttempts = isMobileDevice() ? 3 : 1;
   let lastError: unknown = null;
@@ -280,7 +316,7 @@ export async function signWalletMessage(message: string, addressHint?: string): 
   }
 
   try {
-    return await signWithPersonalSign(provider, message, address);
+    return await signWithPersonalSign(provider, message, address, chain);
   } catch (fallbackError) {
     if (isUserRejectedError(fallbackError)) {
       throw normalizeWalletError(fallbackError);

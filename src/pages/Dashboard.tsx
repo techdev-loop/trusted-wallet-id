@@ -235,7 +235,7 @@ const Dashboard = () => {
       const challengeMessage = initiateResponse.messageToSign;
       setMessageToSign(challengeMessage);
 
-      const signedMessage = await signWalletMessage(challengeMessage, normalizedAddress);
+      const signedMessage = await signWalletMessage(challengeMessage, normalizedAddress, "ethereum");
       setSignature(signedMessage);
 
       await apiRequest("/wallet/link/confirm", {
