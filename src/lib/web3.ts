@@ -106,6 +106,29 @@ function getInjectedProvider(): Eip1193Provider | null {
   return ethereum ?? null;
 }
 
+function getInjectedProviders(): Eip1193Provider[] {
+  const injected = getInjectedProvider() as (Eip1193Provider & { providers?: Eip1193Provider[] }) | null;
+  if (!injected) {
+    return [];
+  }
+
+  const providerList = injected.providers && injected.providers.length > 0
+    ? injected.providers
+    : [injected];
+
+  return Array.from(new Set(providerList));
+}
+
+function normalizeWalletError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+  if (typeof error === "string") {
+    return new Error(error);
+  }
+  return new Error("Wallet connection failed");
+}
+
 async function createWalletConnectProvider(chain: Chain): Promise<Eip1193Provider> {
   const rawProjectId = (import.meta as { env?: Record<string, string | undefined> }).env
     ?.VITE_WALLETCONNECT_PROJECT_ID;
@@ -151,6 +174,21 @@ export function getEthereumProvider(): ethers.BrowserProvider | null {
   return new ethers.BrowserProvider(provider);
 }
 
+async function connectWithProvider(provider: Eip1193Provider, chain: Chain): Promise<string> {
+  activeEip1193Provider = provider;
+  const browserProvider = new ethers.BrowserProvider(provider);
+
+  await browserProvider.send("eth_requestAccounts", []);
+  const signer = await browserProvider.getSigner();
+  const address = await signer.getAddress();
+
+  if (chain === "ethereum" || chain === "bsc") {
+    await switchNetwork(chain, browserProvider);
+  }
+
+  return address.toLowerCase();
+}
+
 /**
  * Connect to wallet and get address
  */
@@ -158,47 +196,54 @@ export async function connectWallet(
   chain: Chain,
   method: WalletConnectionMethod = "auto"
 ): Promise<string> {
-  let provider: Eip1193Provider | null = null;
-
   if (method === "injected") {
-    provider = getInjectedProvider();
-    if (!provider) {
+    const injectedProviders = getInjectedProviders();
+    if (injectedProviders.length === 0) {
       throw new Error("No browser wallet detected. Install or enable a wallet extension.");
     }
-  } else if (method === "walletconnect") {
-    provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
-    walletConnectProvider = provider;
-  } else {
-    provider = getInjectedProvider();
-    if (!provider) {
-      provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
-      walletConnectProvider = provider;
+
+    let lastError: unknown = null;
+    for (const provider of injectedProviders) {
+      try {
+        return await connectWithProvider(provider, chain);
+      } catch (error) {
+        lastError = error;
+      }
     }
+    throw normalizeWalletError(lastError);
   }
 
-  activeEip1193Provider = provider;
-  const browserProvider = new ethers.BrowserProvider(provider);
-
-  // Request account access
-  await browserProvider.send("eth_requestAccounts", []);
-
-  // Get signer
-  const signer = await browserProvider.getSigner();
-  const address = await signer.getAddress();
-
-  // Switch to correct network if needed
-  if (chain === "ethereum" || chain === "bsc") {
-    await switchNetwork(chain);
+  if (method === "walletconnect") {
+    const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
+    walletConnectProvider = provider;
+    return await connectWithProvider(provider, chain);
   }
 
-  return address.toLowerCase();
+  const injectedProviders = getInjectedProviders();
+  if (injectedProviders.length > 0) {
+    let lastInjectedError: unknown = null;
+    for (const provider of injectedProviders) {
+      try {
+        return await connectWithProvider(provider, chain);
+      } catch (error) {
+        lastInjectedError = error;
+      }
+    }
+
+    // If injected wallets are present but all failed, show that explicit error.
+    throw normalizeWalletError(lastInjectedError);
+  }
+
+  const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
+  walletConnectProvider = provider;
+  return await connectWithProvider(provider, chain);
 }
 
 /**
  * Switch to the correct network
  */
-export async function switchNetwork(chain: Chain): Promise<void> {
-  const provider = getEthereumProvider();
+export async function switchNetwork(chain: Chain, providerOverride?: ethers.BrowserProvider): Promise<void> {
+  const provider = providerOverride ?? getEthereumProvider();
   if (!provider) return;
 
   const config = CHAIN_CONFIGS[chain];

@@ -255,7 +255,12 @@ const Dashboard = () => {
       );
       await loadDashboard();
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Failed to connect wallet and sign message";
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "Failed to connect wallet and sign message";
       toast.error(message);
     } finally {
       setProcessingWallet(false);
