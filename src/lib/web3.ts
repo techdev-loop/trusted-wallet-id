@@ -505,12 +505,60 @@ export async function signWalletMessage(
   }
 
   const utf8Message = String(message ?? "");
-  try {
-    const signer = await provider.getSigner(address);
+  const expectedAddress = address.toLowerCase();
+  const rawProvider = getRawProvider(provider);
+  const chainIdHex = CHAIN_CONFIGS[chain]?.chainId ?? CHAIN_CONFIGS.ethereum.chainId;
+  const chainCandidates = getWalletConnectChainCandidates(rawProvider, chainIdHex);
+
+  const requestAccountsWithFallback = async (): Promise<void> => {
+    try {
+      await provider.send("eth_requestAccounts", []);
+      return;
+    } catch {
+      // fall through
+    }
+
+    if (!rawProvider?.request) {
+      return;
+    }
+
+    try {
+      await rawProvider.request({
+        method: "eth_requestAccounts",
+        params: []
+      });
+      return;
+    } catch {
+      // fall through
+    }
+
+    for (const chainId of chainCandidates) {
+      try {
+        await rawProvider.request({
+          chainId,
+          request: { method: "eth_requestAccounts", params: [] }
+        });
+        return;
+      } catch {
+        // continue
+      }
+    }
+  };
+
+  const signWithSigner = async (): Promise<string> => {
+    const signer = await provider.getSigner();
+    const signerAddress = (await signer.getAddress()).toLowerCase();
+    if (signerAddress !== expectedAddress) {
+      throw new Error("Connected wallet account changed. Please reconnect and try again.");
+    }
     return await signer.signMessage(utf8Message);
+  };
+
+  try {
+    await requestAccountsWithFallback();
+    return await signWithSigner();
   } catch (initialError) {
     // Re-establish WalletConnect session then retry signMessage once.
-    const rawProvider = getRawProvider(provider);
     if (rawProvider?.request) {
       const reconnectError = initialError as { message?: string };
       const lowerMessage = `${reconnectError?.message ?? ""}`.toLowerCase();
@@ -518,8 +566,8 @@ export async function signWalletMessage(
         const activeProvider = activeEip1193Provider;
         if (activeProvider) {
           await ensureWalletConnectSession(activeProvider, chain);
-          const signer = await provider.getSigner(address);
-          return await signer.signMessage(utf8Message);
+          await requestAccountsWithFallback();
+          return await signWithSigner();
         }
       }
     }
