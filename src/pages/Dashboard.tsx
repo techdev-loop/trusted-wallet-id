@@ -88,6 +88,7 @@ const Dashboard = () => {
   const [paymentReadyToPay, setPaymentReadyToPay] = useState(false);
 
   const session = getSession();
+  const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
 
   const loadDashboard = async () => {
     try {
@@ -373,9 +374,11 @@ const Dashboard = () => {
           </Link>
 
           <div className="flex items-center gap-3">
-            <Link to="/admin" className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:inline-flex items-center gap-1">
-              Admin Panel <ArrowUpRight className="w-3 h-3" />
-            </Link>
+            {canAccessAdmin && (
+              <Link to="/admin" className="text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1">
+                Admin Panel <ArrowUpRight className="w-3 h-3" />
+              </Link>
+            )}
             <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-muted/70 border border-border/50">
               <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
                 <User className="w-3.5 h-3.5 text-accent" />
