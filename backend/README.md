@@ -77,10 +77,15 @@ Unified role management (recommended):
 - `npm run admin:set-role -- --email compliance@fiulink.com --role compliance`
 - `npm run admin:set-role -- --email user@fiulink.com --role user`
 
+Optional operator metadata for auditing:
+
+- `npm run admin:set-role -- --email admin@fiulink.com --role admin --changed-by ops@fiulink.com`
+
 Notes:
 - Run this after `npm run db:init`.
 - If the email already exists, the role is updated.
 - Demotion only works for existing `admin`/`compliance` users.
+- Role changes are written to `user_role_changes` in Identity DB.
 
 ## API Entry Points
 

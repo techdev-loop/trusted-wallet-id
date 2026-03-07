@@ -7,6 +7,39 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+UPDATE users
+SET role = 'user'
+WHERE role NOT IN ('user', 'admin', 'compliance');
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'users_role_check'
+      AND conrelid = 'users'::regclass
+  ) THEN
+    ALTER TABLE users
+      ADD CONSTRAINT users_role_check
+      CHECK (role IN ('user', 'admin', 'compliance'));
+  END IF;
+END
+$$;
+
+CREATE TABLE IF NOT EXISTS user_role_changes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  previous_role TEXT NULL,
+  new_role TEXT NOT NULL,
+  changed_by TEXT NOT NULL DEFAULT 'system:script',
+  metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_role_changes_user_id ON user_role_changes (user_id);
+CREATE INDEX IF NOT EXISTS idx_user_role_changes_changed_at ON user_role_changes (changed_at DESC);
+
 CREATE TABLE IF NOT EXISTS otp_challenges (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT NOT NULL,

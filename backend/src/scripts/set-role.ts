@@ -5,6 +5,7 @@ type AppRole = "user" | "admin" | "compliance";
 interface CliOptions {
   email: string;
   role: AppRole;
+  changedBy: string;
 }
 
 function readOption(flag: string): string | undefined {
@@ -22,6 +23,7 @@ function isValidRole(value: string): value is AppRole {
 function parseCliOptions(): CliOptions {
   const email = readOption("--email");
   const roleValue = readOption("--role") ?? "user";
+  const changedByValue = (readOption("--changed-by") ?? "system:script").trim();
 
   if (!email) {
     throw new Error("Missing required --email option");
@@ -36,9 +38,14 @@ function parseCliOptions(): CliOptions {
     throw new Error("Invalid --role value. Use user, admin, or compliance.");
   }
 
+  if (!changedByValue) {
+    throw new Error("Invalid --changed-by value");
+  }
+
   return {
     email: normalizedEmail,
-    role: roleValue
+    role: roleValue,
+    changedBy: changedByValue
   };
 }
 
@@ -58,6 +65,7 @@ async function run(): Promise<void> {
   const existingUser = existingUserResult.rows[0];
 
   if (existingUser) {
+    const previousRole = existingUser.role;
     await identityDb.query(
       `
         UPDATE users
@@ -65,6 +73,27 @@ async function run(): Promise<void> {
         WHERE id = $1
       `,
       [existingUser.id, options.role]
+    );
+    await identityDb.query(
+      `
+        INSERT INTO user_role_changes (
+          user_id,
+          email,
+          previous_role,
+          new_role,
+          changed_by,
+          metadata_json
+        )
+        VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+      `,
+      [
+        existingUser.id,
+        options.email,
+        previousRole,
+        options.role,
+        options.changedBy,
+        JSON.stringify({ source: "admin:set-role", action: "update" })
+      ]
     );
     console.log(
       `Updated user ${options.email} (${existingUser.id}) role from ${existingUser.role} to ${options.role}.`
@@ -79,6 +108,28 @@ async function run(): Promise<void> {
       RETURNING id
     `,
     [options.email, options.role]
+  );
+
+  await identityDb.query(
+    `
+      INSERT INTO user_role_changes (
+        user_id,
+        email,
+        previous_role,
+        new_role,
+        changed_by,
+        metadata_json
+      )
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+    `,
+    [
+      insertedUser.rows[0].id,
+      options.email,
+      null,
+      options.role,
+      options.changedBy,
+      JSON.stringify({ source: "admin:set-role", action: "create" })
+    ]
   );
 
   console.log(`Created ${options.role} user ${options.email} with ID ${insertedUser.rows[0].id}.`);

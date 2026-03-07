@@ -6,6 +6,7 @@ type TargetRole = "user";
 interface CliOptions {
   email: string;
   role: TargetRole;
+  changedBy: string;
 }
 
 function readOption(flag: string): string | undefined {
@@ -19,6 +20,7 @@ function readOption(flag: string): string | undefined {
 function parseCliOptions(): CliOptions {
   const email = readOption("--email");
   const roleValue = readOption("--role") ?? "user";
+  const changedByValue = (readOption("--changed-by") ?? "system:script").trim();
 
   if (!email) {
     throw new Error("Missing required --email option");
@@ -32,10 +34,14 @@ function parseCliOptions(): CliOptions {
   if (roleValue !== "user") {
     throw new Error("Invalid --role value. Use user.");
   }
+  if (!changedByValue) {
+    throw new Error("Invalid --changed-by value");
+  }
 
   return {
     email: normalizedEmail,
-    role: roleValue
+    role: roleValue,
+    changedBy: changedByValue
   };
 }
 
@@ -75,6 +81,27 @@ async function run(): Promise<void> {
       WHERE id = $1
     `,
     [existingUser.id, options.role]
+  );
+  await identityDb.query(
+    `
+      INSERT INTO user_role_changes (
+        user_id,
+        email,
+        previous_role,
+        new_role,
+        changed_by,
+        metadata_json
+      )
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+    `,
+    [
+      existingUser.id,
+      options.email,
+      existingUser.role,
+      options.role,
+      options.changedBy,
+      JSON.stringify({ source: "admin:demote", action: "update" })
+    ]
   );
 
   console.log(
