@@ -10,6 +10,8 @@
     "db:init": "tsx src/scripts/init-db.ts",
     "db:migrate": "tsx src/scripts/init-db.ts",
     "admin:bootstrap": "tsx src/scripts/bootstrap-admin.ts",
+    "admin:demote": "tsx src/scripts/demote-admin.ts",
+    "admin:set-role": "tsx src/scripts/set-role.ts",
     "contracts:init": "tsx src/scripts/init-contract-configs.ts",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "vitest run"

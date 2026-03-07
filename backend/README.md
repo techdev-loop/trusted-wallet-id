@@ -67,9 +67,20 @@ Create or promote a user as `admin` or `compliance`:
 - `npm run admin:bootstrap -- --email admin@fiulink.com --role admin`
 - `npm run admin:bootstrap -- --email compliance@fiulink.com --role compliance`
 
+Demote a privileged account back to `user`:
+
+- `npm run admin:demote -- --email admin@fiulink.com --role user`
+
+Unified role management (recommended):
+
+- `npm run admin:set-role -- --email admin@fiulink.com --role admin`
+- `npm run admin:set-role -- --email compliance@fiulink.com --role compliance`
+- `npm run admin:set-role -- --email user@fiulink.com --role user`
+
 Notes:
 - Run this after `npm run db:init`.
 - If the email already exists, the role is updated.
+- Demotion only works for existing `admin`/`compliance` users.
 
 ## API Entry Points
 
