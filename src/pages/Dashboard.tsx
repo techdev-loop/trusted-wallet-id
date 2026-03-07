@@ -395,6 +395,15 @@ const Dashboard = () => {
       </header>
 
       <div className="page-container py-8 md:py-10 max-w-6xl">
+        {canAccessAdmin && (
+          <div className="sm:hidden mb-4">
+            <Button asChild variant="outline" className="w-full">
+              <Link to="/admin" className="inline-flex items-center justify-center gap-2">
+                Admin Panel <ArrowUpRight className="w-4 h-4" />
+              </Link>
+            </Button>
+          </div>
+        )}
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={0}>
           <div className="mb-10">
             <div className="flex items-center gap-3 mb-2">
