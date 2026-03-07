@@ -235,14 +235,9 @@ const Admin = () => {
               <span className="font-display font-bold text-lg text-foreground">FIUlink</span>
               <Badge className="ml-1.5 text-[10px] gradient-accent text-accent-foreground border-0 rounded-md px-2">Admin</Badge>
             </Link>
-            <div className="flex items-center gap-3">
-              <Link to="/dashboard" className="text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1">
-                User Dashboard <ArrowUpRight className="w-3 h-3" />
-              </Link>
-              <Button variant="ghost" size="icon" className="rounded-xl" onClick={handleLogout}>
-                <LogOut className="w-4 h-4" />
-              </Button>
-            </div>
+            <Button variant="ghost" size="icon" className="rounded-xl" onClick={handleLogout}>
+              <LogOut className="w-4 h-4" />
+            </Button>
           </div>
         </header>
         <div className="page-container py-8 md:py-10 max-w-6xl">
