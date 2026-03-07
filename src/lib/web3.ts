@@ -215,18 +215,56 @@ async function createWalletConnectProvider(chain: Chain): Promise<Eip1193Provide
     showQrModal: true,
     chains: [selectedChainId],
     optionalChains: [11155111, 56, 1],
+    rpcMap: {
+      11155111: CHAIN_CONFIGS.ethereum.rpcUrls[0],
+      56: CHAIN_CONFIGS.bsc.rpcUrls[0],
+      1: "https://ethereum-rpc.publicnode.com"
+    },
     methods: [
       "eth_requestAccounts",
       "eth_accounts",
       "eth_sendTransaction",
       "personal_sign",
+      "eth_sign",
+      "eth_signTypedData",
+      "eth_signTypedData_v4",
       "wallet_switchEthereumChain",
       "wallet_addEthereumChain"
-    ]
+    ],
+    optionalMethods: [
+      "eth_requestAccounts",
+      "eth_accounts",
+      "eth_sendTransaction",
+      "personal_sign",
+      "eth_sign",
+      "eth_signTypedData",
+      "eth_signTypedData_v4",
+      "wallet_switchEthereumChain",
+      "wallet_addEthereumChain"
+    ],
+    optionalEvents: ["accountsChanged", "chainChanged", "disconnect"]
   })) as { enable: () => Promise<unknown> };
 
   await provider.enable();
   return provider as unknown as Eip1193Provider;
+}
+
+async function resetWalletConnectProvider(): Promise<void> {
+  if (!walletConnectProvider) return;
+  const providerWithDisconnect = walletConnectProvider as Eip1193Provider & {
+    disconnect?: () => Promise<unknown>;
+  };
+  if (typeof providerWithDisconnect.disconnect === "function") {
+    try {
+      await providerWithDisconnect.disconnect();
+    } catch {
+      // Ignore stale disconnect errors.
+    }
+  }
+  if (activeEip1193Provider === walletConnectProvider) {
+    activeEip1193Provider = null;
+  }
+  walletConnectProvider = null;
 }
 
 async function ensureWalletConnectSession(provider: Eip1193Provider, chain: Chain): Promise<void> {
@@ -391,7 +429,9 @@ export async function connectWallet(
   }
 
   if (method === "walletconnect") {
-    let provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
+    // Force a clean WalletConnect session to avoid stale chain namespace issues on mobile.
+    await resetWalletConnectProvider();
+    let provider = await createWalletConnectProvider(chain);
     walletConnectProvider = provider;
     try {
       return await connectWithProvider(provider, chain);
@@ -417,7 +457,8 @@ export async function connectWallet(
     }
 
     if (isMobileDevice() && isRecoverableConnectionError(lastInjectedError)) {
-      let provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
+      await resetWalletConnectProvider();
+      let provider = await createWalletConnectProvider(chain);
       walletConnectProvider = provider;
       try {
         return await connectWithProvider(provider, chain);
@@ -435,6 +476,10 @@ export async function connectWallet(
     throw normalizeWalletError(lastInjectedError);
   }
 
+  // In auto mode on mobile, prefer a fresh WalletConnect session.
+  if (isMobileDevice()) {
+    await resetWalletConnectProvider();
+  }
   let provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
   walletConnectProvider = provider;
   try {
