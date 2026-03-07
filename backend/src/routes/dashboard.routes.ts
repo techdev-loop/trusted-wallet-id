@@ -3,7 +3,6 @@ import { StatusCodes } from "http-status-codes";
 import { identityDb, walletDb } from "../db/pool.js";
 import { HttpError } from "../lib/http-error.js";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
-import { isWalletVerified } from "../services/blockchain.service.js";
 
 const router = Router();
 
@@ -12,7 +11,7 @@ router.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
     throw new HttpError("Unauthorized", StatusCodes.UNAUTHORIZED);
   }
 
-  const [kycResult, walletResult, disclosureResult] = await Promise.all([
+  const [kycResult, walletResult, paymentResult, disclosureResult] = await Promise.all([
     identityDb.query<{ verification_status: string }>(
       `
         SELECT verification_status
@@ -25,16 +24,30 @@ router.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
     walletDb.query<{
       id: string;
       wallet_address: string;
-      chain: string | null;
       link_status: string;
       linked_at: Date | null;
       unlinked_at: Date | null;
     }>(
       `
-        SELECT id, wallet_address, chain, link_status, linked_at, unlinked_at
+        SELECT id, wallet_address, link_status, linked_at, unlinked_at
         FROM wallet_links
         WHERE user_id = $1
         ORDER BY created_at DESC
+      `,
+      [req.user.sub]
+    ),
+    walletDb.query<{
+      tx_hash: string;
+      amount_usdt: string;
+      paid_at: Date;
+      wallet_address: string;
+    }>(
+      `
+        SELECT p.tx_hash, p.amount_usdt::TEXT, p.paid_at, w.wallet_address
+        FROM fee_payments p
+        INNER JOIN wallet_links w ON p.wallet_link_id = w.id
+        WHERE w.user_id = $1
+        ORDER BY p.paid_at DESC
       `,
       [req.user.sub]
     ),
@@ -55,30 +68,20 @@ router.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
     )
   ]);
 
-  const walletsWithOnchainStatus = await Promise.all(
-    walletResult.rows.map(async (wallet) => {
-      const chain = wallet.chain === "bsc" || wallet.chain === "tron" || wallet.chain === "solana" ? wallet.chain : "ethereum";
-      const onchainVerified = await isWalletVerified(wallet.wallet_address, chain);
-      return {
-        ...wallet,
-        onchainVerified
-      };
-    })
-  );
-
   res.status(StatusCodes.OK).json({
     identityVerificationStatus: kycResult.rows[0]?.verification_status ?? "not_started",
-    linkedWallets: walletsWithOnchainStatus.map((wallet) => ({
+    linkedWallets: walletResult.rows.map((wallet) => ({
       id: wallet.id,
       walletAddress: wallet.wallet_address,
-      status:
-        wallet.onchainVerified
-          ? "Active"
-          : wallet.link_status === "pending_verification" || wallet.link_status === "pending_signature"
-            ? "Pending Verification"
-            : "Unlinked",
+      status: wallet.link_status === "active" ? "Active" : "Unlinked",
       linkedAt: wallet.linked_at,
       unlinkedAt: wallet.unlinked_at
+    })),
+    paymentHistory: paymentResult.rows.map((payment) => ({
+      txHash: payment.tx_hash,
+      amountUsdt: Number(payment.amount_usdt),
+      walletAddress: payment.wallet_address,
+      paidAt: payment.paid_at
     })),
     disclosureHistory: disclosureResult.rows.map((disclosure) => ({
       id: disclosure.id,
@@ -107,14 +110,14 @@ router.post("/wallets/:walletAddress/unlink", requireAuth, async (req: Authentic
           unlinked_at = NOW()
       WHERE user_id = $1
         AND wallet_address = $2
-        AND link_status IN ('active', 'pending_verification', 'pending_signature')
+        AND link_status = 'active'
       RETURNING id
     `,
     [req.user.sub, normalizedAddress]
   );
 
   if (!updateResult.rows[0]) {
-    throw new HttpError("Wallet link not found", StatusCodes.NOT_FOUND);
+    throw new HttpError("Active wallet link not found", StatusCodes.NOT_FOUND);
   }
 
   res.status(StatusCodes.OK).json({

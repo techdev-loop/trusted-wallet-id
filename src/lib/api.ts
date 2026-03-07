@@ -1,6 +1,8 @@
 import { getSession } from "./session";
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:4000/api";
+// Default to a relative /api base so Vite can proxy to the backend in development.
+// In production, override with VITE_API_BASE_URL if the API is on a different origin.
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api";
 
 export class ApiError extends Error {
   readonly status: number;

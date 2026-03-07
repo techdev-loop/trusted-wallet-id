@@ -3,7 +3,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import { StatusCodes } from "http-status-codes";
 import { z } from "zod";
 import { env } from "../config/env.js";
-import { identityDb, walletDb } from "../db/pool.js";
+import { identityDb } from "../db/pool.js";
 import { HttpError } from "../lib/http-error.js";
 import { logAdminAudit } from "../services/audit.service.js";
 import {
@@ -53,20 +53,6 @@ const OTP_RETRY_COOLDOWN_MS = 60 * 1000;
 const MAX_KYC_INIT_ATTEMPTS = 5;
 const SYSTEM_AUDIT_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
 const SANDBOX_PROVIDER_NAME = "didit_sandbox";
-
-async function activatePendingWalletsForUser(userId: string): Promise<void> {
-  await walletDb.query(
-    `
-      UPDATE wallet_links
-      SET link_status = 'active',
-          linked_at = COALESCE(linked_at, NOW()),
-          unlinked_at = NULL
-      WHERE user_id = $1
-        AND link_status = 'pending_verification'
-    `,
-    [userId]
-  );
-}
 
 function isSandboxModeEnabled(): boolean {
   return env.NODE_ENV !== "production" && env.KYC_SANDBOX_MODE;
@@ -185,10 +171,6 @@ router.post("/webhooks/didit", async (req, res) => {
     ]
   );
 
-  if (verificationStatus === "verified") {
-    await activatePendingWalletsForUser(userId);
-  }
-
   await logAdminAudit({
     actorUserId: SYSTEM_AUDIT_ACTOR_ID,
     actorRole: "system",
@@ -265,10 +247,6 @@ router.post("/sandbox/decision", requireAuth, async (req: AuthenticatedRequest, 
 
   if (!updateResult.rows[0]) {
     throw new HttpError("Start KYC first before setting sandbox decision", StatusCodes.BAD_REQUEST);
-  }
-
-  if (verificationStatus === "verified") {
-    await activatePendingWalletsForUser(req.user.sub);
   }
 
   res.status(StatusCodes.OK).json({
@@ -459,10 +437,6 @@ router.post("/submit", requireAuth, async (req: AuthenticatedRequest, res) => {
     ]
   );
 
-  if (verificationStatus === "verified") {
-    await activatePendingWalletsForUser(req.user.sub);
-  }
-
   res.status(StatusCodes.OK).json({
     verificationStatus,
     message:
@@ -531,9 +505,6 @@ router.get("/status", requireAuth, async (req: AuthenticatedRequest, res) => {
         [req.user.sub, refreshedProviderStatus, refreshedVerificationStatus]
       );
 
-      if (refreshedVerificationStatus === "verified") {
-        await activatePendingWalletsForUser(req.user.sub);
-      }
     } catch {
       // Non-blocking. Keep last known database status.
     }

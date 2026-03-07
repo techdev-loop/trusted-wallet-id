@@ -19,51 +19,10 @@ const verifyOtpSchema = z.object({
 
 const router = Router();
 
-async function issueSessionForEmail(email: string) {
-  const upsertedUser = await identityDb.query<{ id: string; email: string; role: AppRole }>(
-    `
-      INSERT INTO users (email)
-      VALUES ($1)
-      ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
-      RETURNING id, email, role
-    `,
-    [email]
-  );
-
-  const user = upsertedUser.rows[0];
-  const token = signAccessToken({
-    sub: user.id,
-    email: user.email,
-    role: user.role
-  });
-
-  return {
-    token,
-    user: {
-      id: user.id,
-      email: user.email,
-      role: user.role
-    }
-  };
-}
-
 router.post("/signup", async (req, res) => {
   const parsed = signupSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
-  }
-
-  const email = parsed.data.email.toLowerCase();
-
-  if (!env.OTP_REQUIRED) {
-    const session = await issueSessionForEmail(email);
-    res.status(StatusCodes.CREATED).json({
-      message: "OTP skipped (disabled by environment setting)",
-      email,
-      otpRequired: false,
-      ...session
-    });
-    return;
   }
 
   const otpCode = `${Math.floor(100000 + Math.random() * 900000)}`;
@@ -74,15 +33,14 @@ router.post("/signup", async (req, res) => {
       INSERT INTO otp_challenges (email, otp_code, expires_at)
       VALUES ($1, $2, $3)
     `,
-    [email, otpCode, expiresAt]
+    [parsed.data.email.toLowerCase(), otpCode, expiresAt]
   );
 
-  await sendOtpEmail(email, otpCode);
+  await sendOtpEmail(parsed.data.email.toLowerCase(), otpCode);
 
   const response: Record<string, unknown> = {
     message: "OTP sent successfully",
-    email,
-    otpRequired: true
+    email: parsed.data.email.toLowerCase()
   };
 
   if (env.NODE_ENV !== "production" && env.EMAIL_PROVIDER === "none") {
@@ -96,10 +54,6 @@ router.post("/verify-otp", async (req, res) => {
   const parsed = verifyOtpSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
-  }
-
-  if (!env.OTP_REQUIRED) {
-    throw new HttpError("OTP verification is disabled in this environment", StatusCodes.BAD_REQUEST);
   }
 
   const email = parsed.data.email.toLowerCase();
@@ -139,10 +93,30 @@ router.post("/verify-otp", async (req, res) => {
 
   await identityDb.query(`UPDATE otp_challenges SET consumed_at = NOW() WHERE id = $1`, [otpRow.id]);
 
-  const session = await issueSessionForEmail(email);
+  const upsertedUser = await identityDb.query<{ id: string; email: string; role: AppRole }>(
+    `
+      INSERT INTO users (email)
+      VALUES ($1)
+      ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
+      RETURNING id, email, role
+    `,
+    [email]
+  );
+
+  const user = upsertedUser.rows[0];
+  const token = signAccessToken({
+    sub: user.id,
+    email: user.email,
+    role: user.role
+  });
 
   res.status(StatusCodes.OK).json({
-    ...session
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      role: user.role
+    }
   });
 });
 

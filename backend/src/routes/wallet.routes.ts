@@ -48,11 +48,8 @@ router.post("/link/initiate", requireAuth, async (req: AuthenticatedRequest, res
   );
 
   const kycProfile = kycResult.rows[0];
-  if (!kycProfile || !["pending", "verified"].includes(kycProfile.verification_status)) {
-    throw new HttpError(
-      "Submit KYC and reach pending or verified status before wallet linking",
-      StatusCodes.BAD_REQUEST
-    );
+  if (!kycProfile || kycProfile.verification_status !== "verified") {
+    throw new HttpError("Complete KYC verification before wallet linking", StatusCodes.BAD_REQUEST);
   }
 
   const normalizedAddress = parsed.data.walletAddress.toLowerCase();
@@ -61,12 +58,12 @@ router.post("/link/initiate", requireAuth, async (req: AuthenticatedRequest, res
   const upsertResult = await walletDb.query<{ id: string }>(
     `
       INSERT INTO wallet_links (user_id, wallet_address, message_nonce, link_status)
-      VALUES ($1, $2, $3, 'pending_signature')
+      VALUES ($1, $2, $3, 'pending_payment')
       ON CONFLICT (wallet_address)
       DO UPDATE
       SET user_id = EXCLUDED.user_id,
           message_nonce = EXCLUDED.message_nonce,
-          link_status = 'pending_signature',
+          link_status = 'pending_payment',
           unlinked_at = NULL
       RETURNING id
     `,
@@ -119,41 +116,11 @@ router.post("/link/confirm", requireAuth, async (req: AuthenticatedRequest, res)
     throw new HttpError("Wallet signature verification failed", StatusCodes.BAD_REQUEST);
   }
 
-  const kycResult = await identityDb.query<{ verification_status: string }>(
-    `
-      SELECT verification_status
-      FROM kyc_profiles
-      WHERE user_id = $1
-      LIMIT 1
-    `,
-    [req.user.sub]
-  );
-  const verificationStatus = kycResult.rows[0]?.verification_status;
-  if (!verificationStatus || !["pending", "verified"].includes(verificationStatus)) {
-    throw new HttpError("KYC status is not eligible for wallet linking", StatusCodes.BAD_REQUEST);
-  }
-
-  const nextLinkStatus = verificationStatus === "verified" ? "active" : "pending_verification";
-  await walletDb.query(
-    `
-      UPDATE wallet_links
-      SET link_status = $2,
-          linked_at = CASE WHEN $2 = 'active' THEN COALESCE(linked_at, NOW()) ELSE linked_at END,
-          unlinked_at = NULL
-      WHERE id = $1
-    `,
-    [walletLink.id, nextLinkStatus]
-  );
-
   res.status(StatusCodes.OK).json({
     walletLinkId: walletLink.id,
     walletAddress: walletLink.wallet_address,
     signatureVerified: true,
-    status: nextLinkStatus,
-    nextStep:
-      nextLinkStatus === "active"
-        ? "Wallet linked successfully"
-        : "Wallet linked. It will become active once identity verification is approved."
+    nextStep: "Pay 10 USDT fee"
   });
 });
 
