@@ -449,52 +449,6 @@ export async function connectWallet(
   }
 }
 
-function isInvalidRequestShapeError(error: unknown): boolean {
-  const err = error as
-    | {
-        message?: string;
-        error?: { message?: string };
-        info?: { error?: { message?: string } };
-      }
-    | undefined;
-  const message = `${err?.message ?? ""} ${err?.error?.message ?? ""} ${err?.info?.error?.message ?? ""}`.toLowerCase();
-  return message.includes("missing or invalid request()");
-}
-
-function messageToHex(message: string): string {
-  return ethers.hexlify(ethers.toUtf8Bytes(message));
-}
-
-async function trySignRequest(
-  rawRequest: (args: unknown) => Promise<unknown>,
-  method: "personal_sign" | "eth_sign",
-  params: unknown[],
-  chainCandidates: string[]
-): Promise<string | null> {
-  try {
-    const signature = await rawRequest({ method, params });
-    return typeof signature === "string" ? signature : null;
-  } catch {
-    // try WalletConnect universal request shape next
-  }
-
-  for (const chainId of chainCandidates) {
-    try {
-      const signature = await rawRequest({
-        chainId,
-        request: { method, params }
-      });
-      if (typeof signature === "string") {
-        return signature;
-      }
-    } catch {
-      // continue
-    }
-  }
-
-  return null;
-}
-
 export async function signWalletMessage(
   message: string,
   address: string,
@@ -505,49 +459,24 @@ export async function signWalletMessage(
     throw new Error("Wallet provider not available for signing.");
   }
 
+  const utf8Message = String(message ?? "");
   try {
-    const signer = await provider.getSigner();
-    return await signer.signMessage(message);
+    const signer = await provider.getSigner(address);
+    return await signer.signMessage(utf8Message);
   } catch (initialError) {
+    // Re-establish WalletConnect session then retry signMessage once.
     const rawProvider = getRawProvider(provider);
-    if (!rawProvider?.request) {
-      throw initialError;
-    }
-
-    const chainIdHex = CHAIN_CONFIGS[chain]?.chainId ?? CHAIN_CONFIGS.ethereum.chainId;
-    const chainCandidates = getWalletConnectChainCandidates(rawProvider, chainIdHex);
-    const messageHex = messageToHex(message);
-
-    const personalSignVariants: unknown[][] = [
-      [messageHex, address],
-      [address, messageHex],
-      [message, address],
-      [address, message]
-    ];
-
-    for (const params of personalSignVariants) {
-      const signature = await trySignRequest(rawProvider.request, "personal_sign", params, chainCandidates);
-      if (signature) {
-        return signature;
+    if (rawProvider?.request) {
+      const reconnectError = initialError as { message?: string };
+      const lowerMessage = `${reconnectError?.message ?? ""}`.toLowerCase();
+      if (isConnectBeforeRequestError(initialError) || lowerMessage.includes("missing or invalid request()")) {
+        const activeProvider = activeEip1193Provider;
+        if (activeProvider) {
+          await ensureWalletConnectSession(activeProvider, chain);
+          const signer = await provider.getSigner(address);
+          return await signer.signMessage(utf8Message);
+        }
       }
-    }
-
-    // Some wallets only accept eth_sign as fallback.
-    const ethSignVariants: unknown[][] = [
-      [address, messageHex],
-      [messageHex, address],
-      [address, message],
-      [message, address]
-    ];
-    for (const params of ethSignVariants) {
-      const signature = await trySignRequest(rawProvider.request, "eth_sign", params, chainCandidates);
-      if (signature) {
-        return signature;
-      }
-    }
-
-    if (isInvalidRequestShapeError(initialError)) {
-      throw new Error("Wallet connected, but mobile wallet rejected signing format. Please update wallet app and try again.");
     }
     throw initialError;
   }
