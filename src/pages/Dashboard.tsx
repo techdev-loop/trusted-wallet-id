@@ -596,7 +596,7 @@ const Dashboard = () => {
                       variant="accent"
                       onClick={() => void handleConnectAndSignWallet("injected")}
                       disabled={processingWallet}
-                      className="w-full sm:w-auto"
+                      className="hidden sm:inline-flex w-full sm:w-auto"
                     >
                       Connect Browser Wallet & Sign
                     </Button>
