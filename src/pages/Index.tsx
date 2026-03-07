@@ -82,31 +82,31 @@ const Index = () => {
       <Navbar />
 
       {/* Hero */}
-      <section className="relative min-h-[92vh] md:min-h-screen flex items-center justify-center overflow-hidden">
+      <section className="relative min-h-[90vh] md:min-h-screen flex items-center justify-center overflow-hidden pt-12">
         <div className="absolute inset-0">
-          <img src={heroBg} alt="" className="w-full h-full object-cover scale-105" />
-          <div className="absolute inset-0 gradient-hero opacity-90" />
-          <div className="absolute inset-0 grid-pattern opacity-30" />
+          <img src={heroBg} alt="" className="w-full h-full object-cover scale-[1.03]" />
+          <div className="absolute inset-0 gradient-hero opacity-88" />
+          <div className="absolute inset-0 grid-pattern opacity-20" />
         </div>
 
         {/* Glow effects */}
-        <div className="hero-glow -top-20 -right-40 animate-pulse-slow" />
-        <div className="hero-glow -bottom-40 -left-20 animate-pulse-slow" style={{ animationDelay: '2s' }} />
+        <div className="hero-glow -top-20 -right-40 animate-pulse-slow opacity-80" />
+        <div className="hero-glow -bottom-40 -left-20 animate-pulse-slow opacity-80" style={{ animationDelay: "2s" }} />
 
-        <div className="relative page-container py-28 md:py-32 text-center">
+        <div className="relative page-container py-20 sm:py-24 md:py-28 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent/10 border border-accent/20 mb-8 backdrop-blur-sm">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent/12 border border-accent/25 mb-7 backdrop-blur-sm">
               <Zap className="w-3.5 h-3.5 text-accent" />
               <span className="text-sm font-medium text-accent">Web3 Identity Registry</span>
             </div>
           </motion.div>
 
           <motion.h1
-            className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-primary-foreground mb-6 max-w-5xl mx-auto leading-[1.1]"
+            className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-primary-foreground mb-5 max-w-5xl mx-auto leading-[1.06]"
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
@@ -116,7 +116,7 @@ const Index = () => {
           </motion.h1>
 
           <motion.p
-            className="text-base sm:text-lg md:text-xl text-primary-foreground/70 max-w-2xl mx-auto mb-10 md:mb-12 leading-relaxed"
+            className="text-base sm:text-lg md:text-xl text-primary-foreground/70 max-w-2xl mx-auto mb-8 md:mb-10 leading-relaxed"
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
@@ -126,7 +126,7 @@ const Index = () => {
           </motion.p>
 
           <motion.div
-            className="flex flex-col sm:flex-row gap-4 justify-center"
+            className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center"
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
@@ -144,7 +144,7 @@ const Index = () => {
 
           {/* Stats bar */}
           <motion.div
-            className="mt-14 md:mt-20 grid grid-cols-2 md:grid-cols-4 gap-5 md:gap-6 max-w-3xl mx-auto"
+            className="mt-12 md:mt-16 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 max-w-3xl mx-auto"
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.5, ease: [0.16, 1, 0.3, 1] }}
@@ -176,22 +176,20 @@ const Index = () => {
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/8 border border-accent/15 mb-5">
               <span className="text-xs font-semibold text-accent tracking-wider uppercase">Simple Process</span>
             </div>
-            <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground">
-              How It Works
-            </h2>
-            <p className="text-muted-foreground mt-5 max-w-lg mx-auto text-lg">
+            <h2 className="section-title">How It Works</h2>
+            <p className="section-subtitle mt-4 max-w-lg mx-auto">
               Three simple steps to link your identity to your Web3 wallet securely.
             </p>
           </motion.div>
 
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto relative">
+          <div className="grid md:grid-cols-3 gap-6 md:gap-7 max-w-5xl mx-auto relative">
             {/* Connection line */}
             <div className="hidden md:block absolute top-24 left-[20%] right-[20%] h-px bg-gradient-to-r from-transparent via-accent/20 to-transparent" />
             
             {steps.map((step, i) => (
               <motion.div
                 key={step.step}
-                className="glass-card rounded-2xl p-8 text-center group relative"
+                className="glass-card rounded-2xl p-7 text-center group relative"
                 initial="hidden"
                 whileInView="visible"
                 viewport={{ once: true }}
@@ -211,8 +209,8 @@ const Index = () => {
       </section>
 
       {/* Features */}
-      <section id="features" className="section-pad bg-muted/40 relative overflow-hidden">
-        <div className="absolute inset-0 grid-pattern opacity-40" />
+      <section id="features" className="section-pad bg-muted/35 relative overflow-hidden">
+        <div className="absolute inset-0 grid-pattern opacity-25" />
         <div className="page-container relative">
           <motion.div
             className="text-center mb-20"
@@ -225,19 +223,17 @@ const Index = () => {
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/8 border border-accent/15 mb-5">
               <span className="text-xs font-semibold text-accent tracking-wider uppercase">Enterprise Security</span>
             </div>
-            <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground">
-              Built for Trust
-            </h2>
-            <p className="text-muted-foreground mt-5 max-w-lg mx-auto text-lg">
+            <h2 className="section-title">Built for Trust</h2>
+            <p className="section-subtitle mt-4 max-w-lg mx-auto">
               Every layer of FIUlink is designed with security and compliance in mind.
             </p>
           </motion.div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto" id="security">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6 max-w-6xl mx-auto" id="security">
             {features.map((feature, i) => (
               <motion.div
                 key={feature.title}
-                className="glass-card rounded-2xl p-8 group"
+                className="glass-card rounded-2xl p-7 group"
                 initial="hidden"
                 whileInView="visible"
                 viewport={{ once: true }}
@@ -259,7 +255,7 @@ const Index = () => {
       <section className="section-pad bg-background">
         <div className="page-container">
           <motion.div
-            className="gradient-hero rounded-3xl p-8 sm:p-10 md:p-20 text-center max-w-5xl mx-auto relative overflow-hidden"
+            className="gradient-hero rounded-3xl p-8 sm:p-10 md:p-14 lg:p-16 text-center max-w-5xl mx-auto relative overflow-hidden"
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true }}
@@ -274,10 +270,10 @@ const Index = () => {
               <div className="w-16 h-16 rounded-2xl gradient-accent flex items-center justify-center mx-auto mb-8 shadow-[var(--shadow-accent)]">
                 <CheckCircle2 className="w-7 h-7 text-accent-foreground" />
               </div>
-              <h2 className="font-display text-3xl md:text-5xl font-bold text-primary-foreground mb-5">
+              <h2 className="font-display text-3xl md:text-5xl font-bold text-primary-foreground mb-4">
                 Ready to Link Your Wallet?
               </h2>
-              <p className="text-primary-foreground/50 mb-10 max-w-lg mx-auto text-lg">
+              <p className="text-primary-foreground/55 mb-8 max-w-lg mx-auto text-lg">
                 Join the secure identity-linked wallet registry. Quick setup, enterprise-grade security.
               </p>
               <Button variant="accent" size="xl" asChild>

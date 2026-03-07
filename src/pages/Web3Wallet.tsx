@@ -77,21 +77,21 @@ const Web3Wallet = () => {
     <div className="page-shell">
       <Navbar />
 
-      <div className="page-container py-14 md:py-16 max-w-4xl">
+      <div className="page-container py-12 md:py-16 max-w-4xl">
         <motion.div
           initial="hidden"
           animate="visible"
           variants={fadeIn}
-          className="text-center mb-10 md:mb-12"
+          className="text-center mb-8 md:mb-10"
         >
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent/10 border border-accent/20 mb-6">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent/10 border border-accent/20 mb-5">
             <Zap className="w-4 h-4 text-accent" />
             <span className="text-sm font-medium text-accent">Web3 Wallet Verification</span>
           </div>
-          <h1 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-foreground mb-4">
+          <h1 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-foreground mb-3">
             Connect & Verify Your Wallet
           </h1>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+          <p className="text-muted-foreground text-base sm:text-lg max-w-2xl mx-auto">
             Connect your Web3 wallet to create a wallet session. Supports Ethereum, BSC, Tron, and Solana.
           </p>
         </motion.div>
@@ -105,12 +105,12 @@ const Web3Wallet = () => {
                 <CardDescription>Choose the blockchain network for your wallet</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-5">
                   {chains.map((chain) => (
                     <Button
                       key={chain}
-                      variant={selectedChain === chain ? "default" : "outline"}
-                      className="h-auto py-6 flex flex-col gap-2"
+                      variant={selectedChain === chain ? "accent" : "outline"}
+                      className="h-auto py-5 flex flex-col gap-1.5"
                       onClick={() => setSelectedChain(chain)}
                     >
                       <span className="font-semibold capitalize">{chain}</span>
@@ -121,7 +121,7 @@ const Web3Wallet = () => {
                 <Button
                   onClick={() => void handleConnectWallet("injected")}
                   disabled={isProcessing}
-                  className="w-full"
+                  className="hidden sm:inline-flex w-full"
                   size="lg"
                 >
                   {isProcessing ? (
@@ -139,7 +139,7 @@ const Web3Wallet = () => {
                 <Button
                   onClick={() => void handleConnectWallet("walletconnect")}
                   disabled={isProcessing}
-                  className="w-full mt-3"
+                  className="w-full sm:mt-3"
                   size="lg"
                   variant="outline"
                 >
@@ -174,7 +174,7 @@ const Web3Wallet = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="p-4 bg-success/10 border border-success/20 rounded-lg">
+                <div className="p-4 bg-success/10 border border-success/20 rounded-xl">
                   <div className="flex items-center gap-2 mb-2">
                     <CheckCircle2 className="w-5 h-5 text-success" />
                     <span className="font-semibold">Verification Complete</span>

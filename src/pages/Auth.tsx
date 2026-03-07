@@ -98,19 +98,19 @@ const Auth = () => {
   return (
     <div className="page-shell flex">
       {/* Left panel */}
-      <div className="hidden lg:flex lg:w-1/2 gradient-hero relative items-center justify-center p-16 overflow-hidden">
-        <div className="absolute inset-0 grid-pattern opacity-15" />
+      <div className="hidden lg:flex lg:w-[48%] gradient-hero relative items-center justify-center p-14 xl:p-16 overflow-hidden">
+        <div className="absolute inset-0 grid-pattern opacity-12" />
         <div className="hero-glow top-0 right-0" />
-        <div className="hero-glow bottom-0 left-0" style={{ animationDelay: '2s' }} />
+        <div className="hero-glow bottom-0 left-0" style={{ animationDelay: "2s" }} />
         
         <div className="relative text-center max-w-md">
-          <div className="w-20 h-20 rounded-2xl gradient-accent flex items-center justify-center mx-auto mb-10 shadow-[var(--shadow-accent)]">
+          <div className="w-20 h-20 rounded-2xl gradient-accent flex items-center justify-center mx-auto mb-9 shadow-[var(--shadow-accent)]">
             <Shield className="w-9 h-9 text-accent-foreground" />
           </div>
-          <h1 className="font-display text-4xl font-bold text-primary-foreground mb-5 leading-tight">
+          <h1 className="font-display text-4xl font-bold text-primary-foreground mb-4 leading-tight">
             Secure Identity<br />Linking
           </h1>
-          <p className="text-primary-foreground/50 leading-relaxed text-lg">
+          <p className="text-primary-foreground/55 leading-relaxed text-lg">
             KYC-verified wallet identity linking with enterprise-grade encryption and full regulatory compliance.
           </p>
 
@@ -119,7 +119,7 @@ const Auth = () => {
               { icon: Lock, label: "AES-256 Encrypted" },
               { icon: Zap, label: "Instant Linking" },
             ].map((item) => (
-              <div key={item.label} className="flex items-center gap-3 text-left bg-primary-foreground/5 rounded-xl p-4 border border-primary-foreground/8">
+              <div key={item.label} className="flex items-center gap-3 text-left bg-primary-foreground/8 rounded-xl p-4 border border-primary-foreground/10">
                 <item.icon className="w-5 h-5 text-accent flex-shrink-0" />
                 <span className="text-sm text-primary-foreground/60">{item.label}</span>
               </div>
@@ -129,23 +129,23 @@ const Auth = () => {
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-8">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-8 lg:p-10">
         <motion.div
-          className="w-full max-w-md rounded-2xl border border-border/60 bg-card/75 backdrop-blur-sm shadow-[var(--shadow-md)] p-5 sm:p-8"
+          className="w-full max-w-md rounded-2xl border border-border/65 bg-card/85 backdrop-blur-sm shadow-[var(--shadow-md)] p-5 sm:p-7"
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
-          <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors group">
+          <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-7 transition-colors group">
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
             Back to home
           </Link>
 
-          <div className="mb-8">
-            <h2 className="font-display text-2xl sm:text-3xl font-bold text-foreground">
+          <div className="mb-7">
+            <h2 className="font-display text-2xl sm:text-3xl font-bold text-foreground tracking-tight">
               {mode === "signin" ? "Welcome back" : "Create your account"}
             </h2>
-            <p className="text-muted-foreground mt-3 text-base">
+            <p className="text-muted-foreground mt-2.5 text-sm sm:text-base">
               {step === "email"
                 ? "Enter your email to continue"
                 : "Enter the 6-digit code sent to your email"}
@@ -153,7 +153,7 @@ const Auth = () => {
           </div>
 
           {step === "email" ? (
-            <form onSubmit={handleEmailSubmit} className="space-y-6">
+            <form onSubmit={handleEmailSubmit} className="space-y-5">
               <div className="space-y-2.5">
                 <Label htmlFor="email" className="text-sm font-medium">Email address</Label>
                 <div className="relative">
@@ -162,7 +162,7 @@ const Auth = () => {
                     id="email"
                     type="email"
                     placeholder="you@example.com"
-                    className="pl-11 h-12 rounded-xl bg-muted/50 border-border/60 focus:bg-card transition-colors"
+                    className="pl-11 h-12 rounded-xl bg-muted/45 border-border/60 focus:bg-card transition-colors"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -183,11 +183,11 @@ const Auth = () => {
               </Button>
             </form>
           ) : (
-            <form onSubmit={handleOtpSubmit} className="space-y-6">
+            <form onSubmit={handleOtpSubmit} className="space-y-5">
               <div className="space-y-3">
                 <Label className="text-sm font-medium">Verification code</Label>
                 <InputOTP maxLength={6} value={otp} onChange={setOtp}>
-                  <InputOTPGroup className="w-full justify-between">
+                  <InputOTPGroup className="w-full justify-between gap-1.5 sm:gap-2">
                     <InputOTPSlot index={0} />
                     <InputOTPSlot index={1} />
                     <InputOTPSlot index={2} />
@@ -218,7 +218,7 @@ const Auth = () => {
             </form>
           )}
 
-          <div className="mt-10 text-center text-sm text-muted-foreground">
+          <div className="mt-8 text-center text-sm text-muted-foreground">
             {mode === "signin" ? (
               <>
                 Don't have an account?{" "}

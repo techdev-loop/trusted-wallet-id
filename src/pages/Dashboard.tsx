@@ -364,8 +364,8 @@ const Dashboard = () => {
   return (
     <div className="page-shell">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-card/85 backdrop-blur-xl border-b border-border/50 shadow-[var(--shadow-xs)]">
-        <div className="page-container flex items-center justify-between h-16">
+      <header className="sticky top-0 z-50 bg-card/88 backdrop-blur-xl border-b border-border/55 shadow-[var(--shadow-xs)]">
+        <div className="page-container flex items-center justify-between h-14 sm:h-16">
           <Link to="/" className="flex items-center gap-2.5 group">
             <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
               <Shield className="w-4 h-4 text-accent-foreground" />
@@ -373,17 +373,17 @@ const Dashboard = () => {
             <span className="font-display font-bold text-lg text-foreground">FIUlink</span>
           </Link>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {canAccessAdmin && (
-              <Link to="/admin" className="text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1">
+              <Link to="/admin" className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1">
                 Admin Panel <ArrowUpRight className="w-3 h-3" />
               </Link>
             )}
-            <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-muted/70 border border-border/50">
+            <div className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-muted/70 border border-border/50">
               <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
                 <User className="w-3.5 h-3.5 text-accent" />
               </div>
-              <span className="text-sm font-medium text-foreground hidden sm:block">
+              <span className="text-sm font-medium text-foreground hidden md:block max-w-[180px] truncate">
                 {session?.user.email ?? "Unknown user"}
               </span>
             </div>
@@ -394,19 +394,19 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <div className="page-container py-8 md:py-10 max-w-6xl">
+      <div className="page-container py-6 sm:py-8 md:py-10 max-w-6xl">
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={0}>
-          <div className="mb-10">
+          <div className="mb-7 sm:mb-9">
             <div className="flex items-center gap-3 mb-2">
               <LayoutDashboard className="w-6 h-6 text-accent" />
-              <h1 className="font-display text-3xl font-bold text-foreground">Dashboard</h1>
+              <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h1>
             </div>
-            <p className="text-muted-foreground ml-9">Manage your identity verification and linked wallets</p>
+            <p className="text-muted-foreground ml-0 sm:ml-9">Manage your identity verification and linked wallets</p>
           </div>
         </motion.div>
 
         {/* Status cards */}
-        <div className="grid sm:grid-cols-3 gap-5 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 mb-8 sm:mb-10">
           {[
             {
               label: "KYC Status",
@@ -441,7 +441,7 @@ const Dashboard = () => {
           ].map((card, i) => (
             <motion.div key={card.label} initial="hidden" animate="visible" variants={fadeIn} custom={i + 1}>
               <Card className="stat-card rounded-2xl overflow-hidden">
-                <CardContent className="p-6">
+                <CardContent className="p-5 sm:p-6">
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-sm font-medium text-muted-foreground">{card.label}</span>
                     <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${card.accent} flex items-center justify-center`}>
@@ -488,7 +488,7 @@ const Dashboard = () => {
               )}
 
               {(effectiveKycStatus === "not_started" || effectiveKycStatus === "error") && (
-                <div className="grid md:grid-cols-2 gap-4">
+                <div className="grid md:grid-cols-2 gap-3.5 sm:gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="legalName">Legal Name</Label>
                     <Input
@@ -594,7 +594,7 @@ const Dashboard = () => {
                     />
                   </div>
 
-                  <div className="grid sm:flex gap-3">
+                  <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
                     <Button
                       variant="accent"
                       onClick={() => void handleConnectAndSignWallet("injected")}
@@ -642,7 +642,7 @@ const Dashboard = () => {
         {/* Tabs */}
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={5}>
           <Tabs defaultValue="wallets" className="space-y-6">
-            <TabsList className="bg-muted/70 p-1.5 rounded-xl border border-border/50 w-full sm:w-auto overflow-x-auto">
+            <TabsList className="bg-muted/70 p-1.5 rounded-xl border border-border/50 w-full sm:w-auto overflow-x-auto max-w-full">
               <TabsTrigger value="wallets" className="rounded-lg font-medium shrink-0">Wallets</TabsTrigger>
               <TabsTrigger value="disclosures" className="rounded-lg font-medium shrink-0">Disclosures</TabsTrigger>
             </TabsList>

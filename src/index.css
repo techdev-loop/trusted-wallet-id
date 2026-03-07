@@ -34,7 +34,7 @@
     --input: 220 18% 88%;
     --ring: 215 95% 55%;
 
-    --radius: 0.75rem;
+    --radius: 0.9rem;
 
     --success: 155 65% 38%;
     --success-foreground: 0 0% 100%;
@@ -52,10 +52,10 @@
     --gradient-glass: linear-gradient(145deg, hsla(0, 0%, 100%, 0.9) 0%, hsla(220, 25%, 98%, 0.7) 100%);
 
     --shadow-xs: 0 1px 2px hsl(222 55% 8% / 0.04);
-    --shadow-sm: 0 1px 3px hsl(222 55% 8% / 0.06), 0 1px 2px hsl(222 55% 8% / 0.04);
-    --shadow-md: 0 4px 16px hsl(222 55% 8% / 0.06), 0 2px 4px hsl(222 55% 8% / 0.04);
-    --shadow-lg: 0 10px 40px hsl(222 55% 8% / 0.08), 0 4px 12px hsl(222 55% 8% / 0.04);
-    --shadow-xl: 0 20px 60px hsl(222 55% 8% / 0.1), 0 8px 20px hsl(222 55% 8% / 0.06);
+    --shadow-sm: 0 2px 10px hsl(222 55% 8% / 0.05), 0 1px 2px hsl(222 55% 8% / 0.04);
+    --shadow-md: 0 8px 24px hsl(222 55% 8% / 0.07), 0 2px 8px hsl(222 55% 8% / 0.04);
+    --shadow-lg: 0 14px 36px hsl(222 55% 8% / 0.1), 0 6px 16px hsl(222 55% 8% / 0.06);
+    --shadow-xl: 0 24px 70px hsl(222 55% 8% / 0.12), 0 10px 24px hsl(222 55% 8% / 0.08);
     --shadow-glow: 0 0 50px hsl(215 95% 55% / 0.15);
     --shadow-accent: 0 4px 20px hsl(215 95% 55% / 0.25);
 
@@ -107,7 +107,9 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    background-image: radial-gradient(circle at 20% 0%, hsl(var(--accent) / 0.05), transparent 45%);
+    background-image:
+      radial-gradient(circle at 0% 0%, hsl(var(--accent) / 0.045), transparent 34%),
+      radial-gradient(circle at 100% 100%, hsl(var(--primary) / 0.03), transparent 40%);
     min-height: 100vh;
     text-rendering: optimizeLegibility;
   }
@@ -131,17 +133,17 @@
 
   .glass-card {
     background: var(--gradient-glass);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
     border: 1px solid hsl(var(--border) / 0.6);
     box-shadow: var(--shadow-sm);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
   }
 
   .glass-card:hover {
-    box-shadow: var(--shadow-lg);
-    border-color: hsl(var(--accent) / 0.15);
-    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: hsl(var(--accent) / 0.18);
+    transform: translateY(-1px);
   }
 
   .gradient-hero {
@@ -161,7 +163,7 @@
 
   .stat-card {
     background: var(--gradient-glass);
-    backdrop-filter: blur(20px);
+    backdrop-filter: blur(12px);
     border: 1px solid hsl(var(--border) / 0.6);
     box-shadow: var(--shadow-sm);
     position: relative;
@@ -186,8 +188,7 @@
 
   .stat-card:hover {
     box-shadow: var(--shadow-md);
-    transform: translateY(-1px);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
   }
 
   .hero-glow {
@@ -220,15 +221,31 @@
   }
 
   .page-shell {
-    @apply min-h-screen bg-background;
+    @apply min-h-screen bg-background overflow-x-hidden;
   }
 
   .page-container {
-    @apply container mx-auto px-4 sm:px-6;
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
   }
 
   .section-pad {
-    @apply py-16 md:py-24;
+    @apply py-14 sm:py-16 md:py-20 lg:py-24;
+  }
+
+  .surface-card {
+    @apply rounded-2xl border border-border/60 bg-card/85 shadow-[var(--shadow-sm)] backdrop-blur-sm;
+  }
+
+  .surface-card-strong {
+    @apply rounded-2xl border border-border/70 bg-card shadow-[var(--shadow-md)];
+  }
+
+  .section-title {
+    @apply font-display text-2xl sm:text-3xl md:text-4xl font-bold text-foreground tracking-tight;
+  }
+
+  .section-subtitle {
+    @apply text-muted-foreground text-sm sm:text-base md:text-lg leading-relaxed;
   }
 }
 
@@ -257,5 +274,9 @@
     width: 320px;
     height: 320px;
     filter: blur(45px);
+  }
+
+  .stat-card::before {
+    opacity: 1;
   }
 }
