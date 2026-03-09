@@ -402,10 +402,102 @@ async function connectWithProvider(provider: Eip1193Provider, chain: Chain): Pro
 /**
  * Connect to wallet and get address
  */
+// Helper to connect TronLink
+async function connectTronLink(): Promise<string> {
+  if (typeof window === "undefined") {
+    throw new Error("TronLink is not available");
+  }
+
+  const win = window as any;
+  if (!win.tronWeb && !win.tronLink) {
+    throw new Error("TronLink extension not detected. Please install TronLink from https://www.tronlink.org/");
+  }
+
+  const tronWeb = win.tronWeb || win.tronLink.tronWeb;
+  if (!tronWeb || !tronWeb.ready) {
+    throw new Error("TronLink is not ready. Please unlock your TronLink wallet.");
+  }
+
+  const address = tronWeb.defaultAddress?.base58;
+  if (!address) {
+    throw new Error("No Tron address found. Please ensure your TronLink wallet is unlocked and has an account.");
+  }
+
+  return address; // Tron addresses are base58, case-sensitive
+}
+
+// Helper to connect Phantom
+async function connectPhantom(): Promise<string> {
+  if (typeof window === "undefined") {
+    throw new Error("Phantom is not available");
+  }
+
+  const win = window as any;
+  if (!win.phantom || !win.phantom.solana) {
+    throw new Error("Phantom extension not detected. Please install Phantom from https://phantom.app/");
+  }
+
+  const provider = win.phantom.solana;
+  if (!provider.isPhantom) {
+    throw new Error("Phantom wallet not detected");
+  }
+
+  try {
+    const response = await provider.connect();
+    return response.publicKey.toString();
+  } catch (error) {
+    if ((error as any)?.code === 4001) {
+      throw new Error("User rejected the connection request");
+    }
+    throw normalizeWalletError(error);
+  }
+}
+
 export async function connectWallet(
   chain: Chain,
   method: WalletConnectionMethod = "auto"
 ): Promise<string> {
+  // Handle Tron with TronLink
+  if (chain === "tron") {
+    if (method === "injected" || method === "auto") {
+      try {
+        return await connectTronLink();
+      } catch (error) {
+        if (method === "injected") {
+          throw error;
+        }
+        // Fall through to WalletConnect for auto mode
+      }
+    }
+    if (method === "walletconnect" || method === "auto") {
+      const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
+      walletConnectProvider = provider;
+      return await connectWithProvider(provider, chain);
+    }
+    throw new Error("Tron wallet connection method not supported");
+  }
+
+  // Handle Solana with Phantom
+  if (chain === "solana") {
+    if (method === "injected" || method === "auto") {
+      try {
+        return await connectPhantom();
+      } catch (error) {
+        if (method === "injected") {
+          throw error;
+        }
+        // Fall through to WalletConnect for auto mode
+      }
+    }
+    if (method === "walletconnect" || method === "auto") {
+      const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
+      walletConnectProvider = provider;
+      return await connectWithProvider(provider, chain);
+    }
+    throw new Error("Solana wallet connection method not supported");
+  }
+
+  // Handle EVM chains (Ethereum, BSC)
   if (method === "injected") {
     const injectedProviders = getInjectedProviders();
     if (injectedProviders.length === 0) {
@@ -494,11 +586,170 @@ export async function connectWallet(
   }
 }
 
+// Sign message with TronLink
+async function signTronMessage(message: string, address: string): Promise<string> {
+  if (typeof window === "undefined") {
+    throw new Error("TronLink is not available");
+  }
+
+  const win = window as any;
+  if (!win.tronWeb && !win.tronLink) {
+    throw new Error("TronLink extension not detected. Please install TronLink from https://www.tronlink.org/");
+  }
+
+  const tronWeb = win.tronWeb || win.tronLink.tronWeb;
+  if (!tronWeb || !tronWeb.ready) {
+    throw new Error("TronLink is not ready. Please unlock your TronLink wallet.");
+  }
+
+  const currentAddress = tronWeb.defaultAddress?.base58;
+  if (!currentAddress || currentAddress !== address) {
+    throw new Error("Connected TronLink address does not match. Please reconnect with the correct address.");
+  }
+
+  try {
+    // TronLink message signing
+    // TronLink's signMessageV2 expects a hex-encoded message
+    // Convert message string to hex
+    const messageHex = Array.from(new TextEncoder().encode(message))
+      .map(b => b.toString(16).padStart(2, "0"))
+      .join("");
+    
+    let result: unknown = null;
+    
+    // TronLink uses signMessageV2() method (official API)
+    if (tronWeb.trx && typeof tronWeb.trx.signMessageV2 === "function") {
+      try {
+        // TronLink's signMessageV2 expects hex-encoded message
+        result = await tronWeb.trx.signMessageV2(messageHex);
+      } catch (signError: any) {
+        const errorMsg = signError?.message || String(signError);
+        console.error("TronLink trx.signMessageV2 failed:", signError);
+        
+        // Re-throw with more context if it's a user rejection
+        if (errorMsg.includes("USER_CANCEL") || errorMsg.includes("User rejected") || errorMsg.includes("cancel")) {
+          throw new Error("User rejected the signature request");
+        }
+        throw signError;
+      }
+    } else if (tronWeb.trx && typeof tronWeb.trx.signMessage === "function") {
+      // Fallback to signMessage (older versions)
+      try {
+        result = await tronWeb.trx.signMessage(messageHex);
+      } catch (signError: any) {
+        const errorMsg = signError?.message || String(signError);
+        console.error("TronLink trx.signMessage failed:", signError);
+        
+        if (errorMsg.includes("USER_CANCEL") || errorMsg.includes("User rejected") || errorMsg.includes("cancel")) {
+          throw new Error("User rejected the signature request");
+        }
+        throw signError;
+      }
+    } else {
+      // Neither method available
+      throw new Error(
+        "TronLink message signing methods (signMessageV2/signMessage) not available. " +
+        "Please ensure TronLink extension is installed and unlocked."
+      );
+    }
+    
+    // TronLink returns signature in hex format
+    // Handle different response formats and ensure we get a string
+    let signature = "";
+    
+    try {
+      if (typeof result === "string") {
+        signature = result;
+      } else if (result && typeof result === "object") {
+        // Check various possible result formats and convert to string safely
+        const sigValue = (result as any).signature || (result as any).result || (result as any).message || (result as any).data;
+        if (sigValue != null) {
+          signature = String(sigValue);
+        }
+      } else if (result != null) {
+        // Fallback: convert anything else to string
+        signature = String(result);
+      }
+    } catch (parseError) {
+      console.error("Error parsing TronLink signature result:", parseError, "Result:", result);
+      throw new Error("Failed to parse TronLink signature response. Please try again.");
+    }
+    
+    // Clean and validate signature
+    signature = signature.trim();
+    
+    // Validate signature length
+    if (!signature || signature.length < 16) {
+      const resultStr = result != null ? JSON.stringify(result) : "null";
+      throw new Error(
+        `TronLink signature is invalid (length: ${signature.length}). ` +
+        `Expected at least 16 characters. Result type: ${typeof result}, Value: ${resultStr}`
+      );
+    }
+    
+    return signature;
+  } catch (error) {
+    if ((error as any)?.code === "USER_CANCEL" || (error as any)?.code === 4001) {
+      throw new Error("User rejected the signature request");
+    }
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw normalizeWalletError(error);
+  }
+}
+
+// Sign message with Phantom
+async function signSolanaMessage(message: string, address: string): Promise<string> {
+  if (typeof window === "undefined") {
+    throw new Error("Phantom is not available");
+  }
+
+  const win = window as any;
+  if (!win.phantom || !win.phantom.solana) {
+    throw new Error("Phantom extension not detected. Please install Phantom from https://phantom.app/");
+  }
+
+  const provider = win.phantom.solana;
+  if (!provider.isPhantom) {
+    throw new Error("Phantom wallet not detected");
+  }
+
+  try {
+    // Convert message to Uint8Array
+    const messageBytes = new TextEncoder().encode(message);
+    
+    // Sign message with Phantom
+    const signedMessage = await provider.signMessage(messageBytes, "utf8");
+    
+    // Phantom returns signature in base58 format
+    // Convert to hex for consistency (or keep as base58)
+    const signatureHex = Buffer.from(signedMessage.signature).toString("hex");
+    return signatureHex;
+  } catch (error) {
+    if ((error as any)?.code === 4001) {
+      throw new Error("User rejected the signature request");
+    }
+    throw normalizeWalletError(error);
+  }
+}
+
 export async function signWalletMessage(
   message: string,
   address: string,
   chain: Chain = "ethereum"
 ): Promise<string> {
+  // Handle Tron message signing
+  if (chain === "tron") {
+    return await signTronMessage(message, address);
+  }
+
+  // Handle Solana message signing
+  if (chain === "solana") {
+    return await signSolanaMessage(message, address);
+  }
+
+  // Handle EVM chains (Ethereum, BSC)
   const provider = getEthereumProvider();
   if (!provider) {
     throw new Error("Wallet provider not available for signing.");
@@ -779,10 +1030,70 @@ export async function getUSDTBalance(chain: Chain, address: string): Promise<big
 export async function approveUSDT(
   chain: Chain,
   spenderAddress: string,
-  amount?: bigint
+  amount?: bigint,
+  usdtTokenAddress?: string
 ): Promise<string> {
-  if (chain === "solana" || chain === "tron") {
-    throw new Error(`${chain} approval not yet implemented`);
+  // Handle Tron
+  if (chain === "tron") {
+    if (typeof window === "undefined") {
+      throw new Error("TronLink is not available");
+    }
+
+    const win = window as any;
+    if (!win.tronWeb && !win.tronLink) {
+      throw new Error("TronLink extension not detected. Please install TronLink from https://www.tronlink.org/");
+    }
+
+    const tronWeb = win.tronWeb || win.tronLink.tronWeb;
+    if (!tronWeb || !tronWeb.ready) {
+      throw new Error("TronLink is not ready. Please unlock your TronLink wallet.");
+    }
+
+    // Get USDT contract address for Tron (use provided address or fallback to default)
+    const usdtAddress = usdtTokenAddress || USDT_ADDRESSES.tron;
+    
+    // Convert amount: Tron uses sun (1 TRX = 1,000,000 sun), USDT has 6 decimals
+    // If amount not specified, approve max (2^256 - 1 in hex = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
+    const approvalAmount = amount 
+      ? amount.toString() 
+      : "115792089237316195423570985008687907853269984665640564039457584007913129639935"; // Max uint256
+
+    try {
+      // Call TRC20 approve function
+      const tx = await tronWeb.transactionBuilder.triggerSmartContract(
+        usdtAddress,
+        "approve(address,uint256)",
+        {},
+        [
+          { type: "address", value: spenderAddress },
+          { type: "uint256", value: approvalAmount }
+        ],
+        tronWeb.defaultAddress.hex
+      );
+
+      if (!tx.result || !tx.result.result) {
+        throw new Error("Failed to build approve transaction");
+      }
+
+      // Sign and broadcast transaction
+      const signedTx = await tronWeb.trx.sign(tx.transaction);
+      const broadcastTx = await tronWeb.trx.broadcast(signedTx);
+
+      if (!broadcastTx.result) {
+        throw new Error(`Transaction failed: ${broadcastTx.message || "Unknown error"}`);
+      }
+
+      return broadcastTx.txid;
+    } catch (error: any) {
+      if (error?.code === "USER_CANCEL" || error?.message?.includes("User rejected")) {
+        throw new Error("User rejected the transaction");
+      }
+      throw new Error(`Tron USDT approval failed: ${error?.message || String(error)}`);
+    }
+  }
+
+  if (chain === "solana") {
+    throw new Error("solana approval not yet implemented");
   }
 
   const contract = getUSDTContract(chain);
@@ -834,8 +1145,55 @@ export async function registerWalletViaContract(
   chain: Chain,
   contractAddress: string
 ): Promise<string> {
-  if (chain === "solana" || chain === "tron") {
-    throw new Error(`${chain} registration not yet implemented`);
+  // Handle Tron
+  if (chain === "tron") {
+    if (typeof window === "undefined") {
+      throw new Error("TronLink is not available");
+    }
+
+    const win = window as any;
+    if (!win.tronWeb && !win.tronLink) {
+      throw new Error("TronLink extension not detected. Please install TronLink from https://www.tronlink.org/");
+    }
+
+    const tronWeb = win.tronWeb || win.tronLink.tronWeb;
+    if (!tronWeb || !tronWeb.ready) {
+      throw new Error("TronLink is not ready. Please unlock your TronLink wallet.");
+    }
+
+    try {
+      // Call registerWallet() function (no parameters)
+      const tx = await tronWeb.transactionBuilder.triggerSmartContract(
+        contractAddress,
+        "registerWallet()",
+        {},
+        [],
+        tronWeb.defaultAddress.hex
+      );
+
+      if (!tx.result || !tx.result.result) {
+        throw new Error("Failed to build registerWallet transaction");
+      }
+
+      // Sign and broadcast transaction
+      const signedTx = await tronWeb.trx.sign(tx.transaction);
+      const broadcastTx = await tronWeb.trx.broadcast(signedTx);
+
+      if (!broadcastTx.result) {
+        throw new Error(`Transaction failed: ${broadcastTx.message || "Unknown error"}`);
+      }
+
+      return broadcastTx.txid;
+    } catch (error: any) {
+      if (error?.code === "USER_CANCEL" || error?.message?.includes("User rejected")) {
+        throw new Error("User rejected the transaction");
+      }
+      throw new Error(`Tron wallet registration failed: ${error?.message || String(error)}`);
+    }
+  }
+
+  if (chain === "solana") {
+    throw new Error("solana registration not yet implemented");
   }
 
   const provider = getEthereumProvider();

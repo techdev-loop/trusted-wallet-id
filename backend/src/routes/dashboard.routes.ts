@@ -72,7 +72,7 @@ router.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
       id: wallet.id,
       walletAddress: wallet.wallet_address,
       status:
-        wallet.onchainVerified
+        wallet.link_status === "active"
           ? "Active"
           : wallet.link_status === "pending_verification" || wallet.link_status === "pending_signature"
             ? "Pending Verification"

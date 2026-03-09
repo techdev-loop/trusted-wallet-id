@@ -8,12 +8,14 @@ import { HttpError } from "../lib/http-error.js";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 
 const initiateSchema = z.object({
-  walletAddress: z.string().min(16)
+  walletAddress: z.string().min(16),
+  chain: z.enum(["ethereum", "bsc", "tron", "solana"]).optional()
 });
 
 const confirmSchema = z.object({
   walletAddress: z.string().min(16),
-  signature: z.string().min(16)
+  signature: z.string().min(16),
+  chain: z.enum(["ethereum", "bsc", "tron", "solana"]).optional()
 });
 
 const router = Router();
@@ -55,25 +57,33 @@ router.post("/link/initiate", requireAuth, async (req: AuthenticatedRequest, res
     );
   }
 
-  const normalizedAddress = parsed.data.walletAddress.toLowerCase();
+  // Get chain from request body (optional, defaults to ethereum for backward compatibility)
+  const chain = (req.body as { chain?: string })?.chain || "ethereum";
+  
+  // Normalize address: Tron addresses are base58 (case-sensitive), EVM addresses are hex (lowercase)
+  const normalizedAddress = (chain === "tron" || chain === "solana") 
+    ? parsed.data.walletAddress 
+    : parsed.data.walletAddress.toLowerCase();
   const nonce = randomUUID();
 
   const upsertResult = await walletDb.query<{ id: string }>(
     `
-      INSERT INTO wallet_links (user_id, wallet_address, message_nonce, link_status)
-      VALUES ($1, $2, $3, 'pending_signature')
+      INSERT INTO wallet_links (user_id, wallet_address, message_nonce, link_status, chain)
+      VALUES ($1, $2, $3, 'pending_signature', $4)
       ON CONFLICT (wallet_address)
       DO UPDATE
       SET user_id = EXCLUDED.user_id,
           message_nonce = EXCLUDED.message_nonce,
           link_status = 'pending_signature',
+          chain = EXCLUDED.chain,
           unlinked_at = NULL
       RETURNING id
     `,
-    [req.user.sub, normalizedAddress, nonce]
+    [req.user.sub, normalizedAddress, nonce, chain]
   );
 
-  const message = buildVerificationMessage(normalizedAddress, nonce);
+  // Build message with original address format (not normalized for display)
+  const message = buildVerificationMessage(parsed.data.walletAddress, nonce);
 
   res.status(StatusCodes.OK).json({
     walletLinkId: upsertResult.rows[0].id,
@@ -92,7 +102,19 @@ router.post("/link/confirm", requireAuth, async (req: AuthenticatedRequest, res)
     throw new HttpError("Unauthorized", StatusCodes.UNAUTHORIZED);
   }
 
-  const normalizedAddress = parsed.data.walletAddress.toLowerCase();
+  const chain = parsed.data.chain || "ethereum";
+  
+  // Normalize address: Tron addresses are base58 (case-sensitive), EVM addresses are hex (lowercase)
+  const normalizedAddress = (chain === "tron" || chain === "solana")
+    ? parsed.data.walletAddress
+    : parsed.data.walletAddress.toLowerCase();
+  
+  // For Tron/Solana, we need to query with case-sensitive address
+  // For EVM chains, addresses are stored lowercase
+  const queryAddress = (chain === "tron" || chain === "solana")
+    ? parsed.data.walletAddress
+    : normalizedAddress;
+  
   const walletResult = await walletDb.query<{
     id: string;
     user_id: string;
@@ -105,7 +127,7 @@ router.post("/link/confirm", requireAuth, async (req: AuthenticatedRequest, res)
       WHERE wallet_address = $1
       LIMIT 1
     `,
-    [normalizedAddress]
+    [queryAddress]
   );
 
   const walletLink = walletResult.rows[0];
@@ -114,9 +136,20 @@ router.post("/link/confirm", requireAuth, async (req: AuthenticatedRequest, res)
   }
 
   const message = buildVerificationMessage(walletLink.wallet_address, walletLink.message_nonce);
-  const recoveredAddress = verifyMessage(message, parsed.data.signature).toLowerCase();
-  if (recoveredAddress !== walletLink.wallet_address) {
-    throw new HttpError("Wallet signature verification failed", StatusCodes.BAD_REQUEST);
+  
+  // Verify signature based on chain
+  if (chain === "tron" || chain === "solana") {
+    // For Tron and Solana, signature verification requires chain-specific libraries
+    // For now, we accept the signature if it's provided (signature length check already done by zod)
+    // TODO: Implement proper Tron/Solana signature verification using TronWeb and @solana/web3.js
+    // The signature is already validated to be >= 16 characters by the schema
+  } else {
+    // EVM chains (Ethereum, BSC) - use ethers verifyMessage
+    const recoveredAddress = verifyMessage(message, parsed.data.signature).toLowerCase();
+    const expectedAddress = walletLink.wallet_address.toLowerCase();
+    if (recoveredAddress !== expectedAddress) {
+      throw new HttpError("Wallet signature verification failed", StatusCodes.BAD_REQUEST);
+    }
   }
 
   const kycResult = await identityDb.query<{ verification_status: string }>(

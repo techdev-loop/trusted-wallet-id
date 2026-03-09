@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import TronWeb from "tronweb";
 import { walletDb } from "../db/pool.js";
 import { HttpError } from "../lib/http-error.js";
 import { StatusCodes } from "http-status-codes";
@@ -140,9 +141,149 @@ export async function verifyTronTransaction(
   txHash: string,
   expectedAmount: number
 ): Promise<TransactionVerification> {
-  // Tron verification would use TronWeb
-  // This is a placeholder - full implementation would require Tron RPC
-  throw new HttpError("Tron verification not yet implemented", StatusCodes.NOT_IMPLEMENTED);
+  const config = await getContractConfig("tron");
+  if (!config) {
+    throw new HttpError("Contract configuration not found for chain: tron", StatusCodes.BAD_REQUEST);
+  }
+
+  // Initialize TronWeb
+  const tronWeb = new TronWeb({
+    fullHost: config.rpcUrl
+  });
+
+  try {
+    // Get transaction info
+    const tx = await tronWeb.trx.getTransaction(txHash);
+    if (!tx) {
+      throw new HttpError("Transaction not found on blockchain", StatusCodes.NOT_FOUND);
+    }
+
+    // Check if transaction is confirmed
+    const txInfo = await tronWeb.trx.getTransactionInfo(txHash);
+    if (!txInfo || txInfo.receipt?.result !== "SUCCESS") {
+      throw new HttpError("Transaction failed on blockchain", StatusCodes.BAD_REQUEST);
+    }
+
+    // Get block info for block number and hash
+    const block = await tronWeb.trx.getBlockByNumber(txInfo.blockNumber);
+    const blockHash = block?.blockID || "";
+
+    // Parse transaction to find USDT transfer to contract
+    // When registerWallet() is called, it triggers a TRC20 transfer from user to contract
+    // This appears as an internal transaction in Tron
+    let transferFound = false;
+    let fromAddress = "";
+    let transferAmount = BigInt(0);
+
+    // Check if transaction is calling our contract
+    const contractAddressHex = tx.contract_address;
+    if (!contractAddressHex) {
+      throw new HttpError("Transaction is not a contract call", StatusCodes.BAD_REQUEST);
+    }
+
+    const contractAddressBase58 = tronWeb.address.fromHex(contractAddressHex);
+    if (contractAddressBase58 !== config.contractAddress) {
+      throw new HttpError(
+        `Transaction contract address mismatch. Expected ${config.contractAddress}, got ${contractAddressBase58}`,
+        StatusCodes.BAD_REQUEST
+      );
+    }
+
+    // Check internal transactions for TRC20 USDT transfer
+    if (txInfo.internal_transactions && txInfo.internal_transactions.length > 0) {
+      for (const internalTx of txInfo.internal_transactions) {
+        // Check if this is a TRC20 token transfer to our contract
+        if (
+          internalTx.to === config.contractAddress &&
+          internalTx.token_info &&
+          (internalTx.token_info.symbol === "USDT" || internalTx.token_info.address === config.usdtTokenAddress)
+        ) {
+          fromAddress = internalTx.from || "";
+          // Amount is in sun (smallest unit, 6 decimals for USDT)
+          transferAmount = BigInt(internalTx.amount || 0);
+          transferFound = true;
+          break;
+        }
+      }
+    }
+
+    // If not found in internal transactions, check event logs
+    if (!transferFound && txInfo.log && txInfo.log.length > 0) {
+      // TRC20 Transfer event signature hash (first 32 bytes)
+      const TRANSFER_EVENT_SIGNATURE = "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+      
+      for (const log of txInfo.log) {
+        try {
+          // Check if this log is from the USDT token contract
+          const logAddress = tronWeb.address.fromHex(log.address);
+          if (logAddress !== config.usdtTokenAddress) {
+            continue;
+          }
+
+          // Check if this is a Transfer event
+          if (log.topics && log.topics.length >= 3) {
+            const eventSignature = log.topics[0];
+            if (eventSignature && eventSignature.toLowerCase().startsWith(TRANSFER_EVENT_SIGNATURE.toLowerCase())) {
+              // topics[1] = from address (padded to 32 bytes)
+              // topics[2] = to address (padded to 32 bytes)
+              // data = amount (uint256)
+              
+              const fromAddressHex = log.topics[1].slice(-40); // Last 20 bytes (40 hex chars)
+              const toAddressHex = log.topics[2].slice(-40);
+              const amountHex = log.data;
+
+              // Convert hex addresses to base58
+              const toAddress = tronWeb.address.fromHex("41" + toAddressHex); // Add prefix
+              const fromAddressBase58 = tronWeb.address.fromHex("41" + fromAddressHex);
+
+              // Check if transfer is to contract address
+              if (toAddress === config.contractAddress) {
+                // Parse amount (big-endian uint256, remove 0x prefix if present)
+                const cleanAmountHex = amountHex.startsWith("0x") ? amountHex.slice(2) : amountHex;
+                transferAmount = BigInt("0x" + cleanAmountHex);
+                fromAddress = fromAddressBase58;
+                transferFound = true;
+                break;
+              }
+            }
+          }
+        } catch (error) {
+          // Not a Transfer event or parsing failed, continue
+          continue;
+        }
+      }
+    }
+
+    if (!transferFound) {
+      throw new HttpError("USDT transfer to contract not found in transaction", StatusCodes.BAD_REQUEST);
+    }
+
+    // Convert amount (USDT on Tron has 6 decimals)
+    const expectedAmountSun = BigInt(expectedAmount * 10 ** 6);
+    if (transferAmount !== expectedAmountSun) {
+      throw new HttpError(
+        `Amount mismatch. Expected ${expectedAmount} USDT, got ${Number(transferAmount) / 10 ** 6}`,
+        StatusCodes.BAD_REQUEST
+      );
+    }
+
+    return {
+      walletAddress: fromAddress, // Keep Tron address in base58 format (case-sensitive)
+      chain: "tron",
+      txHash: txHash.toLowerCase(), // Tron tx hashes are hex, can be lowercased
+      amount: expectedAmount,
+      blockNumber: txInfo.blockNumber,
+      blockHash: blockHash
+    };
+  } catch (error) {
+    if (error instanceof HttpError) {
+      throw error;
+    }
+    throw new HttpError(
+      `Failed to verify Tron transaction: ${error instanceof Error ? error.message : "Unknown error"}`,
+      StatusCodes.INTERNAL_SERVER_ERROR
+    );
+  }
 }
 
 /**
@@ -150,6 +291,9 @@ export async function verifyTronTransaction(
  */
 export async function registerWalletPayment(verification: TransactionVerification): Promise<void> {
   const { walletAddress, chain, txHash, amount, blockNumber, blockHash } = verification;
+
+  // Normalize address: Tron addresses are base58 (case-sensitive), EVM addresses are hex (lowercase)
+  const normalizedAddress = chain === "tron" ? walletAddress : walletAddress.toLowerCase();
 
   // Get or create wallet user
   const walletUserResult = await walletDb.query<{ id: string }>(
@@ -160,7 +304,7 @@ export async function registerWalletPayment(verification: TransactionVerificatio
       DO UPDATE SET is_verified = TRUE, verified_at = NOW()
       RETURNING id
     `,
-    [walletAddress.toLowerCase(), chain]
+    [normalizedAddress, chain]
   );
 
   const walletUserId = walletUserResult.rows[0].id;
@@ -186,7 +330,7 @@ export async function registerWalletPayment(verification: TransactionVerificatio
         unlinked_at = NULL
       RETURNING id
     `,
-    [walletUserId, walletAddress.toLowerCase(), chain, config.contractAddress]
+    [walletUserId, normalizedAddress, chain, config.contractAddress]
   );
 
   const walletLinkId = walletLinkResult.rows[0].id;
@@ -206,17 +350,48 @@ export async function registerWalletPayment(verification: TransactionVerificatio
  * Check if wallet is verified
  */
 export async function isWalletVerified(walletAddress: string, chain: Chain): Promise<boolean> {
-  const normalizedAddress = walletAddress.toLowerCase();
   const config = await getContractConfig(chain);
   if (!config) {
     return false;
   }
 
   try {
-    const provider = new ethers.JsonRpcProvider(config.rpcUrl);
-    const contract = new ethers.Contract(config.contractAddress, WALLET_REGISTRY_ABI, provider);
-    const verified = await contract.isWalletVerified(normalizedAddress);
-    return Boolean(verified);
+    if (chain === "tron") {
+      // Tron uses TronWeb and base58 addresses (case-sensitive)
+      const tronWeb = new TronWeb({
+        fullHost: config.rpcUrl
+      });
+
+      // Validate Tron address format
+      if (!tronWeb.isAddress(walletAddress)) {
+        return false;
+      }
+
+      // Convert base58 address to hex (with 41 prefix for Tron)
+      const addressHex = tronWeb.address.toHex(walletAddress);
+      
+      // Call isWalletVerified(address) on the contract
+      // Note: Tron contract expects the address in hex format (with 41 prefix)
+      const contract = await tronWeb.contract().at(config.contractAddress);
+      
+      // Try calling the contract method
+      try {
+        const result = await contract.isWalletVerified(addressHex).call();
+        return Boolean(result);
+      } catch (contractError) {
+        // If contract call fails, log and return false
+        // This might happen if the contract method doesn't exist or RPC is unavailable
+        console.error(`Tron contract call failed for ${walletAddress}:`, contractError);
+        return false;
+      }
+    } else {
+      // EVM chains (Ethereum, BSC)
+      const normalizedAddress = walletAddress.toLowerCase();
+      const provider = new ethers.JsonRpcProvider(config.rpcUrl);
+      const contract = new ethers.Contract(config.contractAddress, WALLET_REGISTRY_ABI, provider);
+      const verified = await contract.isWalletVerified(normalizedAddress);
+      return Boolean(verified);
+    }
   } catch {
     return false;
   }
