@@ -45,10 +45,19 @@ const WALLET_OPTIONS: WalletOption[] = [
     id: "tronlink",
     name: "TronLink",
     icon: "🔷",
-    description: "Connect using TronLink browser extension",
+    description: "Desktop: Browser extension | Mobile: Open in TronLink app's browser",
     method: "injected",
     supportedChains: ["tron"],
     installUrl: "https://www.tronlink.org/",
+  },
+  {
+    id: "tokenpocket",
+    name: "TokenPocket",
+    icon: "💼",
+    description: "Mobile: Open in TokenPocket app's browser | Desktop: Browser extension",
+    method: "injected",
+    supportedChains: ["tron"],
+    installUrl: "https://www.tokenpocket.pro/",
   },
   {
     id: "phantom",
@@ -119,13 +128,26 @@ export function WalletSelectModal({
       }
     }
 
-    // Check for TronLink
+    // Check for Tron wallets
     if (selectedChain === "tron") {
       if (typeof window !== "undefined") {
         const win = window as any;
         // TronLink injects tronWeb or tronLink
         if (win.tronWeb || win.tronLink) {
           detected.push("tronlink");
+        }
+        // TokenPocket also injects tronWeb
+        if (win.tronWeb && win.tronWeb.isTokenPocket) {
+          detected.push("tokenpocket");
+        }
+        // Check for other Tron wallets that might inject tronWeb
+        if (win.tronWeb) {
+          // TokenPocket detection
+          if (win.tronWeb.isTokenPocket || win.isTokenPocket) {
+            if (!detected.includes("tokenpocket")) {
+              detected.push("tokenpocket");
+            }
+          }
         }
       }
     }
@@ -201,6 +223,9 @@ export function WalletSelectModal({
       // Don't allow clicking on unsupported wallets
       return;
     }
+
+    // For Tron wallets, the TronWallet adapter will handle connection automatically
+    // No need to show manual instructions - the adapter handles mobile app opening
 
     // Check if wallet needs to be installed
     if (wallet.isInstalled === false && wallet.installUrl) {
@@ -303,9 +328,18 @@ export function WalletSelectModal({
                     <p className="text-xs text-muted-foreground mt-1">
                       {isUnsupported 
                         ? selectedChain === "tron"
-                          ? "For Tron on mobile, please open this page in TronLink app's browser. On desktop, use TronLink extension."
+                          ? "For Tron on mobile, please open this page in a Tron wallet app's browser. On desktop, use a Tron wallet extension."
                           : `WalletConnect doesn't support ${selectedChain} network. Please use ${selectedChain === "solana" ? "Phantom" : "the appropriate wallet"} instead.`
-                        : wallet.description
+                        : (() => {
+                            // Show mobile-specific instructions for Tron wallets
+                            if (selectedChain === "tron" && (wallet.id === "tronlink" || wallet.id === "tokenpocket")) {
+                              const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+                              if (isMobile && !isInstalled) {
+                                return `Mobile: Open this page in ${wallet.name} app's browser tab`;
+                              }
+                            }
+                            return wallet.description;
+                          })()
                       }
                     </p>
                   </div>

@@ -213,73 +213,36 @@ async function connectTronLinkMobile(): Promise<string> {
     }
   }
   
-  // If TronLink is not injected, show instructions to user
-  // TronLink mobile requires opening the dapp from within the TronLink app
-  const instructions = `
-To connect your TronLink mobile wallet:
-
-1. Open TronLink app on your mobile device
-2. Tap the "Browser" or "DApp" tab in TronLink
-3. Enter or paste this URL: ${window.location.href}
-4. The page will open in TronLink's in-app browser
-5. Click "Connect" again
-
-Alternatively, use a desktop browser with TronLink extension installed.
-  `.trim();
-  
-  // Show instructions to user
-  if (confirm(instructions + "\n\nDo you want to copy the URL to clipboard?")) {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      alert("URL copied! Now open TronLink app and paste it in the browser tab.");
-    } catch (e) {
-      // Clipboard API not available, show URL
-      prompt("Copy this URL and open it in TronLink app:", window.location.href);
-    }
-  }
-  
-  // Wait for TronLink to be injected (user opens page in TronLink app)
-  return new Promise((resolve, reject) => {
-    let checkCount = 0;
-    const maxChecks = 60; // 30 seconds (500ms * 60)
-    
-    const checkInterval = setInterval(() => {
-      checkCount++;
-      
-      if (win.tronWeb || win.tronLink) {
-        const tronWeb = win.tronWeb || win.tronLink.tronWeb;
-        if (tronWeb && tronWeb.ready && tronWeb.defaultAddress?.base58) {
-          clearInterval(checkInterval);
-          resolve(tronWeb.defaultAddress.base58);
-          return;
-        }
-      }
-      
-      // Timeout after max checks
-      if (checkCount >= maxChecks) {
-        clearInterval(checkInterval);
-        reject(new Error(
-          "TronLink not detected. " +
-          "Please open this page in TronLink app's browser (Browser/DApp tab), " +
-          "or use a desktop browser with TronLink extension."
-        ));
-      }
-    }, 500);
-  });
+  // If TronLink is not injected, throw error (no manual dialogs)
+  // The TronWallet adapter should be used instead for automatic connection
+  throw new Error(
+    "TronLink not detected. " +
+    "Please open this page in TronLink app's browser (Browser/DApp tab), " +
+    "or use a desktop browser with TronLink extension. " +
+    "For automatic connection, use the TronWallet adapter."
+  );
 }
 
 async function createTronWalletConnectProvider(): Promise<string> {
-  // For mobile, use direct TronLink connection (more reliable than WalletConnect for Tron)
+  // This function is deprecated - use TronWallet adapter instead
+  // For mobile, try direct connection without dialogs
   if (isMobileDevice()) {
-    return await connectTronLinkMobile();
+    const win = window as any;
+    // Check if TronLink is already available
+    if (win.tronWeb || win.tronLink) {
+      const tronWeb = win.tronWeb || win.tronLink.tronWeb;
+      if (tronWeb && tronWeb.ready && tronWeb.defaultAddress?.base58) {
+        return tronWeb.defaultAddress.base58;
+      }
+    }
+    // If not available, throw error (no dialogs)
+    throw new Error(
+      "TronLink not detected. Please use TronWallet adapter for automatic connection."
+    );
   }
   
-  // For desktop, WalletConnect can be used as fallback
-  // But since WalletConnect Tron support may be unreliable, we'll skip it for now
-  throw new Error(
-    "For Tron network, please use TronLink browser extension on desktop, " +
-    "or open this page in TronLink mobile app's browser."
-  );
+  // For desktop, use TronLink extension
+  return await connectTronLink();
 }
 
 async function createWalletConnectProvider(chain: Chain): Promise<Eip1193Provider> {

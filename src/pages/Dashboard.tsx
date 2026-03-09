@@ -25,6 +25,8 @@ import {
   type WalletConnectionMethod,
   type Chain
 } from "@/lib/web3";
+import { useWagmiWallet } from "@/lib/wagmi-hooks";
+import { useTronWallet } from "@/lib/tronwallet-adapter";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
 
 interface DashboardData {
@@ -224,19 +226,45 @@ const Dashboard = () => {
     }
   };
 
+  // Use Wagmi for EVM chains, TronWallet Adapter for Tron, native methods for Solana
+  const wagmiWallet = useWagmiWallet();
+  const tronWallet = useTronWallet();
+
   const handleConnectAndSignWallet = async (method: WalletConnectionMethod) => {
     try {
       setProcessingWallet(true);
       setIsWalletModalOpen(false); // Close modal when connecting starts
       
-      // On mobile with Tron, automatically use WalletConnect
-      // (TronLink extension is not available on mobile browsers)
-      const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
-      const effectiveMethod = (isMobile && selectedChain === "tron" && method === "auto") 
-        ? "walletconnect" 
-        : method;
+      let normalizedAddress: string;
       
-      const normalizedAddress = await connectWallet(selectedChain, effectiveMethod);
+      // Use Wagmi for EVM chains (Ethereum, BSC)
+      if (selectedChain === "ethereum" || selectedChain === "bsc") {
+        // Map method to connector ID
+        const connectorId = method === "walletconnect" ? "walletConnect" : 
+                           method === "injected" ? "injected" : undefined;
+        normalizedAddress = await wagmiWallet.connectWallet(selectedChain, connectorId);
+      } else if (selectedChain === "tron") {
+        // Use TronWallet Adapter for Tron - automatically connect to TronLink
+        // If already connected, use existing connection
+        if (tronWallet.isConnected && tronWallet.address) {
+          normalizedAddress = tronWallet.address;
+        } else {
+          // Auto-select adapter: prefer TronLink, fallback to WalletConnect on mobile
+          const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+          const adapterType = (method === "walletconnect" || (isMobile && method === "auto")) 
+            ? "walletconnect" 
+            : "tronlink";
+          normalizedAddress = await tronWallet.connect(adapterType);
+        }
+      } else {
+        // Use native methods for Solana
+        const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+        const effectiveMethod = (isMobile && method === "auto") 
+          ? "walletconnect" 
+          : method;
+        normalizedAddress = await connectWallet(selectedChain, effectiveMethod);
+      }
+      
       setWalletAddress(normalizedAddress);
 
       // For all chains, use message signing flow
@@ -253,7 +281,17 @@ const Dashboard = () => {
       setMessageToSign(challengeMessage);
 
       // Sign message with the appropriate wallet based on chain
-      const signedMessage = await signWalletMessage(challengeMessage, normalizedAddress, selectedChain);
+      let signedMessage: string;
+      if (selectedChain === "ethereum" || selectedChain === "bsc") {
+        // Use Wagmi for EVM chains
+        signedMessage = await wagmiWallet.signMessage(challengeMessage);
+      } else if (selectedChain === "tron") {
+        // Use TronWallet Adapter for Tron
+        signedMessage = await tronWallet.signMessage(challengeMessage);
+      } else {
+        // Use native methods for Solana
+        signedMessage = await signWalletMessage(challengeMessage, normalizedAddress, selectedChain);
+      }
       setSignature(signedMessage);
 
       await apiRequest("/wallet/link/confirm", {
@@ -652,17 +690,9 @@ const Dashboard = () => {
                         
                         const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
                         
-                        // On mobile with Tron, use direct TronLink connection
-                        // (WalletConnect doesn't reliably support Tron)
-                        if (isMobile && selectedChain === "tron") {
-                          await handleConnectAndSignWallet("walletconnect");
-                        } else if (isMobile) {
-                          // For other chains on mobile, use WalletConnect
-                          await handleConnectAndSignWallet("walletconnect");
-                        } else {
-                          // On desktop, show modal for wallet selection
-                          setIsWalletModalOpen(true);
-                        }
+                        // Always show modal to let user choose wallet
+                        // This is especially important for Tron on mobile where multiple options exist
+                        setIsWalletModalOpen(true);
                       }}
                       disabled={processingWallet}
                       className="w-full sm:w-auto"
@@ -676,16 +706,7 @@ const Dashboard = () => {
                       ) : (
                         <>
                           <Wallet className="w-4 h-4 mr-2" />
-                          {(() => {
-                            const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
-                            if (isMobile && selectedChain === "tron") {
-                              return "Open in TronLink App";
-                            }
-                            if (isMobile) {
-                              return "Connect Mobile Wallet";
-                            }
-                            return "Connect Browser Wallet & Sign";
-                          })()}
+                          Connect Wallet
                         </>
                       )}
                     </Button>
