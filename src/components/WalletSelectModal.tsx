@@ -150,7 +150,18 @@ export function WalletSelectModal({
   // Filter wallets by selected chain
   const availableWallets = WALLET_OPTIONS.filter((wallet) =>
     wallet.supportedChains.includes(selectedChain)
-  );
+  ).sort((a, b) => {
+    // Sort native wallets (TronLink, Phantom) first for their respective chains
+    if (selectedChain === "tron") {
+      if (a.id === "tronlink") return -1;
+      if (b.id === "tronlink") return 1;
+    }
+    if (selectedChain === "solana") {
+      if (a.id === "phantom") return -1;
+      if (b.id === "phantom") return 1;
+    }
+    return 0;
+  });
 
   // Debug: log available wallets
   useEffect(() => {
@@ -159,24 +170,15 @@ export function WalletSelectModal({
     }
   }, [open, selectedChain, availableWallets]);
 
-  const handleWalletClick = async (wallet: WalletOption) => {
-    // Check if wallet needs to be installed
-    if (wallet.isInstalled === false && wallet.installUrl) {
-      window.open(wallet.installUrl, "_blank");
-      return;
+  const getWalletStatus = (wallet: WalletOption) => {
+    // WalletConnect supports Tron through @tronweb3/walletconnect-tron (for mobile wallets)
+    // Solana support may vary
+    if (wallet.id === "walletconnect" && selectedChain === "solana") {
+      return "unsupported"; // Mark as unsupported for Solana
     }
 
-    console.log("Wallet selected:", wallet.name, "method:", wallet.method);
-    setSelectedWallet(wallet.id);
-    // Small delay to ensure modal state updates before connection starts
-    setTimeout(() => {
-      onSelectWallet(wallet.method);
-    }, 100);
-  };
-
-  const getWalletStatus = (wallet: WalletOption) => {
     if (wallet.id === "walletconnect") {
-      return "available"; // WalletConnect is always available
+      return "available"; // WalletConnect is available for EVM chains
     }
 
     // For EVM chains, if any EVM wallet is detected, show MetaMask as available
@@ -191,6 +193,28 @@ export function WalletSelectModal({
       return "installed";
     }
     return "not-installed";
+  };
+
+  const handleWalletClick = async (wallet: WalletOption) => {
+    // Check if wallet is unsupported for this chain
+    const status = getWalletStatus(wallet);
+    if (status === "unsupported") {
+      // Don't allow clicking on unsupported wallets
+      return;
+    }
+
+    // Check if wallet needs to be installed
+    if (wallet.isInstalled === false && wallet.installUrl) {
+      window.open(wallet.installUrl, "_blank");
+      return;
+    }
+
+    console.log("Wallet selected:", wallet.name, "method:", wallet.method);
+    setSelectedWallet(wallet.id);
+    // Small delay to ensure modal state updates before connection starts
+    setTimeout(() => {
+      onSelectWallet(wallet.method);
+    }, 100);
   };
 
   // Debug: log when modal state changes
@@ -239,6 +263,7 @@ export function WalletSelectModal({
             const status = getWalletStatus(wallet);
             const isSelected = selectedWallet === wallet.id && isConnecting;
             const isInstalled = status === "installed";
+            const isUnsupported = status === "unsupported";
 
             return (
               <Button
@@ -246,7 +271,7 @@ export function WalletSelectModal({
                 variant={isSelected ? "accent" : "outline"}
                 className="w-full h-auto p-4 justify-start gap-4 hover:bg-accent/50 transition-all"
                 onClick={() => handleWalletClick(wallet)}
-                disabled={isConnecting}
+                disabled={isConnecting || isUnsupported}
               >
                 <div className="flex items-center gap-3 flex-1">
                   <div className="text-2xl">{wallet.icon}</div>
@@ -265,14 +290,24 @@ export function WalletSelectModal({
                           Install
                         </Badge>
                       )}
-                      {wallet.id === "walletconnect" && (
+                      {wallet.id === "walletconnect" && !isUnsupported && (
                         <Badge variant="secondary" className="text-xs">
                           Mobile
                         </Badge>
                       )}
+                      {isUnsupported && (
+                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                          Not Supported
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {wallet.description}
+                      {isUnsupported 
+                        ? `WalletConnect doesn't support ${selectedChain} network. Please use Phantom instead.`
+                        : wallet.id === "walletconnect" && selectedChain === "tron"
+                          ? "Scan QR code to connect with mobile TronLink or other TRON wallets (TokenPocket, etc.)"
+                          : wallet.description
+                      }
                     </p>
                   </div>
                   {isSelected && (

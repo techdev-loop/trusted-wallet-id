@@ -193,6 +193,62 @@ function isConnectBeforeRequestError(error: unknown): boolean {
   return message.includes("please call connect() before request()");
 }
 
+async function createTronWalletConnectProvider(): Promise<string> {
+  const rawProjectId = (import.meta as { env?: Record<string, string | undefined> }).env
+    ?.VITE_WALLETCONNECT_PROJECT_ID;
+  const projectId = rawProjectId?.trim();
+  if (!projectId) {
+    throw new Error(
+      "WalletConnect is not configured. Set VITE_WALLETCONNECT_PROJECT_ID to enable mobile wallet connections."
+    );
+  }
+  if (!/^[a-fA-F0-9]{32}$/.test(projectId)) {
+    throw new Error("Invalid WalletConnect project ID format. Check VITE_WALLETCONNECT_PROJECT_ID.");
+  }
+
+  try {
+    // Import WalletConnect Tron adapter
+    // The package exports WalletConnectWallet class
+    const walletConnectTronModule = await import("@tronweb3/walletconnect-tron");
+    
+    // Get the WalletConnectWallet class
+    const WalletConnectWallet = (walletConnectTronModule as any).WalletConnectWallet;
+    
+    if (!WalletConnectWallet) {
+      throw new Error("WalletConnectWallet not found in @tronweb3/walletconnect-tron package");
+    }
+    
+    const wallet = new WalletConnectWallet({
+      network: "shasta", // Use Shasta testnet (change to "mainnet" for production)
+      options: {
+        projectId,
+        metadata: {
+          name: "FIUlink",
+          description: "Web3 Identity-linked Wallet Registry",
+          url: window.location.origin,
+          icons: []
+        }
+      }
+    });
+
+    const result = await wallet.connect();
+    
+    if (!result || !result.address) {
+      throw new Error("Failed to get address from WalletConnect");
+    }
+
+    // Store wallet instance for later use (signing, transactions, etc.)
+    (window as any).__tronWalletConnectWallet = wallet;
+    
+    return result.address;
+  } catch (error: any) {
+    if (error?.code === 4001 || error?.message?.includes("User rejected")) {
+      throw new Error("User rejected the connection request");
+    }
+    throw new Error(`WalletConnect Tron connection failed: ${error?.message || String(error)}`);
+  }
+}
+
 async function createWalletConnectProvider(chain: Chain): Promise<Eip1193Provider> {
   const rawProjectId = (import.meta as { env?: Record<string, string | undefined> }).env
     ?.VITE_WALLETCONNECT_PROJECT_ID;
@@ -466,13 +522,18 @@ export async function connectWallet(
         if (method === "injected") {
           throw error;
         }
-        // Fall through to WalletConnect for auto mode
+        // For auto mode, fall through to WalletConnect for mobile support
       }
     }
     if (method === "walletconnect" || method === "auto") {
-      const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
-      walletConnectProvider = provider;
-      return await connectWithProvider(provider, chain);
+      // Use Tron-specific WalletConnect provider for mobile TronLink support
+      try {
+        return await createTronWalletConnectProvider();
+      } catch (error) {
+        throw new Error(
+          `Failed to connect via WalletConnect: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
     }
     throw new Error("Tron wallet connection method not supported");
   }
@@ -593,6 +654,33 @@ async function signTronMessage(message: string, address: string): Promise<string
   }
 
   const win = window as any;
+  
+  // Check if using WalletConnect Tron wallet (for mobile)
+  const walletConnectWallet = win.__tronWalletConnectWallet;
+  if (walletConnectWallet) {
+    try {
+      // Convert message to hex for Tron
+      const messageHex = Array.from(new TextEncoder().encode(message))
+        .map(b => b.toString(16).padStart(2, "0"))
+        .join("");
+      
+      // Sign message using WalletConnect wallet
+      const signature = await walletConnectWallet.signMessage(messageHex);
+      
+      if (!signature || signature.length < 16) {
+        throw new Error(`WalletConnect signature is invalid (length: ${signature.length})`);
+      }
+      
+      return signature;
+    } catch (error: any) {
+      if (error?.code === 4001 || error?.message?.includes("User rejected")) {
+        throw new Error("User rejected the signature request");
+      }
+      throw new Error(`WalletConnect Tron signing failed: ${error?.message || String(error)}`);
+    }
+  }
+
+  // Fallback to TronLink browser extension
   if (!win.tronWeb && !win.tronLink) {
     throw new Error("TronLink extension not detected. Please install TronLink from https://www.tronlink.org/");
   }

@@ -17,6 +17,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@tronweb3/walletconnect-tron": "^4.0.1",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "ethers": "^6.15.0",
