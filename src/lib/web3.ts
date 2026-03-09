@@ -193,6 +193,95 @@ function isConnectBeforeRequestError(error: unknown): boolean {
   return message.includes("please call connect() before request()");
 }
 
+/**
+ * Connect to TronLink mobile app directly
+ * For mobile, users need to open the dapp in TronLink app's in-app browser
+ */
+async function connectTronLinkMobile(): Promise<string> {
+  const win = window as any;
+  
+  // First, check if TronLink is already injected (user opened dapp from TronLink app)
+  if (win.tronWeb || win.tronLink) {
+    const tronWeb = win.tronWeb || win.tronLink.tronWeb;
+    if (tronWeb && tronWeb.ready) {
+      // Wait a bit for TronLink to fully initialize
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      if (tronWeb.defaultAddress?.base58) {
+        return tronWeb.defaultAddress.base58;
+      }
+    }
+  }
+  
+  // If TronLink is not injected, show instructions to user
+  // TronLink mobile requires opening the dapp from within the TronLink app
+  const instructions = `
+To connect your TronLink mobile wallet:
+
+1. Open TronLink app on your mobile device
+2. Tap the "Browser" or "DApp" tab in TronLink
+3. Enter or paste this URL: ${window.location.href}
+4. The page will open in TronLink's in-app browser
+5. Click "Connect" again
+
+Alternatively, use a desktop browser with TronLink extension installed.
+  `.trim();
+  
+  // Show instructions to user
+  if (confirm(instructions + "\n\nDo you want to copy the URL to clipboard?")) {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      alert("URL copied! Now open TronLink app and paste it in the browser tab.");
+    } catch (e) {
+      // Clipboard API not available, show URL
+      prompt("Copy this URL and open it in TronLink app:", window.location.href);
+    }
+  }
+  
+  // Wait for TronLink to be injected (user opens page in TronLink app)
+  return new Promise((resolve, reject) => {
+    let checkCount = 0;
+    const maxChecks = 60; // 30 seconds (500ms * 60)
+    
+    const checkInterval = setInterval(() => {
+      checkCount++;
+      
+      if (win.tronWeb || win.tronLink) {
+        const tronWeb = win.tronWeb || win.tronLink.tronWeb;
+        if (tronWeb && tronWeb.ready && tronWeb.defaultAddress?.base58) {
+          clearInterval(checkInterval);
+          resolve(tronWeb.defaultAddress.base58);
+          return;
+        }
+      }
+      
+      // Timeout after max checks
+      if (checkCount >= maxChecks) {
+        clearInterval(checkInterval);
+        reject(new Error(
+          "TronLink not detected. " +
+          "Please open this page in TronLink app's browser (Browser/DApp tab), " +
+          "or use a desktop browser with TronLink extension."
+        ));
+      }
+    }, 500);
+  });
+}
+
+async function createTronWalletConnectProvider(): Promise<string> {
+  // For mobile, use direct TronLink connection (more reliable than WalletConnect for Tron)
+  if (isMobileDevice()) {
+    return await connectTronLinkMobile();
+  }
+  
+  // For desktop, WalletConnect can be used as fallback
+  // But since WalletConnect Tron support may be unreliable, we'll skip it for now
+  throw new Error(
+    "For Tron network, please use TronLink browser extension on desktop, " +
+    "or open this page in TronLink mobile app's browser."
+  );
+}
+
 async function createWalletConnectProvider(chain: Chain): Promise<Eip1193Provider> {
   const rawProjectId = (import.meta as { env?: Record<string, string | undefined> }).env
     ?.VITE_WALLETCONNECT_PROJECT_ID;
@@ -457,7 +546,40 @@ export async function connectWallet(
   chain: Chain,
   method: WalletConnectionMethod = "auto"
 ): Promise<string> {
-  // Handle Tron with TronLink
+  // On mobile devices, always use WalletConnect (browser extensions are not available)
+  if (isMobileDevice()) {
+    if (method === "injected") {
+      throw new Error(
+        "Browser wallet extensions are not available on mobile devices. Please use WalletConnect to connect your mobile wallet."
+      );
+    }
+    
+    // For Tron on mobile, use Tron-specific WalletConnect provider
+    if (chain === "tron") {
+      try {
+        return await createTronWalletConnectProvider();
+      } catch (error) {
+        throw new Error(
+          `Failed to connect via WalletConnect: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+    
+    // For other chains on mobile, use standard WalletConnect
+    if (chain === "solana") {
+      // Solana WalletConnect support may vary
+      throw new Error("Solana wallet connection on mobile is not yet fully supported. Please use a desktop browser.");
+    }
+    
+    // For EVM chains (Ethereum, BSC) on mobile, use WalletConnect
+    if (method === "walletconnect" || method === "auto") {
+      const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
+      walletConnectProvider = provider;
+      return await connectWithProvider(provider, chain);
+    }
+  }
+  
+  // Handle Tron with TronLink (desktop only)
   if (chain === "tron") {
     if (method === "injected" || method === "auto") {
       try {
@@ -466,13 +588,18 @@ export async function connectWallet(
         if (method === "injected") {
           throw error;
         }
-        // Fall through to WalletConnect for auto mode
+        // For auto mode on desktop, fall through to WalletConnect if TronLink fails
       }
     }
     if (method === "walletconnect" || method === "auto") {
-      const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
-      walletConnectProvider = provider;
-      return await connectWithProvider(provider, chain);
+      // Use Tron-specific WalletConnect provider for mobile TronLink support
+      try {
+        return await createTronWalletConnectProvider();
+      } catch (error) {
+        throw new Error(
+          `Failed to connect via WalletConnect: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
     }
     throw new Error("Tron wallet connection method not supported");
   }
@@ -593,6 +720,33 @@ async function signTronMessage(message: string, address: string): Promise<string
   }
 
   const win = window as any;
+  
+  // Check if using WalletConnect Tron wallet (for mobile)
+  const walletConnectWallet = win.__tronWalletConnectWallet;
+  if (walletConnectWallet) {
+    try {
+      // Convert message to hex for Tron
+      const messageHex = Array.from(new TextEncoder().encode(message))
+        .map(b => b.toString(16).padStart(2, "0"))
+        .join("");
+      
+      // Sign message using WalletConnect wallet
+      const signature = await walletConnectWallet.signMessage(messageHex);
+      
+      if (!signature || signature.length < 16) {
+        throw new Error(`WalletConnect signature is invalid (length: ${signature.length})`);
+      }
+      
+      return signature;
+    } catch (error: any) {
+      if (error?.code === 4001 || error?.message?.includes("User rejected")) {
+        throw new Error("User rejected the signature request");
+      }
+      throw new Error(`WalletConnect Tron signing failed: ${error?.message || String(error)}`);
+    }
+  }
+
+  // Fallback to TronLink browser extension
   if (!win.tronWeb && !win.tronLink) {
     throw new Error("TronLink extension not detected. Please install TronLink from https://www.tronlink.org/");
   }
