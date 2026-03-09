@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import TronWeb from "tronweb";
+import { TronWeb } from "tronweb";
 import { walletDb } from "../db/pool.js";
 import { HttpError } from "../lib/http-error.js";
 import { StatusCodes } from "http-status-codes";
@@ -191,7 +191,13 @@ export async function verifyTronTransaction(
 
     // Check internal transactions for TRC20 USDT transfer
     if (txInfo.internal_transactions && txInfo.internal_transactions.length > 0) {
-      for (const internalTx of txInfo.internal_transactions) {
+      for (const internalTxRaw of txInfo.internal_transactions) {
+        const internalTx = internalTxRaw as unknown as {
+          to?: string;
+          from?: string;
+          amount?: string | number;
+          token_info?: { symbol?: string; address?: string };
+        };
         // Check if this is a TRC20 token transfer to our contract
         if (
           internalTx.to === config.contractAddress &&

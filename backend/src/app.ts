@@ -88,7 +88,10 @@ app.get("/api/health", async (_req, res) => {
 
   const overallStatus = identityDbStatus === "ok" && walletDbStatus === "ok" ? "ok" : "degraded";
 
-  res.status(overallStatus === "ok" ? StatusCodes.OK : StatusCodes.SERVICE_UNAVAILABLE).json({
+  // Keep health endpoint HTTP 200 so platform health checks do not de-route the
+  // service during transient database interruptions. Clients can inspect the
+  // JSON status field (`ok` | `degraded`) for dependency state.
+  res.status(StatusCodes.OK).json({
     service: "fiulink-backend",
     status: overallStatus,
     dependencies: {
