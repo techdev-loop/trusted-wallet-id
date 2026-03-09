@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { apiRequest } from "@/lib/api";
 import { setSession } from "@/lib/session";
 import { connectWallet, type Chain, type WalletConnectionMethod } from "@/lib/web3";
+import { WalletSelectModal } from "@/components/WalletSelectModal";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
@@ -26,12 +27,16 @@ const Web3Wallet = () => {
   const [selectedChain, setSelectedChain] = useState<Chain>("ethereum");
   const [walletAddress, setWalletAddress] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
 
   const chains: Chain[] = ["ethereum", "bsc", "tron", "solana"];
 
   const handleConnectWallet = async (method: WalletConnectionMethod) => {
     try {
       setIsProcessing(true);
+      setIsWalletModalOpen(false); // Close modal when connecting starts
+
+      console.log("Connecting wallet with method:", method, "chain:", selectedChain);
 
       // Connect to wallet
       const address = await connectWallet(selectedChain, method);
@@ -63,6 +68,10 @@ const Web3Wallet = () => {
       const message =
         error instanceof Error ? error.message : "Failed to connect wallet";
       toast.error(message);
+      // Reopen modal on error so user can try again
+      if (error instanceof Error && !message.includes("User rejected")) {
+        setIsWalletModalOpen(true);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -119,10 +128,16 @@ const Web3Wallet = () => {
                 </div>
 
                 <Button
-                  onClick={() => void handleConnectWallet("injected")}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log("Button clicked, opening modal");
+                    setIsWalletModalOpen(true);
+                  }}
                   disabled={isProcessing}
-                  className="hidden sm:inline-flex w-full"
+                  className="w-full"
                   size="lg"
+                  type="button"
                 >
                   {isProcessing ? (
                     <>
@@ -132,26 +147,7 @@ const Web3Wallet = () => {
                   ) : (
                     <>
                       <Wallet className="w-4 h-4 mr-2" />
-                      Connect Browser Wallet
-                    </>
-                  )}
-                </Button>
-                <Button
-                  onClick={() => void handleConnectWallet("walletconnect")}
-                  disabled={isProcessing}
-                  className="w-full sm:mt-3"
-                  size="lg"
-                  variant="outline"
-                >
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Connecting...
-                    </>
-                  ) : (
-                    <>
-                      <Wallet className="w-4 h-4 mr-2" />
-                      Connect via WalletConnect
+                      Connect Browser Wallet & Sign
                     </>
                   )}
                 </Button>
@@ -216,6 +212,20 @@ const Web3Wallet = () => {
           </div>
         )}
       </div>
+
+      <WalletSelectModal
+        open={isWalletModalOpen}
+        onOpenChange={(open) => {
+          console.log("Modal onOpenChange called with:", open, "isConnecting:", isProcessing);
+          // Don't allow closing during connection
+          if (!isProcessing) {
+            setIsWalletModalOpen(open);
+          }
+        }}
+        selectedChain={selectedChain}
+        onSelectWallet={handleConnectWallet}
+        isConnecting={isProcessing}
+      />
 
       <Footer />
     </div>

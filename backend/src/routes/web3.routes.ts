@@ -28,7 +28,8 @@ router.post("/connect", async (req, res) => {
   }
 
   const { walletAddress, chain } = parsed.data;
-  const normalizedAddress = walletAddress.toLowerCase();
+  // Normalize address: Tron addresses are base58 (case-sensitive), EVM addresses are hex (lowercase)
+  const normalizedAddress = chain === "tron" ? walletAddress : walletAddress.toLowerCase();
 
   // Get or create wallet user (no payment required)
   const walletUserResult = await walletDb.query<{ id: string }>(
@@ -85,10 +86,12 @@ router.get("/status/:walletAddress/:chain", async (req, res) => {
     throw new HttpError("Invalid chain", StatusCodes.BAD_REQUEST);
   }
 
-  const verified = await isWalletVerified(walletAddress.toLowerCase(), chain as Chain);
+  // Normalize address: Tron addresses are base58 (case-sensitive), EVM addresses are hex (lowercase)
+  const normalizedAddress = chain === "tron" ? walletAddress : walletAddress.toLowerCase();
+  const verified = await isWalletVerified(normalizedAddress, chain as Chain);
 
   res.status(StatusCodes.OK).json({
-    walletAddress: walletAddress.toLowerCase(),
+    walletAddress: normalizedAddress,
     chain,
     verified
   });

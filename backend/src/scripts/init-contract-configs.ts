@@ -27,10 +27,16 @@ async function initContractConfigs() {
     },
     {
       chain: "tron",
-      contractAddress: process.env.TRON_CONTRACT_ADDRESS || "",
-      usdtTokenAddress: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-      networkName: process.env.TRON_NETWORK || "mainnet",
-      rpcUrl: process.env.TRON_RPC_URL || "https://api.trongrid.io",
+      contractAddress: process.env.TRON_CONTRACT_ADDRESS || (process.env.TRON_NETWORK === "shasta" 
+        ? "TMCiUULbCGB2JLBcAxhU15Re8DrSqrCgoF" // Default Shasta testnet contract address
+        : ""),
+      usdtTokenAddress: process.env.TRON_NETWORK === "shasta"
+        ? (process.env.SHASTA_USDT_ADDRESS || "TXYZopYRdj2D9XRtbG411XZZ3kM5VkA00B") // Shasta testnet USDT (example - update with actual)
+        : "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", // Mainnet USDT
+      networkName: process.env.TRON_NETWORK || "shasta",
+      rpcUrl: process.env.TRON_RPC_URL || (process.env.TRON_NETWORK === "shasta" 
+        ? "https://api.shasta.trongrid.io"
+        : "https://api.trongrid.io"),
       isActive: true
     },
     {

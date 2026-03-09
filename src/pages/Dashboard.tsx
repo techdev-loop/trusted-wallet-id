@@ -22,8 +22,10 @@ import {
   getEthereumProvider,
   registerWalletViaContract,
   signWalletMessage,
-  type WalletConnectionMethod
+  type WalletConnectionMethod,
+  type Chain
 } from "@/lib/web3";
+import { WalletSelectModal } from "@/components/WalletSelectModal";
 
 interface DashboardData {
   identityVerificationStatus: "verified" | "pending" | "not_started" | "rejected" | "error";
@@ -86,6 +88,8 @@ const Dashboard = () => {
   const [messageToSign, setMessageToSign] = useState("");
   const [signature, setSignature] = useState("");
   const [paymentReadyToPay, setPaymentReadyToPay] = useState(false);
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const [selectedChain, setSelectedChain] = useState<Chain>("ethereum");
 
   const session = getSession();
   const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
@@ -223,29 +227,35 @@ const Dashboard = () => {
   const handleConnectAndSignWallet = async (method: WalletConnectionMethod) => {
     try {
       setProcessingWallet(true);
-      const normalizedAddress = await connectWallet("ethereum", method);
+      setIsWalletModalOpen(false); // Close modal when connecting starts
+      const normalizedAddress = await connectWallet(selectedChain, method);
       setWalletAddress(normalizedAddress);
 
+      // For all chains, use message signing flow
       const initiateResponse = await apiRequest<{ messageToSign: string }>("/wallet/link/initiate", {
         method: "POST",
         auth: true,
-        body: { walletAddress: normalizedAddress }
+        body: { 
+          walletAddress: normalizedAddress,
+          chain: selectedChain
+        }
       });
 
       const challengeMessage = initiateResponse.messageToSign;
       setMessageToSign(challengeMessage);
 
-      const provider = getEthereumProvider();
-      if (!provider) {
-        throw new Error("Wallet provider not available after connection.");
-      }
-      const signedMessage = await signWalletMessage(challengeMessage, normalizedAddress, "ethereum");
+      // Sign message with the appropriate wallet based on chain
+      const signedMessage = await signWalletMessage(challengeMessage, normalizedAddress, selectedChain);
       setSignature(signedMessage);
 
       await apiRequest("/wallet/link/confirm", {
         method: "POST",
         auth: true,
-        body: { walletAddress: normalizedAddress, signature: signedMessage }
+        body: { 
+          walletAddress: normalizedAddress, 
+          signature: signedMessage,
+          chain: selectedChain
+        }
       });
       setPaymentReadyToPay(true);
 
@@ -263,6 +273,10 @@ const Dashboard = () => {
             ? error.message
             : "Failed to connect wallet and sign message";
       toast.error(message);
+      // Reopen modal on error so user can try again (unless user rejected)
+      if (error instanceof Error && !message.includes("User rejected") && !message.includes("user rejected")) {
+        setIsWalletModalOpen(true);
+      }
     } finally {
       setProcessingWallet(false);
     }
@@ -302,20 +316,26 @@ const Dashboard = () => {
       return;
     }
 
+    if (!selectedChain) {
+      toast.error("Please select a blockchain first.");
+      return;
+    }
+
     try {
       setProcessingWallet(true);
       toast.info("Preparing contract payment...");
 
-      const contractConfig = await apiRequest<{ contractAddress: string }>("/web3/contract-config/ethereum");
+      // Get contract config for the selected chain
+      const contractConfig = await apiRequest<{ contractAddress: string; usdtTokenAddress?: string }>(`/web3/contract-config/${selectedChain}`);
       if (!contractConfig.contractAddress) {
-        throw new Error("Contract address is not configured.");
+        throw new Error(`Contract address is not configured for ${selectedChain}.`);
       }
 
       // Step 1: Approve 10 USDT spend for the registry contract.
-      await approveUSDT("ethereum", contractConfig.contractAddress);
+      await approveUSDT(selectedChain, contractConfig.contractAddress, undefined, contractConfig.usdtTokenAddress);
 
       // Step 2: Execute on-chain wallet registration/payment transaction.
-      const txHash = await registerWalletViaContract("ethereum", contractConfig.contractAddress);
+      const txHash = await registerWalletViaContract(selectedChain, contractConfig.contractAddress);
 
       // Step 3: Persist payment/activation on backend.
       await apiRequest("/payments/confirm", {
@@ -324,7 +344,8 @@ const Dashboard = () => {
         body: {
           walletAddress,
           txHash,
-          amountUsdt: 10
+          amountUsdt: 10,
+          chain: selectedChain
         }
       });
 
@@ -562,6 +583,26 @@ const Dashboard = () => {
 
               {(effectiveKycStatus === "pending" || effectiveKycStatus === "verified") && (
                 <div className="space-y-4">
+                  {/* Chain Selection */}
+                  <div className="space-y-2">
+                    <Label>Select Blockchain</Label>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {(["ethereum", "bsc", "tron", "solana"] as Chain[]).map((chain) => (
+                        <Button
+                          key={chain}
+                          variant={selectedChain === chain ? "accent" : "outline"}
+                          className="h-auto py-3"
+                          onClick={() => setSelectedChain(chain)}
+                          type="button"
+                        >
+                          <span className="font-semibold capitalize text-sm">
+                            {chain === "ethereum" ? "ETH" : chain === "bsc" ? "BSC" : chain.toUpperCase()}
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="walletAddress">Wallet Address</Label>
@@ -569,7 +610,7 @@ const Dashboard = () => {
                         id="walletAddress"
                         value={walletAddress}
                         onChange={(event) => setWalletAddress(event.target.value)}
-                        placeholder="0x..."
+                        placeholder={selectedChain === "tron" ? "T..." : selectedChain === "solana" ? "Base58..." : "0x..."}
                       />
                     </div>
                   </div>
@@ -597,19 +638,26 @@ const Dashboard = () => {
                   <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
                     <Button
                       variant="accent"
-                      onClick={() => void handleConnectAndSignWallet("injected")}
-                      disabled={processingWallet}
-                      className="hidden sm:inline-flex w-full sm:w-auto"
-                    >
-                      Connect Browser Wallet & Sign
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => void handleConnectAndSignWallet("walletconnect")}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsWalletModalOpen(true);
+                      }}
                       disabled={processingWallet}
                       className="w-full sm:w-auto"
+                      type="button"
                     >
-                      Connect via WalletConnect & Sign
+                      {processingWallet ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Connecting...
+                        </>
+                      ) : (
+                        <>
+                          <Wallet className="w-4 h-4 mr-2" />
+                          Connect Browser Wallet & Sign
+                        </>
+                      )}
                     </Button>
                     <Button variant="outline" onClick={handleInitiateWallet} disabled={processingWallet} className="w-full sm:w-auto">
                       1) Generate Challenge
@@ -750,6 +798,18 @@ const Dashboard = () => {
           </Tabs>
         </motion.div>
       </div>
+
+      <WalletSelectModal
+        open={isWalletModalOpen}
+        onOpenChange={(open) => {
+          if (!processingWallet) {
+            setIsWalletModalOpen(open);
+          }
+        }}
+        selectedChain={selectedChain}
+        onSelectWallet={handleConnectAndSignWallet}
+        isConnecting={processingWallet}
+      />
     </div>
   );
 };
