@@ -228,7 +228,15 @@ const Dashboard = () => {
     try {
       setProcessingWallet(true);
       setIsWalletModalOpen(false); // Close modal when connecting starts
-      const normalizedAddress = await connectWallet(selectedChain, method);
+      
+      // On mobile with Tron, automatically use WalletConnect
+      // (TronLink extension is not available on mobile browsers)
+      const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+      const effectiveMethod = (isMobile && selectedChain === "tron" && method === "auto") 
+        ? "walletconnect" 
+        : method;
+      
+      const normalizedAddress = await connectWallet(selectedChain, effectiveMethod);
       setWalletAddress(normalizedAddress);
 
       // For all chains, use message signing flow
@@ -638,10 +646,23 @@ const Dashboard = () => {
                   <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
                     <Button
                       variant="accent"
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        setIsWalletModalOpen(true);
+                        
+                        const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+                        
+                        // On mobile with Tron, use direct TronLink connection
+                        // (WalletConnect doesn't reliably support Tron)
+                        if (isMobile && selectedChain === "tron") {
+                          await handleConnectAndSignWallet("walletconnect");
+                        } else if (isMobile) {
+                          // For other chains on mobile, use WalletConnect
+                          await handleConnectAndSignWallet("walletconnect");
+                        } else {
+                          // On desktop, show modal for wallet selection
+                          setIsWalletModalOpen(true);
+                        }
                       }}
                       disabled={processingWallet}
                       className="w-full sm:w-auto"
@@ -655,7 +676,16 @@ const Dashboard = () => {
                       ) : (
                         <>
                           <Wallet className="w-4 h-4 mr-2" />
-                          Connect Browser Wallet & Sign
+                          {(() => {
+                            const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+                            if (isMobile && selectedChain === "tron") {
+                              return "Open in TronLink App";
+                            }
+                            if (isMobile) {
+                              return "Connect Mobile Wallet";
+                            }
+                            return "Connect Browser Wallet & Sign";
+                          })()}
                         </>
                       )}
                     </Button>

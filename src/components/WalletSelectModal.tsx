@@ -65,7 +65,7 @@ const WALLET_OPTIONS: WalletOption[] = [
     icon: "🔗",
     description: "Scan QR code to connect with mobile wallet",
     method: "walletconnect",
-    supportedChains: ["ethereum", "bsc", "tron", "solana"],
+    supportedChains: ["ethereum", "bsc", "solana"], // Removed "tron" - WalletConnect doesn't reliably support Tron
   },
 ];
 
@@ -171,10 +171,9 @@ export function WalletSelectModal({
   }, [open, selectedChain, availableWallets]);
 
   const getWalletStatus = (wallet: WalletOption) => {
-    // WalletConnect supports Tron through @tronweb3/walletconnect-tron (for mobile wallets)
-    // Solana support may vary
-    if (wallet.id === "walletconnect" && selectedChain === "solana") {
-      return "unsupported"; // Mark as unsupported for Solana
+    // WalletConnect doesn't reliably support Tron or Solana
+    if (wallet.id === "walletconnect" && (selectedChain === "solana" || selectedChain === "tron")) {
+      return "unsupported"; // Mark as unsupported for Solana and Tron
     }
 
     if (wallet.id === "walletconnect") {
@@ -303,10 +302,10 @@ export function WalletSelectModal({
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
                       {isUnsupported 
-                        ? `WalletConnect doesn't support ${selectedChain} network. Please use Phantom instead.`
-                        : wallet.id === "walletconnect" && selectedChain === "tron"
-                          ? "Scan QR code to connect with mobile TronLink or other TRON wallets (TokenPocket, etc.)"
-                          : wallet.description
+                        ? selectedChain === "tron"
+                          ? "For Tron on mobile, please open this page in TronLink app's browser. On desktop, use TronLink extension."
+                          : `WalletConnect doesn't support ${selectedChain} network. Please use ${selectedChain === "solana" ? "Phantom" : "the appropriate wallet"} instead.`
+                        : wallet.description
                       }
                     </p>
                   </div>
