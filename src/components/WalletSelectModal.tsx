@@ -63,7 +63,7 @@ const WALLET_OPTIONS: WalletOption[] = [
     id: "phantom",
     name: "Phantom",
     icon: "👻",
-    description: "Connect using Phantom browser extension",
+    description: "Desktop: Browser extension | Mobile: Open Phantom app",
     method: "injected",
     supportedChains: ["solana"],
     installUrl: "https://phantom.app/",
@@ -331,13 +331,24 @@ export function WalletSelectModal({
                           ? "For Tron on mobile, please open this page in a Tron wallet app's browser. On desktop, use a Tron wallet extension."
                           : `WalletConnect doesn't support ${selectedChain} network. Please use ${selectedChain === "solana" ? "Phantom" : "the appropriate wallet"} instead.`
                         : (() => {
+                            const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+                            
                             // Show mobile-specific instructions for Tron wallets
                             if (selectedChain === "tron" && (wallet.id === "tronlink" || wallet.id === "tokenpocket")) {
-                              const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
                               if (isMobile && !isInstalled) {
                                 return `Mobile: Open this page in ${wallet.name} app's browser tab`;
                               }
                             }
+                            
+                            // Show mobile-specific instructions for Phantom
+                            if (wallet.id === "phantom") {
+                              if (isMobile) {
+                                return "Mobile: Tap to open Phantom app and connect";
+                              } else {
+                                return "Desktop: Connect using Phantom browser extension";
+                              }
+                            }
+                            
                             return wallet.description;
                           })()
                       }
