@@ -393,7 +393,7 @@ export async function isWalletVerified(walletAddress: string, chain: Chain): Pro
     } else if (chain === "solana") {
       // Solana uses @solana/web3.js
       const { Connection, PublicKey } = await import('@solana/web3.js');
-      const { Program, AnchorProvider, Wallet } = await import('@coral-xyz/anchor');
+      const { Program, AnchorProvider } = await import("@coral-xyz/anchor");
       
       // Solana program IDL (minimal for isWalletVerified)
       const programIdl = {
@@ -419,11 +419,11 @@ export async function isWalletVerified(walletAddress: string, chain: Chain): Pro
       // Create a read-only provider for view calls
       const provider = new AnchorProvider(
         connection,
-        { publicKey: PublicKey.default } as Wallet,
-        { commitment: 'confirmed' }
+        { publicKey: PublicKey.default } as any,
+        { commitment: "confirmed" }
       );
       
-      const program = new Program(programIdl as any, programId, provider);
+      const program = new (Program as any)(programIdl as any, programId, provider);
       
       try {
         const result = await program.methods
