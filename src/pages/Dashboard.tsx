@@ -370,36 +370,84 @@ const Dashboard = () => {
     try {
       setProcessingWallet(true);
       toast.info("Preparing contract payment...");
+      console.log(`[Payment] Starting payment process for ${selectedChain}`, { walletAddress, selectedChain });
 
       // Get contract config for the selected chain
+      console.log(`[Payment] Fetching contract config for ${selectedChain}...`);
       const contractConfig = await apiRequest<{ contractAddress: string; usdtTokenAddress?: string }>(`/web3/contract-config/${selectedChain}`);
+      console.log(`[Payment] Contract config received:`, contractConfig);
+      
       if (!contractConfig.contractAddress) {
-        throw new Error(`Contract address is not configured for ${selectedChain}.`);
+        const error = new Error(`Contract address is not configured for ${selectedChain}.`);
+        console.error(`[Payment] Error:`, error);
+        throw error;
       }
 
       // Step 1: Approve 10 USDT spend for the registry contract.
-      await approveUSDT(selectedChain, contractConfig.contractAddress, undefined, contractConfig.usdtTokenAddress);
+      console.log(`[Payment] Step 1: Approving USDT for ${selectedChain}...`);
+      try {
+        await approveUSDT(selectedChain, contractConfig.contractAddress, undefined, contractConfig.usdtTokenAddress);
+        console.log(`[Payment] Step 1: USDT approval successful`);
+      } catch (approveError) {
+        console.error(`[Payment] Step 1: USDT approval failed:`, approveError);
+        throw approveError;
+      }
 
       // Step 2: Execute on-chain wallet registration/payment transaction.
-      const txHash = await registerWalletViaContract(selectedChain, contractConfig.contractAddress);
+      console.log(`[Payment] Step 2: Registering wallet via contract for ${selectedChain}...`);
+      let txHash: string;
+      try {
+        txHash = await registerWalletViaContract(selectedChain, contractConfig.contractAddress);
+        console.log(`[Payment] Step 2: Transaction successful, txHash:`, txHash);
+      } catch (registerError) {
+        console.error(`[Payment] Step 2: Wallet registration failed:`, registerError);
+        console.error(`[Payment] Step 2: Error details:`, {
+          error: registerError,
+          message: registerError instanceof Error ? registerError.message : String(registerError),
+          stack: registerError instanceof Error ? registerError.stack : undefined,
+        });
+        throw registerError;
+      }
 
       // Step 3: Persist payment/activation on backend.
-      await apiRequest("/payments/confirm", {
-        method: "POST",
-        auth: true,
-        body: {
-          walletAddress,
-          txHash,
-          amountUsdt: 10,
-          chain: selectedChain
-        }
-      });
+      console.log(`[Payment] Step 3: Confirming payment on backend...`);
+      try {
+        await apiRequest("/payments/confirm", {
+          method: "POST",
+          auth: true,
+          body: {
+            walletAddress,
+            txHash,
+            amountUsdt: 10,
+            chain: selectedChain
+          }
+        });
+        console.log(`[Payment] Step 3: Backend confirmation successful`);
+      } catch (confirmError) {
+        console.error(`[Payment] Step 3: Backend confirmation failed:`, confirmError);
+        throw confirmError;
+      }
 
       toast.success("10 USDT payment completed and wallet activated.");
       setPaymentReadyToPay(false);
       await loadDashboard();
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Failed to process 10 USDT payment";
+      console.error(`[Payment] Payment process failed:`, error);
+      console.error(`[Payment] Error details:`, {
+        error,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        chain: selectedChain,
+        walletAddress,
+      });
+      
+      const message = error instanceof ApiError 
+        ? error.message 
+        : error instanceof Error 
+          ? error.message 
+          : "Failed to process 10 USDT payment";
+      
+      console.error(`[Payment] Showing error to user:`, message);
       toast.error(message);
     } finally {
       setProcessingWallet(false);

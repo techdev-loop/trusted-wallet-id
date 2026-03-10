@@ -1,0 +1,418 @@
+{
+  "address": "4kAwaG8FAMKnhTqCHoVKRAwBdBfh7vsG54Z7CeaqagEc",
+  "metadata": {
+    "name": "wallet_registry",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Multi-chain wallet registry for identity verification"
+  },
+  "instructions": [
+    {
+      "name": "initialize",
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "usdt_mint",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "initialize_registry_usdt_account",
+      "discriminator": [
+        131,
+        234,
+        71,
+        77,
+        139,
+        107,
+        227,
+        18
+      ],
+      "accounts": [
+        {
+          "name": "registry"
+        },
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "usdt_mint",
+          "writable": true
+        },
+        {
+          "name": "registry_usdt_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "registry.usdt_mint",
+                "account": "Registry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "is_wallet_verified",
+      "discriminator": [
+        71,
+        205,
+        152,
+        64,
+        83,
+        250,
+        31,
+        161
+      ],
+      "accounts": [
+        {
+          "name": "registry"
+        },
+        {
+          "name": "wallet"
+        }
+      ],
+      "args": [],
+      "returns": "bool"
+    },
+    {
+      "name": "register_wallet",
+      "discriminator": [
+        181,
+        141,
+        102,
+        82,
+        135,
+        213,
+        141,
+        8
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true
+        },
+        {
+          "name": "wallet",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "user_usdt_account",
+          "writable": true
+        },
+        {
+          "name": "registry_usdt_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "registry.usdt_mint",
+                "account": "Registry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdt_mint"
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "withdraw_usdt",
+      "discriminator": [
+        117,
+        75,
+        94,
+        162,
+        178,
+        92,
+        19,
+        141
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true
+        },
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "registry_usdt_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "registry.usdt_mint",
+                "account": "Registry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "recipient_usdt_account",
+          "writable": true
+        },
+        {
+          "name": "usdt_mint"
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Registry",
+      "discriminator": [
+        47,
+        174,
+        110,
+        246,
+        184,
+        182,
+        252,
+        218
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "WalletRegistered",
+      "discriminator": [
+        172,
+        237,
+        84,
+        96,
+        15,
+        211,
+        154,
+        184
+      ]
+    },
+    {
+      "name": "Withdrawn",
+      "discriminator": [
+        20,
+        89,
+        223,
+        198,
+        194,
+        124,
+        219,
+        13
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "AlreadyRegistered",
+      "msg": "Wallet already registered"
+    },
+    {
+      "code": 6001,
+      "name": "Unauthorized",
+      "msg": "Unauthorized: Only the owner can perform this action"
+    },
+    {
+      "code": 6002,
+      "name": "InvalidTokenAccount",
+      "msg": "Invalid token account"
+    },
+    {
+      "code": 6003,
+      "name": "MaxRegistrationsReached",
+      "msg": "Maximum registrations reached"
+    }
+  ],
+  "types": [
+    {
+      "name": "Registry",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "usdt_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_registrations",
+            "type": "u64"
+          },
+          {
+            "name": "registrations",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "WalletRegistration"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "WalletRegistered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WalletRegistration",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "registered_at",
+            "type": "i64"
+          },
+          {
+            "name": "is_verified",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Withdrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    }
+  ]
+}

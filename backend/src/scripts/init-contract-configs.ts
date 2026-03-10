@@ -41,15 +41,27 @@ async function initContractConfigs() {
     },
     {
       chain: "solana",
-      contractAddress: process.env.SOLANA_CONTRACT_ADDRESS || "",
-      usdtTokenAddress: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
-      networkName: process.env.SOLANA_NETWORK || "mainnet-beta",
-      rpcUrl: process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com",
+      contractAddress: process.env.SOLANA_CONTRACT_ADDRESS || (process.env.SOLANA_NETWORK === "devnet"
+        ? "DwrJcymdTGdiuHK9boV8MPtDmUqMTwzfyvDB8hePMNG4" // Default devnet registry account address
+        : ""),
+      usdtTokenAddress: process.env.SOLANA_NETWORK === "devnet"
+        ? (process.env.SOLANA_DEVNET_USDT_ADDRESS || "Ch9MipiMpaZBkCZFPTsArZigDwEH85Yodp2RcPjSmsvr") // Devnet USDT
+        : "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // Mainnet USDT
+      networkName: process.env.SOLANA_NETWORK || "devnet",
+      rpcUrl: process.env.SOLANA_RPC_URL || (process.env.SOLANA_NETWORK === "devnet"
+        ? "https://api.devnet.solana.com"
+        : "https://api.mainnet-beta.solana.com"),
       isActive: true
     }
   ];
 
   for (const config of configs) {
+      // For Solana, use the registry account address as default if not set
+      if (config.chain === "solana" && !config.contractAddress) {
+        config.contractAddress = "DwrJcymdTGdiuHK9boV8MPtDmUqMTwzfyvDB8hePMNG4";
+        console.log(`Using default Solana devnet registry account: ${config.contractAddress}`);
+      }
+    
     if (!config.contractAddress) {
       console.warn(`Skipping ${config.chain} - contract address not set`);
       continue;
