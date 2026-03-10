@@ -478,63 +478,163 @@ async function connectTronLink(): Promise<string> {
   return address; // Tron addresses are base58, case-sensitive
 }
 
-// Helper to connect Phantom
+// Helper to connect Phantom (supports both desktop extension and mobile app)
 async function connectPhantom(): Promise<string> {
   if (typeof window === "undefined") {
     throw new Error("Phantom is not available");
   }
 
   const win = window as any;
-  if (!win.phantom || !win.phantom.solana) {
-    throw new Error("Phantom extension not detected. Please install Phantom from https://phantom.app/");
-  }
+  const isMobile = isMobileDevice();
 
-  const provider = win.phantom.solana;
-  if (!provider.isPhantom) {
-    throw new Error("Phantom wallet not detected");
-  }
-
-  try {
-    const response = await provider.connect();
-    return response.publicKey.toString();
-  } catch (error) {
-    if ((error as any)?.code === 4001) {
-      throw new Error("User rejected the connection request");
+  // Check for desktop extension first
+  if (win.phantom?.solana) {
+    const provider = win.phantom.solana;
+    if (provider.isPhantom) {
+      try {
+        const response = await provider.connect();
+        return response.publicKey.toString();
+      } catch (error) {
+        if ((error as any)?.code === 4001) {
+          throw new Error("User rejected the connection request");
+        }
+        throw normalizeWalletError(error);
+      }
     }
-    throw normalizeWalletError(error);
   }
+
+  // On mobile, use deep linking to open Phantom app
+  if (isMobile) {
+    return await connectPhantomMobile();
+  }
+
+  // Desktop but no extension found
+  throw new Error("Phantom extension not detected. Please install Phantom from https://phantom.app/");
+}
+
+// Connect to Phantom mobile app using deep linking
+async function connectPhantomMobile(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    // Check if we're returning from Phantom callback
+    const urlParams = new URLSearchParams(window.location.search);
+    const callbackSessionId = urlParams.get('phantom_connect');
+    const callbackPublicKey = urlParams.get('phantom_public_key');
+    const callbackError = urlParams.get('phantom_error');
+    
+    if (callbackSessionId) {
+      // We're in the callback - check if session matches
+      const storedSessionId = sessionStorage.getItem('phantom_session_id');
+      if (storedSessionId === callbackSessionId) {
+        // Clean up URL
+        const newUrl = window.location.pathname + window.location.search.replace(/[?&]phantom_connect=[^&]*/, '').replace(/[?&]phantom_public_key=[^&]*/, '').replace(/[?&]phantom_error=[^&]*/, '');
+        window.history.replaceState({}, '', newUrl);
+        
+        sessionStorage.removeItem('phantom_session_id');
+        const timeoutId = sessionStorage.getItem('phantom_timeout_id');
+        if (timeoutId) {
+          clearTimeout(parseInt(timeoutId));
+          sessionStorage.removeItem('phantom_timeout_id');
+        }
+        
+        if (callbackError) {
+          reject(new Error(decodeURIComponent(callbackError)));
+          return;
+        }
+        
+        if (callbackPublicKey) {
+          resolve(decodeURIComponent(callbackPublicKey));
+          return;
+        }
+        
+        reject(new Error('No public key received from Phantom'));
+        return;
+      }
+    }
+    
+    // Generate a unique session ID for this connection
+    const sessionId = `phantom_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    
+    // Store the session ID in sessionStorage to verify the callback
+    sessionStorage.setItem('phantom_session_id', sessionId);
+    
+    // Create the deep link URL
+    const appUrl = encodeURIComponent(window.location.href.split('?')[0]); // Remove existing query params
+    const redirectLink = encodeURIComponent(`${window.location.origin}${window.location.pathname}?phantom_connect=${sessionId}`);
+    const phantomDeepLink = `https://phantom.app/ul/v1/connect?app_url=${appUrl}&redirect_link=${redirectLink}`;
+    
+    // Set a timeout to clean up if user doesn't connect
+    const timeout = setTimeout(() => {
+      sessionStorage.removeItem('phantom_session_id');
+      sessionStorage.removeItem('phantom_timeout_id');
+      reject(new Error('Connection timeout. Please try again.'));
+    }, 60000); // 60 second timeout
+    
+    // Store timeout ID to clear it if connection succeeds
+    sessionStorage.setItem('phantom_timeout_id', timeout.toString());
+    
+    // Open Phantom app via deep link
+    console.log('Opening Phantom app via deep link...');
+    window.location.href = phantomDeepLink;
+  });
 }
 
 export async function connectWallet(
   chain: Chain,
   method: WalletConnectionMethod = "auto"
 ): Promise<string> {
-  // On mobile devices, always use WalletConnect (browser extensions are not available)
+  // On mobile devices, handle wallet connections appropriately
   if (isMobileDevice()) {
+    // For Solana on mobile, allow Phantom deep link connection
+    if (chain === "solana") {
+      if (method === "injected" || method === "auto") {
+        try {
+          return await connectPhantom();
+        } catch (error) {
+          if (method === "injected") {
+            throw error;
+          }
+          // Fall through to WalletConnect for auto mode
+        }
+      }
+      if (method === "walletconnect" || method === "auto") {
+        const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
+        walletConnectProvider = provider;
+        return await connectWithProvider(provider, chain);
+      }
+      throw new Error("Solana wallet connection method not supported on mobile");
+    }
+    
+    // For Tron on mobile, use Tron-specific WalletConnect provider
+    if (chain === "tron") {
+      if (method === "injected" || method === "auto") {
+        // TronLink mobile is handled via TronWallet adapter
+        try {
+          return await connectTronLinkMobile();
+        } catch (error) {
+          if (method === "injected") {
+            throw error;
+          }
+          // Fall through to WalletConnect for auto mode
+        }
+      }
+      if (method === "walletconnect" || method === "auto") {
+        try {
+          return await createTronWalletConnectProvider();
+        } catch (error) {
+          throw new Error(
+            `Failed to connect via WalletConnect: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      }
+      throw new Error("Tron wallet connection method not supported on mobile");
+    }
+    
+    // For EVM chains (Ethereum, BSC) on mobile, use WalletConnect
     if (method === "injected") {
       throw new Error(
         "Browser wallet extensions are not available on mobile devices. Please use WalletConnect to connect your mobile wallet."
       );
     }
-    
-    // For Tron on mobile, use Tron-specific WalletConnect provider
-    if (chain === "tron") {
-      try {
-        return await createTronWalletConnectProvider();
-      } catch (error) {
-        throw new Error(
-          `Failed to connect via WalletConnect: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    }
-    
-    // For other chains on mobile, use standard WalletConnect
-    if (chain === "solana") {
-      // Solana WalletConnect support may vary
-      throw new Error("Solana wallet connection on mobile is not yet fully supported. Please use a desktop browser.");
-    }
-    
-    // For EVM chains (Ethereum, BSC) on mobile, use WalletConnect
     if (method === "walletconnect" || method === "auto") {
       const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
       walletConnectProvider = provider;
