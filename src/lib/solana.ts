@@ -91,8 +91,10 @@ export function getDefaultRegistryAccount(): PublicKey {
  * Note: This function derives the PDA, but we use DEFAULT_REGISTRY_USDT_ACCOUNT directly
  */
 export function getRegistryUsdtAccountPDA(usdtMint: PublicKey): PublicKey {
+  // Use TextEncoder for browser compatibility (no Buffer)
+  const registryBytes = new TextEncoder().encode('registry');
   const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from('registry'), usdtMint.toBuffer()],
+    [registryBytes, usdtMint.toBuffer()],
     SOLANA_PROGRAM_ID
   );
   return pda;

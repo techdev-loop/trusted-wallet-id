@@ -940,8 +940,9 @@ async function signSolanaMessage(message: string, address: string): Promise<stri
     const signedMessage = await provider.signMessage(messageBytes, "utf8");
     
     // Phantom returns signature in base58 format
-    // Convert to hex for consistency (or keep as base58)
-    const signatureHex = Buffer.from(signedMessage.signature).toString("hex");
+    // Convert to hex for consistency (browser-compatible, no Buffer)
+    const signatureArray = Array.from(signedMessage.signature);
+    const signatureHex = signatureArray.map(b => b.toString(16).padStart(2, '0')).join('');
     return signatureHex;
   } catch (error) {
     if ((error as any)?.code === 4001) {
