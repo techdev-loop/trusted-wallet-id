@@ -390,6 +390,55 @@ export async function isWalletVerified(walletAddress: string, chain: Chain): Pro
         console.error(`Tron contract call failed for ${walletAddress}:`, contractError);
         return false;
       }
+    } else if (chain === "solana") {
+      // Solana uses @solana/web3.js
+      const { Connection, PublicKey } = await import('@solana/web3.js');
+      const { Program, AnchorProvider, Wallet } = await import('@coral-xyz/anchor');
+      
+      // Solana program IDL (minimal for isWalletVerified)
+      const programIdl = {
+        version: "0.1.0",
+        name: "wallet_registry",
+        instructions: [{
+          name: "isWalletVerified",
+          discriminator: [71, 205, 152, 64, 83, 250, 31, 161],
+          accounts: [
+            { name: "registry" },
+            { name: "wallet" }
+          ],
+          args: [],
+          returns: "bool"
+        }]
+      };
+      
+      const connection = new Connection(config.rpcUrl, 'confirmed');
+      const programId = new PublicKey(config.contractAddress);
+      const registryPubkey = new PublicKey(config.contractAddress); // Assuming registry address is same as program or provided separately
+      const walletPubkey = new PublicKey(walletAddress);
+      
+      // Create a read-only provider for view calls
+      const provider = new AnchorProvider(
+        connection,
+        { publicKey: PublicKey.default } as Wallet,
+        { commitment: 'confirmed' }
+      );
+      
+      const program = new Program(programIdl as any, programId, provider);
+      
+      try {
+        const result = await program.methods
+          .isWalletVerified()
+          .accounts({
+            registry: registryPubkey,
+            wallet: walletPubkey,
+          })
+          .view();
+        
+        return Boolean(result);
+      } catch (error) {
+        console.error(`Solana contract call failed for ${walletAddress}:`, error);
+        return false;
+      }
     } else {
       // EVM chains (Ethereum, BSC)
       const normalizedAddress = walletAddress.toLowerCase();

@@ -77,7 +77,7 @@ export const USDT_ADDRESSES: Record<Chain, string> = {
   ethereum: "0xFD311848AE9dD8ffaC8bCd862bC14D38aA77F946", // Sepolia testnet
   bsc: "0x55d398326f99059fF775485246999027B3197955",
   tron: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-  solana: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" // USDT on Solana
+  solana: "G8vDrj3UxWVWFcvKE6tAYSwq7G6PSv164c58oVtfCoXC" // USDT on Solana
 };
 
 // Sepolia testnet USDT (mock/test token)
@@ -1123,7 +1123,12 @@ export function getUSDTContract(chain: Chain, contractAddress?: string): ethers.
  * Get USDT balance
  */
 export async function getUSDTBalance(chain: Chain, address: string): Promise<bigint> {
-  if (chain === "solana" || chain === "tron") {
+  if (chain === "solana") {
+    const { getSolanaUSDTBalance } = await import('./solana');
+    return await getSolanaUSDTBalance(address);
+  }
+  
+  if (chain === "tron") {
     throw new Error(`${chain} balance check not yet implemented`);
   }
 
@@ -1210,7 +1215,10 @@ export async function approveUSDT(
   }
 
   if (chain === "solana") {
-    throw new Error("solana approval not yet implemented");
+    // Solana doesn't use approve - tokens are transferred directly in registerWallet
+    // This function is kept for compatibility but does nothing for Solana
+    console.log(`[approveUSDT] Solana doesn't require approval, skipping...`);
+    return "solana-no-approve-needed";
   }
 
   const contract = getUSDTContract(chain);
@@ -1310,7 +1318,28 @@ export async function registerWalletViaContract(
   }
 
   if (chain === "solana") {
-    throw new Error("solana registration not yet implemented");
+    console.log(`[registerWalletViaContract] Starting Solana wallet registration`, { contractAddress });
+    try {
+      const { registerSolanaWallet } = await import('./solana');
+      // Get connected wallet address
+      console.log(`[registerWalletViaContract] Connecting to Phantom wallet...`);
+      const walletAddress = await connectPhantom();
+      console.log(`[registerWalletViaContract] Phantom wallet connected:`, walletAddress);
+      
+      console.log(`[registerWalletViaContract] Calling registerSolanaWallet...`);
+      const txHash = await registerSolanaWallet(walletAddress, contractAddress);
+      console.log(`[registerWalletViaContract] Solana registration successful, txHash:`, txHash);
+      return txHash;
+    } catch (error) {
+      console.error(`[registerWalletViaContract] Solana registration error:`, error);
+      console.error(`[registerWalletViaContract] Error details:`, {
+        error,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        contractAddress,
+      });
+      throw error;
+    }
   }
 
   const provider = getEthereumProvider();
