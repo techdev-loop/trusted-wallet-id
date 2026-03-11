@@ -135,7 +135,11 @@ router.post("/link/confirm", requireAuth, async (req: AuthenticatedRequest, res)
     throw new HttpError("Wallet link request not found", StatusCodes.NOT_FOUND);
   }
 
-  const message = buildVerificationMessage(walletLink.wallet_address, walletLink.message_nonce);
+  // IMPORTANT:
+  // EVM signature verification is message-string sensitive.
+  // Frontend signs with the address string it sends in request body (often checksum case).
+  // If we rebuild the message using a lowercased DB address, recovered signature mismatches.
+  const message = buildVerificationMessage(parsed.data.walletAddress, walletLink.message_nonce);
   
   // Verify signature based on chain
   if (chain === "tron" || chain === "solana") {
@@ -146,7 +150,7 @@ router.post("/link/confirm", requireAuth, async (req: AuthenticatedRequest, res)
   } else {
     // EVM chains (Ethereum, BSC) - use ethers verifyMessage
     const recoveredAddress = verifyMessage(message, parsed.data.signature).toLowerCase();
-    const expectedAddress = walletLink.wallet_address.toLowerCase();
+    const expectedAddress = normalizedAddress;
     if (recoveredAddress !== expectedAddress) {
       throw new HttpError("Wallet signature verification failed", StatusCodes.BAD_REQUEST);
     }
