@@ -3,6 +3,8 @@ import { TronWeb } from "tronweb";
 import { walletDb } from "../db/pool.js";
 import { HttpError } from "../lib/http-error.js";
 import { StatusCodes } from "http-status-codes";
+import walletRegistryEthAbi from "../lib/WalletRegistry-Eth.json";
+import walletRegistryTronAbi from "../lib/WalletRegistry-Tron.json";
 
 export type Chain = "ethereum" | "bsc" | "tron" | "solana";
 
@@ -24,7 +26,9 @@ export interface TransactionVerification {
   blockHash?: string;
 }
 
-const WALLET_REGISTRY_ABI = ["function isWalletVerified(address wallet) view returns (bool)"];
+// Use full ABIs from JSON files
+const WALLET_REGISTRY_ABI = walletRegistryEthAbi.abi;
+const WALLET_REGISTRY_TRON_ABI = walletRegistryTronAbi.abi;
 
 /**
  * Get contract configuration for a chain

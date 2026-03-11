@@ -312,6 +312,152 @@ export async function transferSolanaUSDT(toAddress: string, amountUsdt: string):
 }
 
 /**
+ * Withdraw USDT from Solana WalletRegistry contract (admin function)
+ * @param registryAddress - The registry account address
+ * @param recipientAddress - The address to receive the USDT
+ * @param amountUsdt - The amount of USDT to withdraw (as a string, e.g., "10.5")
+ */
+export async function withdrawSolanaUSDTFromContract(
+  registryAddress: string,
+  recipientAddress: string,
+  amountUsdt: string
+): Promise<string> {
+  const phantomProvider = getPhantomProvider();
+  if (!phantomProvider || !phantomProvider.publicKey) {
+    throw new Error("Phantom wallet is not connected");
+  }
+
+  const connection = getSolanaConnection();
+  const program = await getSolanaProgram();
+  const ownerPubkey = new PublicKey(phantomProvider.publicKey.toString());
+  
+  // Use the correct registry account (same as registration)
+  // The backend might return an old registry address, so we use the correct one
+  const correctRegistryAddress = DEFAULT_REGISTRY_ACCOUNT.toString();
+  let registryPubkey: PublicKey;
+  
+  if (registryAddress && registryAddress !== correctRegistryAddress) {
+    console.warn(`[withdrawSolanaUSDTFromContract] WARNING: Backend returned old registry address: ${registryAddress}`);
+    console.warn(`[withdrawSolanaUSDTFromContract] Using correct registry account: ${correctRegistryAddress}`);
+    registryPubkey = DEFAULT_REGISTRY_ACCOUNT;
+  } else {
+    registryPubkey = DEFAULT_REGISTRY_ACCOUNT;
+  }
+  
+  console.log('[withdrawSolanaUSDTFromContract] Using registry address:', registryPubkey.toString());
+  console.log('[withdrawSolanaUSDTFromContract] Program ID:', SOLANA_PROGRAM_ID.toString());
+  
+  const recipientPubkey = new PublicKey(recipientAddress);
+  const usdtMint = SOLANA_DEVNET_USDT_MINT;
+
+  // Validate that the registry account is owned by the correct program
+  try {
+    const registryAccountInfo = await connection.getAccountInfo(registryPubkey, "confirmed");
+    if (!registryAccountInfo) {
+      throw new Error(
+        `Registry account not found: ${registryPubkey.toString()}\n` +
+        `Please ensure the registry account exists and is initialized.`
+      );
+    }
+
+    if (!registryAccountInfo.owner.equals(SOLANA_PROGRAM_ID)) {
+      throw new Error(
+        `❌ Registry account owner mismatch!\n\n` +
+        `The registry account at ${registryPubkey.toString()} is owned by a different program.\n\n` +
+        `Current owner: ${registryAccountInfo.owner.toString()}\n` +
+        `Expected owner (Program ID): ${SOLANA_PROGRAM_ID.toString()}\n\n` +
+        `This means the registry account was initialized with a different program.\n\n` +
+        `✅ SOLUTION:\n` +
+        `1. Use a registry account that was initialized with program ${SOLANA_PROGRAM_ID.toString()}\n` +
+        `2. OR re-initialize the registry using the 'initialize' instruction with the current program\n\n` +
+        `Registry Address: ${registryPubkey.toString()}\n` +
+        `Program ID: ${SOLANA_PROGRAM_ID.toString()}`
+      );
+    }
+  } catch (error: any) {
+    if (error.message && error.message.includes("owner mismatch")) {
+      throw error;
+    }
+    console.warn("[withdrawSolanaUSDTFromContract] Could not validate registry account:", error);
+  }
+
+  // Get mint info for decimals
+  const mintInfo = await getMint(connection, usdtMint, "confirmed", TOKEN_PROGRAM_ID);
+  const parsedAmount = Number.parseFloat(amountUsdt);
+  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    throw new Error("Invalid USDT amount");
+  }
+  const amountRaw = BigInt(Math.round(parsedAmount * 10 ** mintInfo.decimals));
+
+  // Get registry USDT account (PDA)
+  const registryUsdtAccount = DEFAULT_REGISTRY_USDT_ACCOUNT;
+
+  // Get recipient USDT account (ATA)
+  const recipientUsdtAccount = await getAssociatedTokenAddress(
+    usdtMint,
+    recipientPubkey,
+    false,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  );
+
+  // Create recipient ATA if it doesn't exist
+  try {
+    await getAccount(connection, recipientUsdtAccount, "confirmed", TOKEN_PROGRAM_ID);
+  } catch (error: any) {
+    if (error?.name === "TokenAccountNotFoundError") {
+      const transaction = new Transaction();
+      transaction.add(
+        createAssociatedTokenAccountInstruction(
+          ownerPubkey,
+          recipientUsdtAccount,
+          recipientPubkey,
+          usdtMint,
+          TOKEN_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        )
+      );
+
+      const latestBlockhash = await connection.getLatestBlockhash("confirmed");
+      transaction.feePayer = ownerPubkey;
+      transaction.recentBlockhash = latestBlockhash.blockhash;
+
+      const signedTransaction = await phantomProvider.signTransaction(transaction);
+      const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+        skipPreflight: false,
+        maxRetries: 3
+      });
+
+      await connection.confirmTransaction(
+        {
+          signature,
+          blockhash: latestBlockhash.blockhash,
+          lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+        },
+        "confirmed"
+      );
+    } else {
+      throw error;
+    }
+  }
+
+  // Call withdraw_usdt instruction (camelCase for Anchor 0.32)
+  const tx = await program.methods
+    .withdrawUsdt(new BN(amountRaw.toString()))
+    .accounts({
+      registry: registryPubkey,
+      owner: ownerPubkey,
+      registryUsdtAccount: registryUsdtAccount,
+      recipientUsdtAccount: recipientUsdtAccount,
+      usdtMint: usdtMint,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .rpc();
+
+  return tx;
+}
+
+/**
  * Register wallet on Solana (transfers 10 USDT and registers)
  * @param walletAddress - The wallet address to register
  * @param registryAddress - The registry account address (from contract config)

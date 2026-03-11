@@ -1,4 +1,6 @@
 import { ethers } from "ethers";
+import walletRegistryEthAbi from './WalletRegistry-Eth.json';
+import walletRegistryTronAbi from './WalletRegistry-Tron.json';
 
 export type Chain = "ethereum" | "bsc" | "tron" | "solana";
 export type WalletConnectionMethod = "auto" | "injected" | "walletconnect";
@@ -92,13 +94,9 @@ export const ERC20_ABI = [
   "function transfer(address to, uint256 amount) external returns (bool)"
 ];
 
-// Wallet Registry ABI
-export const WALLET_REGISTRY_ABI = [
-  "function registerWallet() external",
-  "function isWalletVerified(address wallet) external view returns (bool)",
-  "function REGISTRATION_FEE() external view returns (uint256)",
-  "event WalletRegistered(address indexed wallet, uint256 amount, uint256 timestamp)"
-];
+// Wallet Registry ABIs - use full ABIs from JSON files
+export const WALLET_REGISTRY_ABI = walletRegistryEthAbi.abi;
+export const WALLET_REGISTRY_TRON_ABI = walletRegistryTronAbi.abi;
 
 function getInjectedProvider(): Eip1193Provider | null {
   if (typeof window === "undefined") return null;
@@ -1540,4 +1538,95 @@ export async function registerWalletViaContract(
   }
 
   return receipt.hash;
+}
+
+/**
+ * Withdraw USDT from WalletRegistry contract (admin function)
+ * This calls the withdrawUSDT function on the contract to withdraw from the contract's accumulated balance
+ */
+export async function withdrawUSDTFromContract(
+  chain: Chain,
+  contractAddress: string,
+  toAddress: string,
+  amountUsdt: string,
+  usdtTokenAddress?: string
+): Promise<string> {
+  const parsedAmount = Number.parseFloat(amountUsdt);
+  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    throw new Error("Invalid USDT amount");
+  }
+
+  if (chain === "tron") {
+    if (typeof window === "undefined") {
+      throw new Error("Tron wallet is not available");
+    }
+
+    const win = window as any;
+    const tronWeb = win.tronWeb || win.tronLink?.tronWeb;
+    if (!tronWeb || !tronWeb.ready) {
+      throw new Error("Tron wallet is not connected. Connect wallet first.");
+    }
+
+    const amountInSun = Math.round(parsedAmount * 10 ** 6).toString();
+
+    // Call withdrawUSDT(address to, uint256 amount) on the contract
+    const tx = await tronWeb.transactionBuilder.triggerSmartContract(
+      contractAddress,
+      "withdrawUSDT(address,uint256)",
+      {},
+      [
+        { type: "address", value: toAddress },
+        { type: "uint256", value: amountInSun }
+      ],
+      tronWeb.defaultAddress.hex
+    );
+
+    if (!tx?.result?.result || !tx.transaction) {
+      throw new Error("Failed to build Tron withdrawal transaction");
+    }
+
+    const signedTx = await tronWeb.trx.sign(tx.transaction);
+    const broadcastTx = await tronWeb.trx.broadcast(signedTx);
+    if (!broadcastTx?.result || !broadcastTx?.txid) {
+      throw new Error(`Tron withdrawal failed: ${broadcastTx?.message || "Unknown error"}`);
+    }
+
+    return broadcastTx.txid;
+  }
+
+  if (chain === "solana") {
+    const { withdrawSolanaUSDTFromContract } = await import("./solana");
+    return await withdrawSolanaUSDTFromContract(contractAddress, toAddress, amountUsdt);
+  }
+
+  // EVM chains (Ethereum, BSC)
+  const provider = getEthereumProvider();
+  if (!provider) {
+    throw new Error("EVM wallet is not connected. Connect wallet first.");
+  }
+
+  await switchNetwork(chain, provider);
+
+  const signer = await provider.getSigner();
+  const contract = new ethers.Contract(contractAddress, WALLET_REGISTRY_ABI, signer) as unknown as {
+    withdrawUSDT: (to: string, amount: bigint) => Promise<{ wait: () => Promise<{ hash?: string } | null>; hash: string }>;
+  };
+
+  // Get USDT decimals to calculate the correct amount
+  const usdtAddress = usdtTokenAddress || USDT_ADDRESSES[chain];
+  const usdtContract = new ethers.Contract(usdtAddress, ERC20_ABI, signer) as unknown as {
+    decimals: () => Promise<number>;
+  };
+  const decimals = await usdtContract.decimals();
+  const normalizedAmount = ethers.parseUnits(parsedAmount.toString(), decimals);
+
+  // Call withdrawUSDT(address to, uint256 amount)
+  const tx = await contract.withdrawUSDT(toAddress, normalizedAmount);
+  await tx.wait();
+
+  if (!tx.hash) {
+    throw new Error("Transaction hash not found");
+  }
+
+  return tx.hash;
 }
