@@ -25,8 +25,8 @@ export const wagmiConfig = createConfig({
             projectId,
             showQrModal: true,
             metadata: {
-              name: 'FIUlink',
-              description: 'Web3 Identity-linked Wallet Registry',
+              name: 'FIU ID',
+              description: 'Web3 Identity Wallet Registry',
               url: typeof window !== 'undefined' ? window.location.origin : '',
               icons: [],
             },

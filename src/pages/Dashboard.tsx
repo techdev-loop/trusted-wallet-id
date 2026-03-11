@@ -59,7 +59,7 @@ interface KycStatusData {
 
 const statusConfig = {
   active: { icon: CheckCircle2, label: "Active", className: "bg-success/10 text-success border-success/20" },
-  unlinked: { icon: XCircle, label: "Unlinked", className: "bg-destructive/10 text-destructive border-destructive/20" },
+  unlinked: { icon: XCircle, label: "Removed", className: "bg-destructive/10 text-destructive border-destructive/20" },
   pending: { icon: Clock, label: "Pending", className: "bg-warning/10 text-warning border-warning/20" },
   confirmed: { icon: CheckCircle2, label: "Confirmed", className: "bg-success/10 text-success border-success/20" },
   approved: { icon: CheckCircle2, label: "Approved", className: "bg-success/10 text-success border-success/20" },
@@ -284,8 +284,8 @@ const Dashboard = () => {
 
       toast.success(
         effectiveKycStatus === "verified"
-          ? "Wallet linked and active."
-          : "Wallet linked. It will become active once KYC is verified."
+          ? "Wallet verified and active."
+          : "Wallet verified. It will become active once KYC is verified."
       );
       await loadDashboard();
     } catch (error) {
@@ -420,7 +420,7 @@ const Dashboard = () => {
             <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
               <Shield className="w-4 h-4 text-accent-foreground" />
             </div>
-            <span className="font-display font-bold text-lg text-foreground">FIUlink</span>
+            <span className="font-display font-bold text-lg text-foreground">FIU ID</span>
           </Link>
 
           <div className="flex items-center gap-2 sm:gap-3">
@@ -451,7 +451,7 @@ const Dashboard = () => {
               <LayoutDashboard className="w-6 h-6 text-accent" />
               <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h1>
             </div>
-            <p className="text-muted-foreground ml-0 sm:ml-9">Manage your identity verification and linked wallets</p>
+            <p className="text-muted-foreground ml-0 sm:ml-9">Manage your identity verification and connected wallets</p>
           </div>
         </motion.div>
 
@@ -511,7 +511,7 @@ const Dashboard = () => {
               <div>
                 <h3 className="font-display font-bold text-lg text-foreground">Onboarding Actions</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Complete KYC and connect wallets. Wallets linked during pending review become active once verified.
+                  Complete KYC and connect wallets. Wallets added during pending review become active once verified.
                 </p>
               </div>
 
@@ -582,7 +582,7 @@ const Dashboard = () => {
                       onCheckedChange={(checked) => setConsentAccepted(Boolean(checked))}
                     />
                     <Label htmlFor="consent" className="text-sm text-muted-foreground">
-                      I consent to KYC verification and identity-wallet linkage.
+                      I consent to KYC verification and identity-wallet verification.
                     </Label>
                   </div>
                   <div className="md:col-span-2">
@@ -743,7 +743,7 @@ const Dashboard = () => {
                           </div>
                           <div className="min-w-0">
                             <p className="font-mono text-sm font-semibold text-foreground break-all">{wallet.walletAddress}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">Linked {linkedDateLabel}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">Verified {linkedDateLabel}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3 self-start sm:self-auto">

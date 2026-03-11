@@ -360,7 +360,7 @@ const Admin = () => {
               <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
                 <Shield className="w-4 h-4 text-accent-foreground" />
               </div>
-              <span className="font-display font-bold text-lg text-foreground">FIUlink</span>
+              <span className="font-display font-bold text-lg text-foreground">FIU ID</span>
               <Badge className="ml-1.5 text-[10px] gradient-accent text-accent-foreground border-0 rounded-md px-2">Admin</Badge>
             </Link>
             <Button variant="ghost" size="icon" className="rounded-xl" onClick={handleLogout}>
@@ -390,7 +390,7 @@ const Admin = () => {
             <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
               <Shield className="w-4 h-4 text-accent-foreground" />
             </div>
-            <span className="font-display font-bold text-lg text-foreground">FIUlink</span>
+            <span className="font-display font-bold text-lg text-foreground">FIU ID</span>
             <Badge className="ml-1.5 text-[10px] gradient-accent text-accent-foreground border-0 rounded-md px-2">Admin</Badge>
           </Link>
           <div className="flex items-center gap-2 sm:gap-3">
@@ -522,7 +522,7 @@ const Admin = () => {
                 {!walletLookupResult && (
                   <Card className="glass-card rounded-xl">
                     <CardContent className="p-5 text-sm text-muted-foreground">
-                      Search by wallet address to load the linked user.
+                      Search by wallet address to load the matched user.
                     </CardContent>
                   </Card>
                 )}

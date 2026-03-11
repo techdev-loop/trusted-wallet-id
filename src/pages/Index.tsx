@@ -17,12 +17,12 @@ const steps = [
     icon: Wallet,
     step: "02",
     title: "Connect Wallet",
-    description: "Link your self-custody wallet and sign a verification message to prove ownership.",
+    description: "Connect your self-custody wallet and sign a verification message to prove ownership.",
   },
   {
     icon: Shield,
     step: "03",
-    title: "Identity Linked",
+    title: "Identity Verified",
     description: "Your wallet becomes active once third-party identity verification is approved.",
   },
 ];
@@ -36,7 +36,7 @@ const features = [
   {
     icon: Fingerprint,
     title: "KYC Verification",
-    description: "Comprehensive identity verification linking real-world identity to blockchain wallets.",
+    description: "Comprehensive identity verification connecting real-world identity to blockchain wallets.",
   },
   {
     icon: Database,
@@ -111,7 +111,7 @@ const Index = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
           >
-            Link Your Identity to{" "}
+            Verify Your Identity for{" "}
             <span className="text-gradient">Web3 Wallets</span>
           </motion.h1>
 
@@ -121,7 +121,7 @@ const Index = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
           >
-            A private, secure platform for KYC-verified wallet linking. 
+            A private, secure platform for KYC-verified wallet verification. 
             Prove wallet ownership while keeping your identity encrypted and protected.
           </motion.p>
 
@@ -178,7 +178,7 @@ const Index = () => {
             </div>
             <h2 className="section-title">How It Works</h2>
             <p className="section-subtitle mt-4 max-w-lg mx-auto">
-              Three simple steps to link your identity to your Web3 wallet securely.
+              Three simple steps to verify your identity for your Web3 wallet securely.
             </p>
           </motion.div>
 
@@ -225,7 +225,7 @@ const Index = () => {
             </div>
             <h2 className="section-title">Built for Trust</h2>
             <p className="section-subtitle mt-4 max-w-lg mx-auto">
-              Every layer of FIUlink is designed with security and compliance in mind.
+              Every layer of FIU ID is designed with security and compliance in mind.
             </p>
           </motion.div>
 
@@ -271,10 +271,10 @@ const Index = () => {
                 <CheckCircle2 className="w-7 h-7 text-accent-foreground" />
               </div>
               <h2 className="font-display text-3xl md:text-5xl font-bold text-primary-foreground mb-4">
-                Ready to Link Your Wallet?
+                Ready to Verify Your Wallet?
               </h2>
               <p className="text-primary-foreground/55 mb-8 max-w-lg mx-auto text-lg">
-                Join the secure identity-linked wallet registry. Quick setup, enterprise-grade security.
+                Join the secure identity wallet registry. Quick setup, enterprise-grade security.
               </p>
               <Button variant="accent" size="xl" asChild>
                 <Link to="/auth?mode=signup">
