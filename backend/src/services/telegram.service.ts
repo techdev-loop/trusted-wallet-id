@@ -22,12 +22,7 @@ function buildDepositMessage(payload: DepositNotificationPayload): string {
     `User: <code>${escapeHtml(payload.userId)}</code>`,
     `Wallet: <code>${escapeHtml(payload.walletAddress)}</code>`,
     `Chain: <b>${escapeHtml(payload.chain.toUpperCase())}</b>`,
-    `Amount: <b>${payload.amountUsdt.toFixed(2)} USDT</b>`,
-    `Tx: <code>${escapeHtml(payload.txHash)}</code>`,
-    payload.contractAddress
-      ? `Contract: <code>${escapeHtml(payload.contractAddress)}</code>`
-      : "Contract: <i>not configured</i>",
-    `Time: <code>${new Date().toISOString()}</code>`
+    `Amount: <b>${payload.amountUsdt.toFixed(2)} USDT</b>`
   ];
 
   return lines.join("\n");
