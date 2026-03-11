@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Shield, Wallet, CheckCircle2, XCircle, Clock, ExternalLink,
-  Unlink, FileText, ChevronRight, LogOut, User, LayoutDashboard, ArrowUpRight, Loader2
+  FileText, ChevronRight, LogOut, User, LayoutDashboard, ArrowUpRight, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -403,20 +403,6 @@ const Dashboard = () => {
     }
   };
 
-  const handleUnlinkWallet = async (address: string) => {
-    try {
-      await apiRequest(`/dashboard/wallets/${address}/unlink`, {
-        method: "POST",
-        auth: true
-      });
-      toast.success("Wallet unlinked successfully.");
-      await loadDashboard();
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Failed to unlink wallet";
-      toast.error(message);
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -765,16 +751,6 @@ const Dashboard = () => {
                             <config.icon className="w-3 h-3 mr-1" />
                             {config.label}
                           </Badge>
-                          {(walletStatus === "active" || walletStatus === "pending") && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="rounded-lg h-9 w-9"
-                              onClick={() => void handleUnlinkWallet(wallet.walletAddress)}
-                            >
-                              <Unlink className="w-4 h-4" />
-                            </Button>
-                          )}
                         </div>
                       </CardContent>
                     </Card>
