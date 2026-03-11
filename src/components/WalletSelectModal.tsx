@@ -259,8 +259,7 @@ export function WalletSelectModal({
       onOpenChange(newOpen);
     }}>
       <DialogContent 
-        className="sm:max-w-[500px] glass-card rounded-2xl z-50 !fixed pointer-events-none [&:hover]:translate-x-[-50%] [&:hover]:translate-y-[-50%]"
-        style={{ position: 'fixed' }}
+        className="w-[calc(100vw-1.5rem)] max-w-[560px] glass-card rounded-2xl z-50 p-0 overflow-hidden"
         onInteractOutside={(e) => {
           // Prevent closing when clicking outside during connection
           if (isConnecting) {
@@ -274,7 +273,7 @@ export function WalletSelectModal({
           }
         }}
       >
-        <div className="pointer-events-auto">
+        <div className="max-h-[85vh] overflow-y-auto p-5 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold">
               Connect Wallet
@@ -295,14 +294,14 @@ export function WalletSelectModal({
               <Button
                 key={wallet.id}
                 variant={isSelected ? "accent" : "outline"}
-                className="w-full h-auto p-4 justify-start gap-4 hover:bg-accent/50 transition-colors"
+                className="w-full h-auto min-h-[78px] p-3 sm:p-4 justify-start items-start gap-3 sm:gap-4 hover:bg-accent/50 transition-colors text-left whitespace-normal overflow-hidden"
                 onClick={() => handleWalletClick(wallet)}
                 disabled={isConnecting || isUnsupported}
               >
-                <div className="flex items-center gap-3 flex-1">
-                  <div className="text-2xl">{wallet.icon}</div>
-                  <div className="flex-1 text-left">
-                    <div className="flex items-center gap-2">
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  <div className="text-2xl shrink-0 leading-none">{wallet.icon}</div>
+                  <div className="flex-1 min-w-0 text-left">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold">{wallet.name}</span>
                       {isInstalled && (
                         <Badge variant="secondary" className="text-xs">
@@ -327,7 +326,7 @@ export function WalletSelectModal({
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground mt-1 whitespace-normal break-words leading-relaxed">
                       {isUnsupported 
                         ? selectedChain === "tron"
                           ? "For Tron on mobile, please open this page in a Tron wallet app's browser. On desktop, use a Tron wallet extension."
@@ -375,7 +374,7 @@ export function WalletSelectModal({
           )}
 
           <div className="mt-4 pt-4 border-t border-border/50">
-            <p className="text-xs text-muted-foreground text-center">
+            <p className="text-xs text-muted-foreground text-center whitespace-normal break-words">
               By connecting, you agree to our Terms of Service and Privacy Policy.
               New to Web3?{" "}
               <a
