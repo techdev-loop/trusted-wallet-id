@@ -43,10 +43,10 @@ async function initContractConfigs() {
       chain: "solana",
       contractAddress: process.env.SOLANA_CONTRACT_ADDRESS || (process.env.SOLANA_NETWORK === "devnet"
         ? "DwrJcymdTGdiuHK9boV8MPtDmUqMTwzfyvDB8hePMNG4" // Default devnet registry account address (initialized with program 4kAwaG8FAMKnhTqCHoVKRAwBdBfh7vsG54Z7CeaqagEc)
-        : ""),
+        : "DwrJcymdTGdiuHK9boV8MPtDmUqMTwzfyvDB8hePMNG4"),
       usdtTokenAddress: process.env.SOLANA_NETWORK === "devnet"
         ? (process.env.SOLANA_DEVNET_USDT_ADDRESS || "Ch9MipiMpaZBkCZFPTsArZigDwEH85Yodp2RcPjSmsvr") // Devnet USDT
-        : "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // Mainnet USDT
+        : "Ch9MipiMpaZBkCZFPTsArZigDwEH85Yodp2RcPjSmsvr", // Mainnet USDT
       networkName: process.env.SOLANA_NETWORK || "devnet",
       rpcUrl: process.env.SOLANA_RPC_URL || (process.env.SOLANA_NETWORK === "devnet"
         ? "https://api.devnet.solana.com"

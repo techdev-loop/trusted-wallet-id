@@ -17,17 +17,22 @@ const SOLANA_PROGRAM_IDL = (() => {
   return idl;
 })();
 
-// Solana devnet RPC URL
-const SOLANA_DEVNET_RPC = 'https://api.devnet.solana.com';
+// Solana devnet RPC URL - can be overridden via environment variable
+const SOLANA_DEVNET_RPC = import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.devnet.solana.com';
 
 // USDT mint address on Solana devnet
 export const SOLANA_DEVNET_USDT_MINT = new PublicKey('Ch9MipiMpaZBkCZFPTsArZigDwEH85Yodp2RcPjSmsvr');
 
 /**
  * Get Solana connection (devnet)
+ * Uses 'finalized' commitment for better reliability on production
  */
 export function getSolanaConnection(): Connection {
-  return new Connection(SOLANA_DEVNET_RPC, 'confirmed');
+  const connection = new Connection(SOLANA_DEVNET_RPC, {
+    commitment: 'confirmed',
+    confirmTransactionInitialTimeout: 60000, // 60 seconds timeout
+  });
+  return connection;
 }
 
 /**
@@ -600,24 +605,147 @@ export async function registerSolanaWallet(
     const registryUsdtAccount = getDefaultRegistryUsdtAccount();
     console.log('[registerSolanaWallet] Registry USDT account:', registryUsdtAccount.toString());
     
-    // Check if registry USDT account exists
+    // Check if registry USDT account exists with retry logic for RPC reliability
     let registryUsdtAccountExists = false;
-    try {
-      await getAccount(connection, registryUsdtAccount, 'confirmed', TOKEN_PROGRAM_ID);
-      registryUsdtAccountExists = true;
-      console.log('[registerSolanaWallet] Registry USDT account exists ✓');
-    } catch (error: any) {
-      if (error?.name === 'TokenAccountNotFoundError') {
-        registryUsdtAccountExists = false;
-        console.log('[registerSolanaWallet] Registry USDT account does not exist yet');
-      } else {
-        console.warn('[registerSolanaWallet] Error checking registry USDT account:', error);
+    const maxRetries = 5; // Increased retries for production
+    const commitmentLevels: ('confirmed' | 'finalized')[] = ['finalized', 'confirmed'];
+    
+    // Helper function to check if error indicates account doesn't exist
+    const isAccountNotFoundError = (error: any): boolean => {
+      if (!error) return false;
+      const errorName = error?.name || error?.constructor?.name || '';
+      const errorMessage = String(error?.message || '').toLowerCase();
+      
+      // Check for various forms of "account not found" errors
+      return (
+        errorName === 'TokenAccountNotFoundError' ||
+        errorName.includes('NotFound') ||
+        errorMessage.includes('account not found') ||
+        errorMessage.includes('invalid account') ||
+        errorMessage.includes('could not find account') ||
+        (error?.code === -32602 && errorMessage.includes('account'))
+      );
+    };
+    
+    // Helper function to check if error is a retryable network error
+    const isRetryableError = (error: any): boolean => {
+      if (!error) return false;
+      const errorMessage = String(error?.message || '').toLowerCase();
+      const errorCode = error?.code;
+      
+      return (
+        errorMessage.includes('timeout') ||
+        errorMessage.includes('fetch') ||
+        errorMessage.includes('network') ||
+        errorMessage.includes('connection') ||
+        errorMessage.includes('failed to fetch') ||
+        errorCode === -32002 || // RPC server error
+        errorCode === -32005 || // Request limit exceeded
+        errorCode === -32603  // Internal error
+      );
+    };
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      for (const commitment of commitmentLevels) {
+        try {
+          console.log(`[registerSolanaWallet] Checking registry USDT account (attempt ${attempt + 1}/${maxRetries}, commitment: ${commitment})...`);
+          await getAccount(connection, registryUsdtAccount, commitment, TOKEN_PROGRAM_ID);
+          registryUsdtAccountExists = true;
+          console.log(`[registerSolanaWallet] Registry USDT account exists ✓ (found with ${commitment} commitment)`);
+          break;
+        } catch (error: any) {
+          if (isAccountNotFoundError(error)) {
+            // Account definitely doesn't exist - but only break if we've tried all commitment levels
+            if (commitment === 'confirmed') {
+              registryUsdtAccountExists = false;
+              console.log(`[registerSolanaWallet] Registry USDT account does not exist (${commitment} commitment)`);
+              // Don't break here - try finalized first
+            }
+          } else if (isRetryableError(error)) {
+            // RPC error - retry
+            console.warn(`[registerSolanaWallet] RPC error checking account (${commitment} commitment, attempt ${attempt + 1}):`, {
+              message: error?.message,
+              code: error?.code,
+              name: error?.name
+            });
+            if (attempt < maxRetries - 1) {
+              // Wait before retry (exponential backoff)
+              const delay = 1000 * (attempt + 1);
+              console.log(`[registerSolanaWallet] Retrying in ${delay}ms...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              continue;
+            }
+          } else {
+            // Other error - log but don't treat as "doesn't exist" - might be a false negative
+            console.warn(`[registerSolanaWallet] Unexpected error checking account (${commitment} commitment):`, {
+              message: error?.message,
+              code: error?.code,
+              name: error?.name,
+              error: error
+            });
+            // Don't break - continue to next commitment level or retry
+          }
+        }
+      }
+      if (registryUsdtAccountExists) break;
+    }
+    
+    // Final check: if still not found, try getAccountInfo as fallback (more reliable)
+    if (!registryUsdtAccountExists) {
+      console.log('[registerSolanaWallet] Primary check failed, trying alternative methods...');
+      
+      // Try getAccountInfo with multiple commitment levels
+      for (const commitment of ['finalized', 'confirmed'] as const) {
+        try {
+          console.log(`[registerSolanaWallet] Trying getAccountInfo with ${commitment} commitment...`);
+          const accountInfo = await connection.getAccountInfo(registryUsdtAccount, commitment);
+          if (accountInfo) {
+            // Check if it's a token account by verifying owner
+            if (accountInfo.owner.equals(TOKEN_PROGRAM_ID)) {
+              registryUsdtAccountExists = true;
+              console.log(`[registerSolanaWallet] Registry USDT account exists ✓ (found via getAccountInfo with ${commitment} commitment)`);
+              break;
+            } else {
+              console.warn(`[registerSolanaWallet] Account exists but owner is ${accountInfo.owner.toString()}, expected ${TOKEN_PROGRAM_ID.toString()}`);
+            }
+          } else {
+            console.log(`[registerSolanaWallet] Account info is null with ${commitment} commitment`);
+          }
+        } catch (error: any) {
+          console.warn(`[registerSolanaWallet] getAccountInfo failed with ${commitment} commitment:`, error?.message || error);
+        }
+      }
+      
+      // Last resort: try to get multiple accounts at once (batch request)
+      if (!registryUsdtAccountExists) {
+        try {
+          console.log('[registerSolanaWallet] Trying batch account info check...');
+          const accounts = await connection.getMultipleAccountsInfo([registryUsdtAccount], 'finalized');
+          if (accounts && accounts[0] && accounts[0].owner.equals(TOKEN_PROGRAM_ID)) {
+            registryUsdtAccountExists = true;
+            console.log('[registerSolanaWallet] Registry USDT account exists ✓ (found via getMultipleAccountsInfo)');
+          }
+        } catch (error: any) {
+          console.warn('[registerSolanaWallet] Batch check also failed:', error?.message || error);
+        }
       }
     }
     
     if (!registryUsdtAccountExists) {
       // Derive the PDA to show what it should be
       const registryUsdtAccountPDA = getRegistryUsdtAccountPDA(usdtMint);
+      
+      // Additional diagnostic: try to get account info directly
+      let diagnosticInfo = '';
+      try {
+        const accountInfo = await connection.getAccountInfo(registryUsdtAccount, 'finalized');
+        if (accountInfo) {
+          diagnosticInfo = `\n⚠️ NOTE: Account exists but may not be a valid token account. Owner: ${accountInfo.owner.toString()}`;
+        }
+      } catch (diagError) {
+        diagnosticInfo = `\n⚠️ Diagnostic check also failed. This might be an RPC connectivity issue.`;
+      }
+      
       throw new Error(
         `❌ Registry USDT account not initialized! ` +
         `\n\nThe registry USDT token account has not been initialized. ` +
@@ -630,7 +758,8 @@ export async function registerSolanaWallet(
         `\n\nRegistry Address: ${registryPubkey.toString()}` +
         `\nRegistry USDT Account (expected): ${registryUsdtAccount.toString()}` +
         `\nRegistry USDT Account (PDA): ${registryUsdtAccountPDA.toString()}` +
-        `\nProgram ID: ${SOLANA_PROGRAM_ID.toString()}`
+        `\nProgram ID: ${SOLANA_PROGRAM_ID.toString()}` +
+        diagnosticInfo
       );
     }
 
