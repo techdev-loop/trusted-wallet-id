@@ -1,31 +1,32 @@
-// Polyfill Buffer for browser environments (especially mobile)
-if (typeof window !== 'undefined' && typeof (window as any).Buffer === 'undefined') {
-  // Simple Buffer polyfill using Uint8Array
-  (window as any).Buffer = {
-    from: (data: string | Uint8Array | ArrayBuffer, encoding?: string): Uint8Array => {
-      if (typeof data === 'string') {
-        if (encoding === 'hex') {
-          // Hex string to Uint8Array
-          const bytes = new Uint8Array(data.length / 2);
-          for (let i = 0; i < data.length; i += 2) {
-            bytes[i / 2] = parseInt(data.substr(i, 2), 16);
-          }
-          return bytes;
-        }
-        // String to Uint8Array (UTF-8)
-        return new TextEncoder().encode(data);
-      }
-      if (data instanceof Uint8Array) {
-        return data;
-      }
-      if (data instanceof ArrayBuffer) {
-        return new Uint8Array(data);
-      }
-      return new Uint8Array(0);
-    },
-    isBuffer: (obj: any): boolean => {
-      return obj instanceof Uint8Array;
-    }
+// Polyfill Buffer and process for browser environments
+import { Buffer } from 'buffer';
+
+// Make Buffer available globally (both window and globalThis)
+if (typeof window !== 'undefined') {
+  (window as any).Buffer = Buffer;
+}
+if (typeof globalThis !== 'undefined') {
+  (globalThis as any).Buffer = Buffer;
+}
+if (typeof global !== 'undefined') {
+  (global as any).Buffer = Buffer;
+}
+
+// Make process available globally (some libraries need it)
+if (typeof window !== 'undefined' && typeof (window as any).process === 'undefined') {
+  (window as any).process = {
+    env: {},
+    version: '',
+    versions: {},
+    browser: true,
+  };
+}
+if (typeof globalThis !== 'undefined' && typeof (globalThis as any).process === 'undefined') {
+  (globalThis as any).process = {
+    env: {},
+    version: '',
+    versions: {},
+    browser: true,
   };
 }
 

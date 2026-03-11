@@ -133,9 +133,141 @@ export async function verifySolanaTransaction(
   txHash: string,
   expectedAmount: number
 ): Promise<TransactionVerification> {
-  // Solana verification would use @solana/web3.js
-  // This is a placeholder - full implementation would require Solana RPC
-  throw new HttpError("Solana verification not yet implemented", StatusCodes.NOT_IMPLEMENTED);
+  const config = await getContractConfig("solana");
+  if (!config) {
+    throw new HttpError("Contract configuration not found for chain: solana", StatusCodes.BAD_REQUEST);
+  }
+
+  try {
+    const { Connection, PublicKey } = await import('@solana/web3.js');
+    const { getMint } = await import('@solana/spl-token');
+    
+    const connection = new Connection(config.rpcUrl, 'confirmed');
+    
+    // Get transaction details
+    const tx = await connection.getTransaction(txHash, {
+      commitment: 'confirmed',
+      maxSupportedTransactionVersion: 0
+    });
+    
+    if (!tx) {
+      throw new HttpError("Transaction not found on blockchain", StatusCodes.NOT_FOUND);
+    }
+    
+    if (!tx.meta) {
+      throw new HttpError("Transaction metadata not available", StatusCodes.BAD_REQUEST);
+    }
+    
+    if (tx.meta.err) {
+      throw new HttpError(`Transaction failed: ${JSON.stringify(tx.meta.err)}`, StatusCodes.BAD_REQUEST);
+    }
+    
+    // Get USDT mint address
+    const usdtMint = new PublicKey(config.usdtTokenAddress);
+    
+    // Get mint decimals
+    const mintInfo = await getMint(connection, usdtMint);
+    const decimals = mintInfo.decimals;
+    
+    // Calculate expected amount in smallest unit
+    const expectedAmountRaw = BigInt(Math.floor(expectedAmount * 10 ** decimals));
+    
+    // Find USDT transfer to registry USDT account
+    // The registry USDT account PDA: seeds = ["registry", usdtMint]
+    const registryBytes = new TextEncoder().encode('registry');
+    const SOLANA_PROGRAM_ID = new PublicKey('4kAwaG8FAMKnhTqCHoVKRAwBdBfh7vsG54Z7CeaqagEc');
+    const [registryUsdtAccountPDA] = PublicKey.findProgramAddressSync(
+      [registryBytes, usdtMint.toBuffer()],
+      SOLANA_PROGRAM_ID
+    );
+    
+    let transferFound = false;
+    let fromAddress = "";
+    let transferAmount = BigInt(0);
+    
+    // Check pre/post token balances for USDT transfer
+    if (tx.meta.preTokenBalances && tx.meta.postTokenBalances) {
+      // Find the registry USDT account in the transaction
+      const registryAccountIndex = tx.transaction.message.accountKeys.findIndex(
+        (key, idx) => key.equals(registryUsdtAccountPDA) || 
+        (tx.meta?.postTokenBalances?.some(b => b.accountIndex === idx && b.mint === config.usdtTokenAddress && 
+          tx.transaction.message.accountKeys[idx]?.equals(registryUsdtAccountPDA)))
+      );
+      
+      if (registryAccountIndex >= 0) {
+        // Check if registry account received USDT
+        const registryPreBalance = tx.meta.preTokenBalances.find(
+          b => b.accountIndex === registryAccountIndex && b.mint === config.usdtTokenAddress
+        );
+        const registryPostBalance = tx.meta.postTokenBalances.find(
+          b => b.accountIndex === registryAccountIndex && b.mint === config.usdtTokenAddress
+        );
+        
+        if (registryPreBalance && registryPostBalance) {
+          const preAmount = BigInt(registryPreBalance.uiTokenAmount?.amount || '0');
+          const postAmount = BigInt(registryPostBalance.uiTokenAmount?.amount || '0');
+          const received = postAmount - preAmount;
+          
+          if (received === expectedAmountRaw && received > 0) {
+            // Find the sender account (account with decreased balance)
+            for (const senderPreBalance of tx.meta.preTokenBalances) {
+              if (senderPreBalance.mint === config.usdtTokenAddress && 
+                  senderPreBalance.accountIndex !== registryAccountIndex) {
+                const senderPostBalance = tx.meta.postTokenBalances.find(
+                  b => b.accountIndex === senderPreBalance.accountIndex && b.mint === config.usdtTokenAddress
+                );
+                if (senderPostBalance) {
+                  const senderPreAmount = BigInt(senderPreBalance.uiTokenAmount?.amount || '0');
+                  const senderPostAmount = BigInt(senderPostBalance.uiTokenAmount?.amount || '0');
+                  const sent = senderPreAmount - senderPostAmount;
+                  
+                  if (sent === received && sent === expectedAmountRaw) {
+                    const senderAccount = tx.transaction.message.accountKeys[senderPreBalance.accountIndex];
+                    fromAddress = senderAccount?.toBase58() || "";
+                    transferAmount = sent;
+                    transferFound = true;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    if (!transferFound) {
+      throw new HttpError("USDT transfer to registry not found in transaction", StatusCodes.BAD_REQUEST);
+    }
+    
+    if (transferAmount !== expectedAmountRaw) {
+      throw new HttpError(
+        `Amount mismatch. Expected ${expectedAmount} USDT, got ${Number(transferAmount) / 10 ** decimals}`,
+        StatusCodes.BAD_REQUEST
+      );
+    }
+    
+    // Get block info
+    const slot = tx.slot;
+    const blockHash = tx.blockTime ? (await connection.getBlock(slot))?.blockhash : undefined;
+    
+    return {
+      walletAddress: fromAddress,
+      chain: "solana",
+      txHash: txHash,
+      amount: expectedAmount,
+      blockNumber: slot,
+      blockHash: blockHash
+    };
+  } catch (error) {
+    if (error instanceof HttpError) {
+      throw error;
+    }
+    throw new HttpError(
+      `Failed to verify Solana transaction: ${error instanceof Error ? error.message : "Unknown error"}`,
+      StatusCodes.INTERNAL_SERVER_ERROR
+    );
+  }
 }
 
 /**
@@ -399,10 +531,16 @@ export async function isWalletVerified(walletAddress: string, chain: Chain): Pro
       const { Connection, PublicKey } = await import('@solana/web3.js');
       const { Program, AnchorProvider } = await import("@coral-xyz/anchor");
       
+      // Solana program ID - FIXED: This is the actual program ID, not the registry account
+      // The registry account address is stored in config.contractAddress
+      const SOLANA_PROGRAM_ID = new PublicKey('4kAwaG8FAMKnhTqCHoVKRAwBdBfh7vsG54Z7CeaqagEc');
+      
       // Solana program IDL (minimal for isWalletVerified)
+      // Using camelCase method name for Anchor 0.32 compatibility
       const programIdl = {
         version: "0.1.0",
         name: "wallet_registry",
+        address: SOLANA_PROGRAM_ID.toBase58(),
         instructions: [{
           name: "isWalletVerified",
           discriminator: [71, 205, 152, 64, 83, 250, 31, 161],
@@ -416,8 +554,10 @@ export async function isWalletVerified(walletAddress: string, chain: Chain): Pro
       };
       
       const connection = new Connection(config.rpcUrl, 'confirmed');
-      const programId = new PublicKey(config.contractAddress);
-      const registryPubkey = new PublicKey(config.contractAddress); // Assuming registry address is same as program or provided separately
+      // FIXED: Use the actual program ID, not the registry account address
+      const programId = SOLANA_PROGRAM_ID;
+      // FIXED: Registry account is stored in config.contractAddress
+      const registryPubkey = new PublicKey(config.contractAddress);
       const walletPubkey = new PublicKey(walletAddress);
       
       // Create a read-only provider for view calls
@@ -427,7 +567,13 @@ export async function isWalletVerified(walletAddress: string, chain: Chain): Pro
         { commitment: "confirmed" }
       );
       
-      const program = new (Program as any)(programIdl as any, programId, provider);
+      // Clone IDL and ensure address is set (Anchor 0.32 compatibility)
+      const idl = JSON.parse(JSON.stringify(programIdl));
+      if (!idl.address) {
+        idl.address = programId.toBase58();
+      }
+      
+      const program = new (Program as any)(idl, programId, provider);
       
       try {
         const result = await program.methods

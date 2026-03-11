@@ -15,16 +15,30 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Polyfill Buffer for browser environments
+      buffer: "buffer",
     },
   },
   define: {
-    // Polyfill Buffer for browser environments (especially mobile)
+    // Polyfill Buffer and global for browser environments
     global: "globalThis",
+    "process.env": {},
   },
   optimizeDeps: {
     esbuildOptions: {
       define: {
         global: "globalThis",
+      },
+    },
+    include: ["buffer"],
+  },
+  build: {
+    commonjsOptions: {
+      transformMixedEsModules: true,
+    },
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
       },
     },
   },
