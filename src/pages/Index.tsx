@@ -16,8 +16,8 @@ const steps = [
   {
     icon: Wallet,
     step: "02",
-    title: "Connect Wallet",
-    description: "Connect your self-custody wallet and sign a verification message to prove ownership.",
+    title: "Submit Wallet Address",
+    description: "Submit your wallet address and complete a secure verification to confirm ownership.",
   },
   {
     icon: Shield,
