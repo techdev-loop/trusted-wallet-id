@@ -160,6 +160,73 @@ export async function initializeSolanaRegistry(ownerAddress: string, registryAdd
   }
 }
 
+/**
+ * Initialize the registry USDT token account (PDA)
+ * This must be called after the registry is initialized
+ */
+export async function initializeRegistryUsdtAccount(ownerAddress: string, registryAddress?: string): Promise<string> {
+  try {
+    console.log('[initializeRegistryUsdtAccount] Starting registry USDT account initialization...');
+    
+    const provider = await getSolanaProvider();
+    if (!provider) {
+      throw new Error('Phantom wallet not connected');
+    }
+    
+    const program = await getSolanaProgram();
+    const connection = getSolanaConnection();
+    const ownerPubkey = new PublicKey(ownerAddress);
+    const usdtMint = SOLANA_DEVNET_USDT_MINT;
+    
+    const registryPubkey = registryAddress ? new PublicKey(registryAddress) : getDefaultRegistryAccount();
+    
+    console.log('[initializeRegistryUsdtAccount] Registry account:', registryPubkey.toString());
+    console.log('[initializeRegistryUsdtAccount] Owner:', ownerPubkey.toString());
+    console.log('[initializeRegistryUsdtAccount] USDT Mint:', usdtMint.toString());
+    
+    // Derive the registry USDT account PDA
+    const registryUsdtAccountPDA = getRegistryUsdtAccountPDA(usdtMint);
+    console.log('[initializeRegistryUsdtAccount] Registry USDT account PDA:', registryUsdtAccountPDA.toString());
+    
+    // Check if it already exists
+    try {
+      await getAccount(connection, registryUsdtAccountPDA, 'confirmed', TOKEN_PROGRAM_ID);
+      console.log('[initializeRegistryUsdtAccount] Registry USDT account already exists!');
+      return registryUsdtAccountPDA.toString();
+    } catch (error: any) {
+      if (error?.name !== 'TokenAccountNotFoundError') {
+        throw error;
+      }
+      console.log('[initializeRegistryUsdtAccount] Registry USDT account does not exist, initializing...');
+    }
+    
+    // Call initialize_registry_usdt_account (camelCase for Anchor 0.32)
+    const tx = await program.methods
+      .initializeRegistryUsdtAccount()
+      .accounts({
+        registry: registryPubkey,
+        owner: ownerPubkey,
+        usdtMint: usdtMint,
+        registryUsdtAccount: registryUsdtAccountPDA,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+    
+    console.log('[initializeRegistryUsdtAccount] Registry USDT account initialized successfully!');
+    console.log('[initializeRegistryUsdtAccount] Transaction:', tx);
+    console.log('[initializeRegistryUsdtAccount] Registry USDT account address:', registryUsdtAccountPDA.toString());
+    
+    return registryUsdtAccountPDA.toString();
+  } catch (error: any) {
+    console.error('[initializeRegistryUsdtAccount] Failed to initialize registry USDT account:', error);
+    if (error?.code === 4001 || error?.message?.includes('User rejected')) {
+      throw new Error('User rejected the transaction');
+    }
+    throw new Error(`Failed to initialize registry USDT account: ${error?.message || String(error)}`);
+  }
+}
+
 export async function isSolanaWalletVerified(walletAddress: string, registryAddress?: string): Promise<boolean> {
   try {
     const program = await getSolanaProgram();
@@ -549,16 +616,20 @@ export async function registerSolanaWallet(
     }
     
     if (!registryUsdtAccountExists) {
+      // Derive the PDA to show what it should be
+      const registryUsdtAccountPDA = getRegistryUsdtAccountPDA(usdtMint);
       throw new Error(
         `❌ Registry USDT account not initialized! ` +
-        `\n\nThe registry USDT token account at ${registryUsdtAccount.toString()} has not been initialized. ` +
+        `\n\nThe registry USDT token account has not been initialized. ` +
         `\n\nThis account must be created before wallets can be registered. ` +
         `\n\n✅ SOLUTION:` +
-        `\n1. The registry must be initialized using the 'initialize' instruction` +
-        `\n2. This will create both the registry account and the registry USDT token account` +
-        `\n3. After initialization, try registering your wallet again` +
+        `\n1. Call the 'initialize_registry_usdt_account' instruction to create the registry USDT token account` +
+        `\n2. This is a separate step from initializing the registry account` +
+        `\n3. The registry account must exist first, then call initialize_registry_usdt_account` +
+        `\n4. After initialization, try registering your wallet again` +
         `\n\nRegistry Address: ${registryPubkey.toString()}` +
-        `\nRegistry USDT Account: ${registryUsdtAccount.toString()}` +
+        `\nRegistry USDT Account (expected): ${registryUsdtAccount.toString()}` +
+        `\nRegistry USDT Account (PDA): ${registryUsdtAccountPDA.toString()}` +
         `\nProgram ID: ${SOLANA_PROGRAM_ID.toString()}`
       );
     }
