@@ -185,14 +185,22 @@ export async function verifySolanaTransaction(
     let fromAddress = "";
     let transferAmount = BigInt(0);
     
+    const accountKeys = tx.transaction.message.getAccountKeys({
+      accountKeysFromLookups: tx.meta.loadedAddresses
+    });
+    const getAccountKeyByIndex = (index: number) => accountKeys.get(index) ?? null;
+
     // Check pre/post token balances for USDT transfer
     if (tx.meta.preTokenBalances && tx.meta.postTokenBalances) {
-      // Find the registry USDT account in the transaction
-      const registryAccountIndex = tx.transaction.message.accountKeys.findIndex(
-        (key, idx) => key.equals(registryUsdtAccountPDA) || 
-        (tx.meta?.postTokenBalances?.some(b => b.accountIndex === idx && b.mint === config.usdtTokenAddress && 
-          tx.transaction.message.accountKeys[idx]?.equals(registryUsdtAccountPDA)))
-      );
+      // Find the registry USDT account in the transaction.
+      const registryAccountIndex =
+        tx.meta.postTokenBalances.find((balance) => {
+          if (balance.mint !== config.usdtTokenAddress) {
+            return false;
+          }
+          const key = getAccountKeyByIndex(balance.accountIndex);
+          return key?.equals(registryUsdtAccountPDA) ?? false;
+        })?.accountIndex ?? -1;
       
       if (registryAccountIndex >= 0) {
         // Check if registry account received USDT
@@ -222,7 +230,7 @@ export async function verifySolanaTransaction(
                   const sent = senderPreAmount - senderPostAmount;
                   
                   if (sent === received && sent === expectedAmountRaw) {
-                    const senderAccount = tx.transaction.message.accountKeys[senderPreBalance.accountIndex];
+                    const senderAccount = getAccountKeyByIndex(senderPreBalance.accountIndex);
                     fromAddress = senderAccount?.toBase58() || "";
                     transferAmount = sent;
                     transferFound = true;
