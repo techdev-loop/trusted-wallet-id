@@ -17,7 +17,7 @@ import { WalletSelectModal } from "@/components/WalletSelectModal";
 import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
-import { connectWallet, transferUSDT, type Chain, type WalletConnectionMethod } from "@/lib/web3";
+import { connectWallet, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
 
 interface WalletLookupResult {
   userId: string;
@@ -268,7 +268,25 @@ const Admin = () => {
     }
     try {
       setIsSubmittingWithdrawal(true);
-      const txHash = await transferUSDT(selectedChain, withdrawalDestination, withdrawalAmountUsdt);
+      
+      // Get contract config to get the contract address
+      const contractConfig = await apiRequest<{ contractAddress: string; usdtTokenAddress?: string }>(
+        `/web3/contract-config/${selectedChain}`
+      );
+      
+      if (!contractConfig.contractAddress) {
+        throw new Error(`Contract address is not configured for ${selectedChain}.`);
+      }
+
+      // Withdraw from the contract using withdrawUSDT function
+      const txHash = await withdrawUSDTFromContract(
+        selectedChain,
+        contractConfig.contractAddress,
+        withdrawalDestination,
+        withdrawalAmountUsdt,
+        contractConfig.usdtTokenAddress
+      );
+      
       setWithdrawalEntries((current) => [
         {
           id: crypto.randomUUID(),

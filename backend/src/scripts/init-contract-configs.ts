@@ -28,7 +28,7 @@ async function initContractConfigs() {
     {
       chain: "tron",
       contractAddress: process.env.TRON_CONTRACT_ADDRESS || (process.env.TRON_NETWORK === "shasta" 
-        ? "TMCiUULbCGB2JLBcAxhU15Re8DrSqrCgoF" // Default Shasta testnet contract address
+        ? "TBYRvXJKnie9CMPTX1R99LTpaGvU5Lnjkf" // Default Shasta testnet contract address
         : ""),
       usdtTokenAddress: process.env.TRON_NETWORK === "shasta"
         ? (process.env.SHASTA_USDT_ADDRESS || "TXYZopYRdj2D9XRtbG411XZZ3kM5VkA00B") // Shasta testnet USDT (example - update with actual)
@@ -42,7 +42,7 @@ async function initContractConfigs() {
     {
       chain: "solana",
       contractAddress: process.env.SOLANA_CONTRACT_ADDRESS || (process.env.SOLANA_NETWORK === "devnet"
-        ? "DwrJcymdTGdiuHK9boV8MPtDmUqMTwzfyvDB8hePMNG4" // Default devnet registry account address
+        ? "DwrJcymdTGdiuHK9boV8MPtDmUqMTwzfyvDB8hePMNG4" // Default devnet registry account address (initialized with program 4kAwaG8FAMKnhTqCHoVKRAwBdBfh7vsG54Z7CeaqagEc)
         : ""),
       usdtTokenAddress: process.env.SOLANA_NETWORK === "devnet"
         ? (process.env.SOLANA_DEVNET_USDT_ADDRESS || "Ch9MipiMpaZBkCZFPTsArZigDwEH85Yodp2RcPjSmsvr") // Devnet USDT
