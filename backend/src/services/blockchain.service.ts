@@ -3,8 +3,8 @@ import { TronWeb } from "tronweb";
 import { walletDb } from "../db/pool.js";
 import { HttpError } from "../lib/http-error.js";
 import { StatusCodes } from "http-status-codes";
-import walletRegistryEthAbi from "../lib/WalletRegistry-Eth.json";
-import walletRegistryTronAbi from "../lib/WalletRegistry-Tron.json";
+import walletRegistryEthAbi from "../lib/WalletRegistry-Eth.json" with { type: "json" };
+import walletRegistryTronAbi from "../lib/WalletRegistry-Tron.json" with { type: "json" };
 
 export type Chain = "ethereum" | "bsc" | "tron" | "solana";
 
