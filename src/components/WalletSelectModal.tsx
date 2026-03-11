@@ -259,7 +259,8 @@ export function WalletSelectModal({
       onOpenChange(newOpen);
     }}>
       <DialogContent 
-        className="sm:max-w-[500px] glass-card rounded-2xl z-50"
+        className="sm:max-w-[500px] glass-card rounded-2xl z-50 !fixed pointer-events-none [&:hover]:translate-x-[-50%] [&:hover]:translate-y-[-50%]"
+        style={{ position: 'fixed' }}
         onInteractOutside={(e) => {
           // Prevent closing when clicking outside during connection
           if (isConnecting) {
@@ -273,16 +274,17 @@ export function WalletSelectModal({
           }
         }}
       >
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold">
-            Connect Wallet
-          </DialogTitle>
-          <DialogDescription>
-            Select a wallet to connect to {selectedChain.charAt(0).toUpperCase() + selectedChain.slice(1)} network
-          </DialogDescription>
-        </DialogHeader>
+        <div className="pointer-events-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold">
+              Connect Wallet
+            </DialogTitle>
+            <DialogDescription>
+              Select a wallet to connect to {selectedChain.charAt(0).toUpperCase() + selectedChain.slice(1)} network
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-3 mt-4">
+          <div className="space-y-3 mt-4">
           {availableWallets.map((wallet) => {
             const status = getWalletStatus(wallet);
             const isSelected = selectedWallet === wallet.id && isConnecting;
@@ -293,7 +295,7 @@ export function WalletSelectModal({
               <Button
                 key={wallet.id}
                 variant={isSelected ? "accent" : "outline"}
-                className="w-full h-auto p-4 justify-start gap-4 hover:bg-accent/50 transition-all"
+                className="w-full h-auto p-4 justify-start gap-4 hover:bg-accent/50 transition-colors"
                 onClick={() => handleWalletClick(wallet)}
                 disabled={isConnecting || isUnsupported}
               >
@@ -363,28 +365,29 @@ export function WalletSelectModal({
           })}
         </div>
 
-        {availableWallets.length === 0 && (
-          <div className="text-center py-8 text-muted-foreground">
-            <p>No wallets available for {selectedChain} network.</p>
-            <p className="text-sm mt-2">
-              Please install a compatible wallet extension.
+          {availableWallets.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>No wallets available for {selectedChain} network.</p>
+              <p className="text-sm mt-2">
+                Please install a compatible wallet extension.
+              </p>
+            </div>
+          )}
+
+          <div className="mt-4 pt-4 border-t border-border/50">
+            <p className="text-xs text-muted-foreground text-center">
+              By connecting, you agree to our Terms of Service and Privacy Policy.
+              New to Web3?{" "}
+              <a
+                href="https://ethereum.org/en/wallets/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent hover:underline"
+              >
+                Learn more about wallets
+              </a>
             </p>
           </div>
-        )}
-
-        <div className="mt-4 pt-4 border-t border-border/50">
-          <p className="text-xs text-muted-foreground text-center">
-            By connecting, you agree to our Terms of Service and Privacy Policy.
-            New to Web3?{" "}
-            <a
-              href="https://ethereum.org/en/wallets/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-accent hover:underline"
-            >
-              Learn more about wallets
-            </a>
-          </p>
         </div>
       </DialogContent>
     </Dialog>
