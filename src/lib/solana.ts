@@ -1,6 +1,6 @@
 import { Connection, PublicKey, Transaction, SystemProgram, SYSVAR_RENT_PUBKEY, Keypair } from '@solana/web3.js';
 import { Program, AnchorProvider, Wallet, BN } from '@coral-xyz/anchor';
-import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, getAccount, getMint } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, createTransferInstruction, getAccount, getMint } from '@solana/spl-token';
 import type { Chain } from './web3';
 import SOLANA_PROGRAM_IDL_JSON from './solana-idl.json';
 
@@ -211,6 +211,104 @@ export async function getSolanaUSDTBalance(address: string): Promise<bigint> {
     console.error('Error getting Solana USDT balance:', error);
     throw error;
   }
+}
+
+/**
+ * Transfer USDT on Solana (SPL token transfer).
+ */
+export async function transferSolanaUSDT(toAddress: string, amountUsdt: string): Promise<string> {
+  const phantomProvider = getPhantomProvider();
+  if (!phantomProvider || !phantomProvider.publicKey) {
+    throw new Error("Phantom wallet is not connected");
+  }
+
+  const connection = getSolanaConnection();
+  const fromPubkey = new PublicKey(phantomProvider.publicKey.toString());
+  const toPubkey = new PublicKey(toAddress);
+  const usdtMint = SOLANA_DEVNET_USDT_MINT;
+
+  const mintInfo = await getMint(connection, usdtMint, "confirmed", TOKEN_PROGRAM_ID);
+  const parsedAmount = Number.parseFloat(amountUsdt);
+  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    throw new Error("Invalid USDT amount");
+  }
+  const amountRaw = BigInt(Math.round(parsedAmount * 10 ** mintInfo.decimals));
+
+  const fromTokenAccount = await getAssociatedTokenAddress(
+    usdtMint,
+    fromPubkey,
+    false,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  );
+
+  // Ensure sender token account exists and has enough funds.
+  const fromAccountInfo = await getAccount(connection, fromTokenAccount, "confirmed", TOKEN_PROGRAM_ID);
+  if (BigInt(fromAccountInfo.amount.toString()) < amountRaw) {
+    throw new Error("Insufficient Solana USDT balance");
+  }
+
+  const toTokenAccount = await getAssociatedTokenAddress(
+    usdtMint,
+    toPubkey,
+    false,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  );
+
+  const transaction = new Transaction();
+
+  // Create destination ATA if it doesn't exist.
+  try {
+    await getAccount(connection, toTokenAccount, "confirmed", TOKEN_PROGRAM_ID);
+  } catch (error: any) {
+    if (error?.name === "TokenAccountNotFoundError") {
+      transaction.add(
+        createAssociatedTokenAccountInstruction(
+          fromPubkey,
+          toTokenAccount,
+          toPubkey,
+          usdtMint,
+          TOKEN_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        )
+      );
+    } else {
+      throw error;
+    }
+  }
+
+  transaction.add(
+    createTransferInstruction(
+      fromTokenAccount,
+      toTokenAccount,
+      fromPubkey,
+      amountRaw,
+      [],
+      TOKEN_PROGRAM_ID
+    )
+  );
+
+  const latestBlockhash = await connection.getLatestBlockhash("confirmed");
+  transaction.feePayer = fromPubkey;
+  transaction.recentBlockhash = latestBlockhash.blockhash;
+
+  const signedTransaction = await phantomProvider.signTransaction(transaction);
+  const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+    skipPreflight: false,
+    maxRetries: 3
+  });
+
+  await connection.confirmTransaction(
+    {
+      signature,
+      blockhash: latestBlockhash.blockhash,
+      lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+    },
+    "confirmed"
+  );
+
+  return signature;
 }
 
 /**

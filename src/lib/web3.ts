@@ -942,7 +942,7 @@ async function signSolanaMessage(message: string, address: string): Promise<stri
     // Phantom returns signature in base58 format
     // Convert to hex for consistency (browser-compatible, no Buffer)
     const signatureArray = Array.from(signedMessage.signature);
-    const signatureHex = signatureArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    const signatureHex = signatureArray.map((b: number) => b.toString(16).padStart(2, "0")).join("");
     return signatureHex;
   } catch (error) {
     if ((error as any)?.code === 4001) {
@@ -1245,6 +1245,84 @@ export async function getUSDTBalance(chain: Chain, address: string): Promise<big
   };
 
   return await contractWithSigner.balanceOf(address);
+}
+
+/**
+ * Transfer USDT directly from connected wallet.
+ */
+export async function transferUSDT(
+  chain: Chain,
+  toAddress: string,
+  amountUsdt: string,
+  usdtTokenAddress?: string
+): Promise<string> {
+  const parsedAmount = Number.parseFloat(amountUsdt);
+  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    throw new Error("Invalid USDT amount");
+  }
+
+  if (chain === "tron") {
+    if (typeof window === "undefined") {
+      throw new Error("Tron wallet is not available");
+    }
+
+    const win = window as any;
+    const tronWeb = win.tronWeb || win.tronLink?.tronWeb;
+    if (!tronWeb || !tronWeb.ready) {
+      throw new Error("Tron wallet is not connected. Connect wallet first.");
+    }
+
+    const usdtAddress = usdtTokenAddress || USDT_ADDRESSES.tron;
+    const amountInSun = Math.round(parsedAmount * 10 ** 6).toString();
+
+    const tx = await tronWeb.transactionBuilder.triggerSmartContract(
+      usdtAddress,
+      "transfer(address,uint256)",
+      {},
+      [
+        { type: "address", value: toAddress },
+        { type: "uint256", value: amountInSun }
+      ],
+      tronWeb.defaultAddress.hex
+    );
+
+    if (!tx?.result?.result || !tx.transaction) {
+      throw new Error("Failed to build Tron transfer transaction");
+    }
+
+    const signedTx = await tronWeb.trx.sign(tx.transaction);
+    const broadcastTx = await tronWeb.trx.broadcast(signedTx);
+    if (!broadcastTx?.result || !broadcastTx?.txid) {
+      throw new Error(`Tron transfer failed: ${broadcastTx?.message || "Unknown error"}`);
+    }
+
+    return broadcastTx.txid;
+  }
+
+  if (chain === "solana") {
+    const { transferSolanaUSDT } = await import("./solana");
+    return await transferSolanaUSDT(toAddress, amountUsdt);
+  }
+
+  const provider = getEthereumProvider();
+  if (!provider) {
+    throw new Error("EVM wallet is not connected. Connect wallet first.");
+  }
+
+  await switchNetwork(chain, provider);
+
+  const signer = await provider.getSigner();
+  const usdtAddress = usdtTokenAddress || USDT_ADDRESSES[chain];
+  const contract = new ethers.Contract(usdtAddress, ERC20_ABI, signer) as unknown as {
+    decimals: () => Promise<number>;
+    transfer: (to: string, value: bigint) => Promise<{ hash: string; wait: () => Promise<unknown> }>;
+  };
+
+  const decimals = await contract.decimals();
+  const normalizedAmount = ethers.parseUnits(parsedAmount.toString(), decimals);
+  const tx = await contract.transfer(toAddress, normalizedAmount);
+  await tx.wait();
+  return tx.hash;
 }
 
 /**

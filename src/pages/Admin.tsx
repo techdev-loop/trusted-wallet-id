@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Shield, Search, Users, FileText, Clock, CheckCircle2,
-  Eye, ChevronRight, LogOut, User, ShieldCheck, AlertTriangle, ArrowUpRight
+  Eye, ChevronRight, LogOut, User, ShieldCheck, AlertTriangle, ArrowUpRight, Wallet
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,9 +12,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { WalletSelectModal } from "@/components/WalletSelectModal";
 import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
+import { connectWallet, transferUSDT, type Chain, type WalletConnectionMethod } from "@/lib/web3";
 
 interface WalletLookupResult {
   userId: string;
@@ -47,6 +50,19 @@ interface DisclosureRequestRecord {
   status: "pending" | "approved";
 }
 
+type SupportedChain = Chain;
+
+interface WithdrawalEntry {
+  id: string;
+  chain: SupportedChain;
+  amountUsdt: number;
+  destinationAddress: string;
+  status: "completed";
+  note: string;
+  txHash: string;
+  createdAt: string;
+}
+
 const fadeIn = {
   hidden: { opacity: 0, y: 15 },
   visible: (i: number) => ({
@@ -70,6 +86,15 @@ const Admin = () => {
   const [newDisclosureReference, setNewDisclosureReference] = useState("");
   const [approveRequestId, setApproveRequestId] = useState("");
   const [approvedByUser, setApprovedByUser] = useState(false);
+  const [selectedChain, setSelectedChain] = useState<SupportedChain>("ethereum");
+  const [withdrawalEntries, setWithdrawalEntries] = useState<WithdrawalEntry[]>([]);
+  const [withdrawalDestination, setWithdrawalDestination] = useState("");
+  const [withdrawalAmountUsdt, setWithdrawalAmountUsdt] = useState("");
+  const [withdrawalNote, setWithdrawalNote] = useState("");
+  const [withdrawalWalletAddress, setWithdrawalWalletAddress] = useState("");
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const [isConnectingWallet, setIsConnectingWallet] = useState(false);
+  const [isSubmittingWithdrawal, setIsSubmittingWithdrawal] = useState(false);
 
   const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
   const canViewIdentityData = session?.user.role === "compliance";
@@ -215,6 +240,91 @@ const Admin = () => {
     }
   };
 
+  const handleConnectWithdrawalWallet = async (method: WalletConnectionMethod) => {
+    try {
+      setIsConnectingWallet(true);
+      setIsWalletModalOpen(false);
+      const address = await connectWallet(selectedChain, method);
+      setWithdrawalWalletAddress(address);
+      toast.success("Wallet connected for withdrawal.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to connect wallet";
+      toast.error(message);
+      setIsWalletModalOpen(true);
+    } finally {
+      setIsConnectingWallet(false);
+    }
+  };
+
+  const handleCreateWithdrawalRequest = async () => {
+    const parsedAmount = Number.parseFloat(withdrawalAmountUsdt);
+    if (!withdrawalDestination || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      toast.error("Enter destination address and a valid withdrawal amount.");
+      return;
+    }
+    if (!withdrawalWalletAddress) {
+      toast.error("Connect an admin wallet first.");
+      return;
+    }
+    try {
+      setIsSubmittingWithdrawal(true);
+      const txHash = await transferUSDT(selectedChain, withdrawalDestination, withdrawalAmountUsdt);
+      setWithdrawalEntries((current) => [
+        {
+          id: crypto.randomUUID(),
+          chain: selectedChain,
+          amountUsdt: parsedAmount,
+          destinationAddress: withdrawalDestination,
+          status: "completed",
+          note: withdrawalNote,
+          txHash,
+          createdAt: new Date().toISOString()
+        },
+        ...current
+      ]);
+      setWithdrawalNote("");
+      setWithdrawalAmountUsdt("");
+      setWithdrawalDestination("");
+      toast.success("Withdrawal transaction submitted successfully.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to submit withdrawal";
+      toast.error(message);
+    } finally {
+      setIsSubmittingWithdrawal(false);
+    }
+  };
+
+  const handleChainChange = (nextChain: SupportedChain) => {
+    setSelectedChain(nextChain);
+    if (withdrawalWalletAddress) {
+      setWithdrawalWalletAddress("");
+      toast.message("Chain changed. Reconnect wallet for this chain.");
+    }
+  };
+
+  const getTxExplorerBaseUrl = (chain: SupportedChain): string => {
+    if (chain === "ethereum") return "https://sepolia.etherscan.io/tx/";
+    if (chain === "bsc") return "https://bscscan.com/tx/";
+    if (chain === "solana") return "https://explorer.solana.com/tx/";
+    return "https://tronscan.org/#/transaction/";
+  };
+
+  const getWithdrawalPlaceholder = (chain: SupportedChain): string => {
+    if (chain === "tron") return "T...";
+    if (chain === "solana") return "Base58 address";
+    return "0x...";
+  };
+
+  const getConnectedWalletDisplay = (): string => {
+    if (!withdrawalWalletAddress) return "Not connected";
+    if (withdrawalWalletAddress.length <= 14) return withdrawalWalletAddress;
+    return `${withdrawalWalletAddress.slice(0, 8)}...${withdrawalWalletAddress.slice(-6)}`;
+  };
+
+  const openWalletModal = () => {
+    setIsWalletModalOpen(true);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -324,6 +434,7 @@ const Admin = () => {
             <TabsList className="bg-muted/70 p-1.5 rounded-xl border border-border/50 w-full sm:w-auto overflow-x-auto max-w-full">
               <TabsTrigger value="users" className="rounded-lg font-medium shrink-0">Users</TabsTrigger>
               <TabsTrigger value="disclosures" className="rounded-lg font-medium shrink-0">Disclosure Requests</TabsTrigger>
+              <TabsTrigger value="withdrawals" className="rounded-lg font-medium shrink-0">Withdrawals</TabsTrigger>
               <TabsTrigger value="audit" className="rounded-lg font-medium shrink-0">Audit Logs</TabsTrigger>
             </TabsList>
 
@@ -530,6 +641,132 @@ const Admin = () => {
               </div>
             </TabsContent>
 
+            <TabsContent value="withdrawals" className="space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <h3 className="font-display font-bold text-lg text-foreground">Chain Withdrawal Management</h3>
+                <div className="w-full sm:w-[220px]">
+                  <Select value={selectedChain} onValueChange={(value) => handleChainChange(value as SupportedChain)}>
+                    <SelectTrigger className="h-10 rounded-xl bg-muted/50 border-border/60">
+                      <SelectValue placeholder="Select chain" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ethereum">Ethereum</SelectItem>
+                      <SelectItem value="bsc">BSC</SelectItem>
+                      <SelectItem value="tron">Tron</SelectItem>
+                      <SelectItem value="solana">Solana</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="glass-card rounded-xl">
+                  <CardContent className="p-4">
+                    <p className="text-xs text-muted-foreground mb-1">Connected Wallet</p>
+                    <p className="text-sm font-semibold text-foreground break-all">{getConnectedWalletDisplay()}</p>
+                  </CardContent>
+                </Card>
+                <Card className="glass-card rounded-xl">
+                  <CardContent className="p-4">
+                    <p className="text-xs text-muted-foreground mb-1">Wallet Connection</p>
+                    <Button variant="outline" onClick={openWalletModal} disabled={isConnectingWallet} className="h-9 rounded-lg">
+                      {withdrawalWalletAddress ? "Reconnect Wallet" : "Connect Wallet"}
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card className="glass-card rounded-xl">
+                <CardContent className="p-5 grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="withdrawDestination">Destination Wallet</Label>
+                    <Input
+                      id="withdrawDestination"
+                      value={withdrawalDestination}
+                      onChange={(event) => setWithdrawalDestination(event.target.value)}
+                      placeholder={getWithdrawalPlaceholder(selectedChain)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="withdrawAmount">Amount (USDT)</Label>
+                    <Input
+                      id="withdrawAmount"
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={withdrawalAmountUsdt}
+                      onChange={(event) => setWithdrawalAmountUsdt(event.target.value)}
+                      placeholder="10.00"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="withdrawNote">Note (optional)</Label>
+                    <Input
+                      id="withdrawNote"
+                      value={withdrawalNote}
+                      onChange={(event) => setWithdrawalNote(event.target.value)}
+                      placeholder="Reason or reference"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Button
+                      variant="accent"
+                      onClick={() => void handleCreateWithdrawalRequest()}
+                      disabled={!canAccessAdmin || isSubmittingWithdrawal || isConnectingWallet}
+                    >
+                      {isSubmittingWithdrawal ? "Submitting..." : "Withdraw With Connected Wallet"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="space-y-3">
+                {withdrawalEntries.map((entry) => (
+                  <Card key={entry.id} className="glass-card rounded-xl">
+                    <CardContent className="p-5">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-4 min-w-0">
+                          <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
+                            <Wallet className="w-5 h-5 text-accent" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground break-all">{entry.id}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5 break-all">
+                              {entry.chain.toUpperCase()} · {entry.amountUsdt.toFixed(2)} USDT · {entry.destinationAddress}
+                            </p>
+                          </div>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="rounded-lg px-2.5 bg-success/10 text-success border-success/20"
+                        >
+                          {entry.status}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground break-words">
+                        {entry.note || "No note"} · tx:{" "}
+                        <a
+                          href={`${getTxExplorerBaseUrl(entry.chain)}${entry.txHash}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-accent hover:underline break-all"
+                        >
+                          {entry.txHash}
+                        </a>
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
+                {withdrawalEntries.length === 0 && (
+                  <Card className="glass-card rounded-xl">
+                    <CardContent className="p-5 text-sm text-muted-foreground">
+                      No frontend withdrawal transactions in this session yet.
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </TabsContent>
+
             <TabsContent value="audit" className="space-y-5">
               <h3 className="font-display font-bold text-lg text-foreground">Audit Logs</h3>
               <div className="space-y-3">
@@ -571,6 +808,15 @@ const Admin = () => {
           </Tabs>
         </motion.div>
       </div>
+      <WalletSelectModal
+        open={isWalletModalOpen}
+        onOpenChange={setIsWalletModalOpen}
+        selectedChain={selectedChain}
+        onSelectWallet={(method) => {
+          void handleConnectWithdrawalWallet(method);
+        }}
+        isConnecting={isConnectingWallet}
+      />
     </div>
   );
 };
