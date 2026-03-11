@@ -43,6 +43,18 @@ Private identity-linked wallet registry backend for FIUlink.
   - Set `OTP_EMAIL_FROM` (for dev/staging, `onboarding@resend.dev` can be used)
 - When Resend is enabled, OTP is not exposed in API response.
 
+## Telegram Deposit Notifications
+
+Enable Telegram notifications for successful wallet deposit confirmations (`POST /api/payments/confirm`):
+
+- `TELEGRAM_BOT_TOKEN`: Bot token from BotFather
+- `TELEGRAM_CHAT_ID`: Target chat ID (user/group/channel)
+- `TELEGRAM_THREAD_ID` (optional): Topic thread ID for forum groups
+
+Notes:
+- If Telegram env vars are missing, payment flow still succeeds and notifications are skipped.
+- Notification includes user ID, wallet address, chain, amount, tx hash, and contract address.
+
 ## KYC Provider (Didit)
 
 - Set `KYC_PROVIDER=didit` to enable provider-backed KYC.
