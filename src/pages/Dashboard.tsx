@@ -203,29 +203,6 @@ const Dashboard = () => {
     }
   };
 
-  const handleInitiateWallet = async () => {
-    if (!walletAddress) {
-      toast.error("Enter a wallet address first.");
-      return;
-    }
-
-    try {
-      setProcessingWallet(true);
-      const response = await apiRequest<{ messageToSign: string }>("/wallet/link/initiate", {
-        method: "POST",
-        auth: true,
-        body: { walletAddress }
-      });
-      setMessageToSign(response.messageToSign);
-      toast.success("Challenge message generated. Sign it with your wallet.");
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Failed to initiate wallet linking";
-      toast.error(message);
-    } finally {
-      setProcessingWallet(false);
-    }
-  };
-
   // Use Wagmi for EVM chains, TronWallet Adapter for Tron, native methods for Solana
   const wagmiWallet = useWagmiWallet();
   const tronWallet = useTronWallet();
@@ -323,34 +300,6 @@ const Dashboard = () => {
       if (error instanceof Error && !message.includes("User rejected") && !message.includes("user rejected")) {
         setIsWalletModalOpen(true);
       }
-    } finally {
-      setProcessingWallet(false);
-    }
-  };
-
-  const handleConfirmSignature = async () => {
-    if (!walletAddress || !signature) {
-      toast.error("Wallet address and signature are required.");
-      return;
-    }
-
-    try {
-      setProcessingWallet(true);
-      await apiRequest("/wallet/link/confirm", {
-        method: "POST",
-        auth: true,
-        body: { walletAddress, signature }
-      });
-      setPaymentReadyToPay(true);
-      toast.success(
-        effectiveKycStatus === "verified"
-          ? "Wallet linked and active."
-          : "Wallet linked. It will become active once KYC is verified."
-      );
-      await loadDashboard();
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Signature verification failed";
-      toast.error(message);
     } finally {
       setProcessingWallet(false);
     }
@@ -540,7 +489,7 @@ const Dashboard = () => {
               accent: "from-success/10 to-success/5",
             },
             {
-              label: "Linked Wallets",
+              label: "KYC Verified Wallets",
               value: `${activeWalletCount} Active`,
               icon: Wallet,
               iconClass: "text-accent",
@@ -754,20 +703,9 @@ const Dashboard = () => {
                       ) : (
                         <>
                           <Wallet className="w-4 h-4 mr-2" />
-                          Connect Wallet
+                          Complete & Verify
                         </>
                       )}
-                    </Button>
-                    <Button variant="outline" onClick={handleInitiateWallet} disabled={processingWallet} className="w-full sm:w-auto">
-                      1) Generate Challenge
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={handleConfirmSignature}
-                      disabled={processingWallet}
-                      className="w-full sm:w-auto"
-                    >
-                      2) Verify Signature
                     </Button>
                     {paymentReadyToPay && (
                       <Button
@@ -796,7 +734,7 @@ const Dashboard = () => {
 
             <TabsContent value="wallets" className="space-y-5">
               <div className="flex items-center justify-between">
-                <h3 className="font-display font-bold text-lg text-foreground">Linked Wallets</h3>
+                <h3 className="font-display font-bold text-lg text-foreground">KYC Verified Wallet</h3>
               </div>
               <div className="space-y-3">
                 {(dashboardData?.linkedWallets ?? []).map((wallet) => {
@@ -845,7 +783,7 @@ const Dashboard = () => {
                 {(dashboardData?.linkedWallets.length ?? 0) === 0 && (
                   <Card className="glass-card rounded-xl">
                     <CardContent className="p-5 text-sm text-muted-foreground">
-                      No wallets linked yet.
+                      No KYC-verified wallet yet.
                     </CardContent>
                   </Card>
                 )}
