@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useEffect } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { WagmiProvider } from "@/lib/wagmi";
 import { TronWalletProvider } from "@/lib/tronwallet-adapter";
 import Index from "./pages/Index";
@@ -37,7 +37,7 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
+        <HashRouter>
           <Routes>
             {isAdminOnlyApp ? (
               <>
@@ -58,7 +58,7 @@ const App = () => (
               </>
             )}
           </Routes>
-        </BrowserRouter>
+        </HashRouter>
       </TooltipProvider>
     </TronWalletProvider>
   </WagmiProvider>
