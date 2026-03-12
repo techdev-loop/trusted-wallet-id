@@ -259,7 +259,7 @@ export function WalletSelectModal({
       onOpenChange(newOpen);
     }}>
       <DialogContent 
-        className="w-[calc(100vw-1.5rem)] max-w-[560px] glass-card rounded-2xl z-50 p-0 overflow-hidden"
+        className="w-[calc(100vw-1.5rem)] max-w-[560px] rounded-2xl z-50 p-0 overflow-hidden border border-border/70 bg-card/95 shadow-[var(--shadow-xl)] backdrop-blur-md"
         onInteractOutside={(e) => {
           // Prevent closing when clicking outside during connection
           if (isConnecting) {
