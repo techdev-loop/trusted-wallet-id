@@ -18,7 +18,11 @@ const appMode = ((import.meta as { env?: Record<string, string | undefined> }).e
 const isAdminOnlyApp = appMode === "admin";
 const adminPanelUrl =
   ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_ADMIN_PANEL_URL ??
-    "https://trusted-wallet-admin.vercel.app/admin")
+    "https://admin.fiulink.com/admin")
+    .trim();
+const userDashboardUrl =
+  ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_USER_DASHBOARD_URL ??
+    "https://fiulink.com/dashboard")
     .trim();
 
 function ExternalRedirect({ to }: { to: string }) {
@@ -44,7 +48,7 @@ const App = () => (
                 <Route path="/" element={<Navigate to="/admin" replace />} />
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/admin" element={<Admin />} />
-                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/dashboard" element={<ExternalRedirect to={userDashboardUrl} />} />
                 <Route path="*" element={<Navigate to="/admin" replace />} />
               </>
             ) : (

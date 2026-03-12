@@ -75,6 +75,10 @@ const fadeIn = {
 const Admin = () => {
   const navigate = useNavigate();
   const session = getSession();
+  const userDashboardUrl =
+    ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_USER_DASHBOARD_URL ??
+      "https://fiulink.com/dashboard")
+      .trim();
   const [loading, setLoading] = useState(true);
   const [searchWalletAddress, setSearchWalletAddress] = useState("");
   const [walletLookupResult, setWalletLookupResult] = useState<WalletLookupResult | null>(null);
@@ -394,9 +398,12 @@ const Admin = () => {
             <Badge className="ml-1.5 text-[10px] gradient-accent text-accent-foreground border-0 rounded-md px-2">Admin</Badge>
           </Link>
           <div className="flex items-center gap-2 sm:gap-3">
-            <Link to="/dashboard" className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1">
+            <a
+              href={userDashboardUrl}
+              className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+            >
               User Dashboard <ArrowUpRight className="w-3 h-3" />
-            </Link>
+            </a>
             <div className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-muted/70 border border-border/50">
               <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
                 <ShieldCheck className="w-3.5 h-3.5 text-accent" />
