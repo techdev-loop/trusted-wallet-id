@@ -17,18 +17,20 @@ const SOLANA_PROGRAM_IDL = (() => {
   return idl;
 })();
 
-// Solana devnet RPC URL - can be overridden via environment variable
-const SOLANA_DEVNET_RPC = import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.devnet.solana.com';
+// Solana RPC URL - can be overridden via environment variable
+// Defaults to mainnet, but can be set to devnet via VITE_SOLANA_RPC_URL
+const SOLANA_RPC = import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 
-// USDT mint address on Solana devnet
+// USDT mint address on Solana devnet (fallback, but mainnet address comes from backend config)
 export const SOLANA_DEVNET_USDT_MINT = new PublicKey('Ch9MipiMpaZBkCZFPTsArZigDwEH85Yodp2RcPjSmsvr');
 
 /**
- * Get Solana connection (devnet)
- * Uses 'finalized' commitment for better reliability on production
+ * Get Solana connection
+ * Uses mainnet by default, but can be overridden via VITE_SOLANA_RPC_URL environment variable
+ * Uses 'confirmed' commitment for better reliability on production
  */
 export function getSolanaConnection(): Connection {
-  const connection = new Connection(SOLANA_DEVNET_RPC, {
+  const connection = new Connection(SOLANA_RPC, {
     commitment: 'confirmed',
     confirmTransactionInitialTimeout: 60000, // 60 seconds timeout
   });
@@ -533,10 +535,12 @@ export async function withdrawSolanaUSDTFromContract(
  * Register wallet on Solana (transfers 10 USDT and registers)
  * @param walletAddress - The wallet address to register
  * @param registryAddress - The registry account address (from contract config)
+ * @param usdtTokenAddress - The USDT token mint address (from contract config, optional - defaults to devnet)
  */
 export async function registerSolanaWallet(
   walletAddress: string,
-  registryAddress: string
+  registryAddress: string,
+  usdtTokenAddress?: string
 ): Promise<string> {
   // Store these in outer scope for error handling
   let registryPubkey: PublicKey | undefined;
@@ -593,16 +597,18 @@ export async function registerSolanaWallet(
       throw new Error(`Invalid registry address: ${registryAddress}. Error: ${error instanceof Error ? error.message : String(error)}`);
     }
     
-    const usdtMint = SOLANA_DEVNET_USDT_MINT;
+    // Use USDT token address from config, or default to devnet
+    const usdtMint = usdtTokenAddress 
+      ? new PublicKey(usdtTokenAddress)
+      : SOLANA_DEVNET_USDT_MINT;
     console.log('[registerSolanaWallet] USDT mint:', usdtMint.toString());
-    console.log('[registerSolanaWallet] Verifying USDT mint address matches:', 'Ch9MipiMpaZBkCZFPTsArZigDwEH85Yodp2RcPjSmsvr');
-    
-    if (!usdtMint.equals(new PublicKey('Ch9MipiMpaZBkCZFPTsArZigDwEH85Yodp2RcPjSmsvr'))) {
-      throw new Error(`USDT mint address mismatch. Expected: Ch9MipiMpaZBkCZFPTsArZigDwEH85Yodp2RcPjSmsvr, Got: ${usdtMint.toString()}`);
-    }
+    console.log('[registerSolanaWallet] USDT mint source:', usdtTokenAddress ? 'from config' : 'default (devnet)');
 
-    // Use the provided registry USDT account address directly
-    const registryUsdtAccount = getDefaultRegistryUsdtAccount();
+    // Derive the registry USDT account PDA based on the actual USDT mint
+    // This ensures it works for both devnet and mainnet
+    const registryUsdtAccountPDA = getRegistryUsdtAccountPDA(usdtMint);
+    const registryUsdtAccount = registryUsdtAccountPDA;
+    console.log('[registerSolanaWallet] Registry USDT account (PDA):', registryUsdtAccount.toString());
     console.log('[registerSolanaWallet] Registry USDT account:', registryUsdtAccount.toString());
     
     // Check if registry USDT account exists with retry logic for RPC reliability
@@ -732,8 +738,7 @@ export async function registerSolanaWallet(
     }
     
     if (!registryUsdtAccountExists) {
-      // Derive the PDA to show what it should be
-      const registryUsdtAccountPDA = getRegistryUsdtAccountPDA(usdtMint);
+      // registryUsdtAccountPDA is already derived above
       
       // Additional diagnostic: try to get account info directly
       let diagnosticInfo = '';
@@ -756,8 +761,8 @@ export async function registerSolanaWallet(
         `\n3. The registry account must exist first, then call initialize_registry_usdt_account` +
         `\n4. After initialization, try registering your wallet again` +
         `\n\nRegistry Address: ${registryPubkey.toString()}` +
-        `\nRegistry USDT Account (expected): ${registryUsdtAccount.toString()}` +
-        `\nRegistry USDT Account (PDA): ${registryUsdtAccountPDA.toString()}` +
+        `\nRegistry USDT Account (PDA): ${registryUsdtAccount.toString()}` +
+        `\nUSDT Mint: ${usdtMint.toString()}` +
         `\nProgram ID: ${SOLANA_PROGRAM_ID.toString()}` +
         diagnosticInfo
       );

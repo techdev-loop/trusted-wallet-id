@@ -26,17 +26,16 @@ let walletConnectProvider: Eip1193Provider | null = null;
 // Note: For testnets, the frontend will use the network from backend config
 export const CHAIN_CONFIGS: Record<Chain, ChainConfig> = {
   ethereum: {
-    // Default to Sepolia testnet (0xaa36a7 = 11155111)
-    // Mainnet would be 0x1
-    chainId: "0xaa36a7", // Sepolia testnet
-    chainName: "Sepolia Testnet",
+    // Ethereum Mainnet
+    chainId: "0x1", // Mainnet (1)
+    chainName: "Ethereum Mainnet",
     nativeCurrency: {
       name: "Ether",
       symbol: "ETH",
       decimals: 18
     },
-    rpcUrls: ["https://ethereum-sepolia-rpc.publicnode.com"],
-    blockExplorerUrls: ["https://sepolia.etherscan.io"]
+    rpcUrls: ["https://eth.llamarpc.com"],
+    blockExplorerUrls: ["https://etherscan.io"]
   },
   bsc: {
     chainId: "0x38",
@@ -73,17 +72,13 @@ export const CHAIN_CONFIGS: Record<Chain, ChainConfig> = {
   }
 };
 
-// USDT token addresses per chain
-// Note: For testnets, these should be testnet token addresses
+// USDT token addresses per chain (Mainnet)
 export const USDT_ADDRESSES: Record<Chain, string> = {
-  ethereum: "0xFD311848AE9dD8ffaC8bCd862bC14D38aA77F946", // Sepolia testnet
-  bsc: "0x55d398326f99059fF775485246999027B3197955",
-  tron: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-  solana: "G8vDrj3UxWVWFcvKE6tAYSwq7G6PSv164c58oVtfCoXC" // USDT on Solana
+  ethereum: "0xdAC17F958D2ee523a2206206994597C13D831ec7", // Ethereum Mainnet USDT
+  bsc: "0x55d398326f99059fF775485246999027B3197955", // BSC Mainnet USDT
+  tron: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", // TRON Mainnet USDT
+  solana: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" // Solana Mainnet USDT
 };
-
-// Sepolia testnet USDT (mock/test token)
-export const SEPOLIA_USDT_ADDRESS = "0xFD311848AE9dD8ffaC8bCd862bC14D38aA77F946";
 
 // ERC20 ABI for USDT
 export const ERC20_ABI = [
@@ -100,7 +95,7 @@ export const WALLET_REGISTRY_TRON_ABI = walletRegistryTronAbi.abi;
 
 function getInjectedProvider(): Eip1193Provider | null {
   if (typeof window === "undefined") return null;
-  const ethereum = (window as Window & { ethereum?: Eip1193Provider }).ethereum;
+  const ethereum = (window as unknown as Window & { ethereum?: Eip1193Provider }).ethereum;
   return ethereum ?? null;
 }
 
@@ -264,11 +259,10 @@ async function createWalletConnectProvider(chain: Chain): Promise<Eip1193Provide
     projectId,
     showQrModal: true,
     chains: [selectedChainId],
-    optionalChains: [11155111, 56, 1],
+    optionalChains: [1, 56], // Ethereum Mainnet (1) and BSC (56)
     rpcMap: {
-      11155111: CHAIN_CONFIGS.ethereum.rpcUrls[0],
-      56: CHAIN_CONFIGS.bsc.rpcUrls[0],
-      1: "https://ethereum-rpc.publicnode.com"
+      1: CHAIN_CONFIGS.ethereum.rpcUrls[0], // Ethereum Mainnet
+      56: CHAIN_CONFIGS.bsc.rpcUrls[0], // BSC Mainnet
     },
     methods: [
       "eth_requestAccounts",
@@ -334,7 +328,7 @@ async function ensureWalletConnectSession(provider: Eip1193Provider, chain: Chai
     try {
       await wcProvider.connect({
         chains: [chainId],
-        optionalChains: [11155111, 56, 1]
+        optionalChains: [1, 56] // Ethereum Mainnet (1) and BSC (56)
       });
     } catch {
       // If connect() fails, we'll try enable() next.
@@ -1504,7 +1498,21 @@ export async function registerWalletViaContract(
       console.log(`[registerWalletViaContract] Phantom wallet connected:`, walletAddress);
       
       console.log(`[registerWalletViaContract] Calling registerSolanaWallet...`);
-      const txHash = await registerSolanaWallet(walletAddress, contractAddress);
+      // Get contract config to pass USDT token address
+      const { apiRequest } = await import('./api');
+      let usdtTokenAddress: string | undefined;
+      try {
+        const contractConfig = await apiRequest<{ usdtTokenAddress?: string }>(`/web3/contract-config/solana`);
+        usdtTokenAddress = contractConfig?.usdtTokenAddress;
+        console.log(`[registerWalletViaContract] USDT token address from config:`, usdtTokenAddress);
+      } catch (error) {
+        console.warn(`[registerWalletViaContract] Failed to fetch contract config, using default:`, error);
+      }
+      const txHash = await registerSolanaWallet(
+        walletAddress, 
+        contractAddress,
+        usdtTokenAddress
+      );
       console.log(`[registerWalletViaContract] Solana registration successful, txHash:`, txHash);
       return txHash;
     } catch (error) {

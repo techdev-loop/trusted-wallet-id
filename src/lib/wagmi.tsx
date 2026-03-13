@@ -11,7 +11,7 @@ const projectId = rawProjectId?.trim() || '';
 
 // Create Wagmi config with chains and connectors
 export const wagmiConfig = createConfig({
-  chains: [sepolia, bsc, mainnet], // Add more chains as needed
+  chains: [mainnet, bsc], // Ethereum Mainnet and BSC Mainnet
   connectors: [
     injected({
       target: 'metaMask', // Prioritize MetaMask
@@ -35,9 +35,8 @@ export const wagmiConfig = createConfig({
       : []),
   ],
   transports: {
-    [sepolia.id]: http(),
-    [bsc.id]: http(),
     [mainnet.id]: http(),
+    [bsc.id]: http(),
   },
 });
 

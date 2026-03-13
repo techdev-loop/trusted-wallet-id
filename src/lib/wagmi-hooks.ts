@@ -4,8 +4,8 @@ import type { Chain } from './web3';
 
 // Map our Chain type to Wagmi chain IDs
 export const CHAIN_TO_WAGMI_ID: Record<Chain, number | null> = {
-  ethereum: sepolia.id, // Using Sepolia testnet
-  bsc: bsc.id,
+  ethereum: mainnet.id, // Ethereum Mainnet
+  bsc: bsc.id, // BSC Mainnet
   tron: null, // Not supported by Wagmi
   solana: null, // Not supported by Wagmi
 };
