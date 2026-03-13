@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Shield, Wallet, CheckCircle2, XCircle, Clock, ExternalLink,
-  Unlink, FileText, ChevronRight, LogOut, User, LayoutDashboard, ArrowUpRight, Loader2
+  FileText, ChevronRight, LogOut, User, LayoutDashboard, ArrowUpRight, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -59,7 +59,7 @@ interface KycStatusData {
 
 const statusConfig = {
   active: { icon: CheckCircle2, label: "Active", className: "bg-success/10 text-success border-success/20" },
-  unlinked: { icon: XCircle, label: "Unlinked", className: "bg-destructive/10 text-destructive border-destructive/20" },
+  unlinked: { icon: XCircle, label: "Removed", className: "bg-destructive/10 text-destructive border-destructive/20" },
   pending: { icon: Clock, label: "Pending", className: "bg-warning/10 text-warning border-warning/20" },
   confirmed: { icon: CheckCircle2, label: "Confirmed", className: "bg-success/10 text-success border-success/20" },
   approved: { icon: CheckCircle2, label: "Approved", className: "bg-success/10 text-success border-success/20" },
@@ -76,6 +76,10 @@ const fadeIn = {
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const adminPanelUrl =
+    ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_ADMIN_PANEL_URL ??
+      "https://admin.fiulink.com/admin")
+      .trim();
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [submittingKyc, setSubmittingKyc] = useState(false);
@@ -203,29 +207,6 @@ const Dashboard = () => {
     }
   };
 
-  const handleInitiateWallet = async () => {
-    if (!walletAddress) {
-      toast.error("Enter a wallet address first.");
-      return;
-    }
-
-    try {
-      setProcessingWallet(true);
-      const response = await apiRequest<{ messageToSign: string }>("/wallet/link/initiate", {
-        method: "POST",
-        auth: true,
-        body: { walletAddress }
-      });
-      setMessageToSign(response.messageToSign);
-      toast.success("Challenge message generated. Sign it with your wallet.");
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Failed to initiate wallet linking";
-      toast.error(message);
-    } finally {
-      setProcessingWallet(false);
-    }
-  };
-
   // Use Wagmi for EVM chains, TronWallet Adapter for Tron, native methods for Solana
   const wagmiWallet = useWagmiWallet();
   const tronWallet = useTronWallet();
@@ -307,8 +288,8 @@ const Dashboard = () => {
 
       toast.success(
         effectiveKycStatus === "verified"
-          ? "Wallet linked and active."
-          : "Wallet linked. It will become active once KYC is verified."
+          ? "Wallet verified and active."
+          : "Wallet verified. It will become active once KYC is verified."
       );
       await loadDashboard();
     } catch (error) {
@@ -323,34 +304,6 @@ const Dashboard = () => {
       if (error instanceof Error && !message.includes("User rejected") && !message.includes("user rejected")) {
         setIsWalletModalOpen(true);
       }
-    } finally {
-      setProcessingWallet(false);
-    }
-  };
-
-  const handleConfirmSignature = async () => {
-    if (!walletAddress || !signature) {
-      toast.error("Wallet address and signature are required.");
-      return;
-    }
-
-    try {
-      setProcessingWallet(true);
-      await apiRequest("/wallet/link/confirm", {
-        method: "POST",
-        auth: true,
-        body: { walletAddress, signature }
-      });
-      setPaymentReadyToPay(true);
-      toast.success(
-        effectiveKycStatus === "verified"
-          ? "Wallet linked and active."
-          : "Wallet linked. It will become active once KYC is verified."
-      );
-      await loadDashboard();
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Signature verification failed";
-      toast.error(message);
     } finally {
       setProcessingWallet(false);
     }
@@ -454,20 +407,6 @@ const Dashboard = () => {
     }
   };
 
-  const handleUnlinkWallet = async (address: string) => {
-    try {
-      await apiRequest(`/dashboard/wallets/${address}/unlink`, {
-        method: "POST",
-        auth: true
-      });
-      toast.success("Wallet unlinked successfully.");
-      await loadDashboard();
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Failed to unlink wallet";
-      toast.error(message);
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -485,14 +424,17 @@ const Dashboard = () => {
             <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
               <Shield className="w-4 h-4 text-accent-foreground" />
             </div>
-            <span className="font-display font-bold text-lg text-foreground">FIUlink</span>
+            <span className="font-display font-bold text-lg text-foreground">FIU ID</span>
           </Link>
 
           <div className="flex items-center gap-2 sm:gap-3">
             {canAccessAdmin && (
-              <Link to="/admin" className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1">
+              <a
+                href={adminPanelUrl}
+                className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+              >
                 Admin Panel <ArrowUpRight className="w-3 h-3" />
-              </Link>
+              </a>
             )}
             <div className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-muted/70 border border-border/50">
               <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
@@ -516,7 +458,7 @@ const Dashboard = () => {
               <LayoutDashboard className="w-6 h-6 text-accent" />
               <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h1>
             </div>
-            <p className="text-muted-foreground ml-0 sm:ml-9">Manage your identity verification and linked wallets</p>
+            <p className="text-muted-foreground ml-0 sm:ml-9">Manage your identity verification and connected wallets</p>
           </div>
         </motion.div>
 
@@ -540,7 +482,7 @@ const Dashboard = () => {
               accent: "from-success/10 to-success/5",
             },
             {
-              label: "Linked Wallets",
+              label: "KYC Verified Wallets",
               value: `${activeWalletCount} Active`,
               icon: Wallet,
               iconClass: "text-accent",
@@ -576,7 +518,7 @@ const Dashboard = () => {
               <div>
                 <h3 className="font-display font-bold text-lg text-foreground">Onboarding Actions</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Complete KYC and connect wallets. Wallets linked during pending review become active once verified.
+                  Complete KYC and connect wallets. Wallets added during pending review become active once verified.
                 </p>
               </div>
 
@@ -647,7 +589,7 @@ const Dashboard = () => {
                       onCheckedChange={(checked) => setConsentAccepted(Boolean(checked))}
                     />
                     <Label htmlFor="consent" className="text-sm text-muted-foreground">
-                      I consent to KYC verification and identity-wallet linkage.
+                      I consent to KYC verification and identity-wallet verification.
                     </Label>
                   </div>
                   <div className="md:col-span-2">
@@ -754,20 +696,9 @@ const Dashboard = () => {
                       ) : (
                         <>
                           <Wallet className="w-4 h-4 mr-2" />
-                          Connect Wallet
+                          Complete & Verify
                         </>
                       )}
-                    </Button>
-                    <Button variant="outline" onClick={handleInitiateWallet} disabled={processingWallet} className="w-full sm:w-auto">
-                      1) Generate Challenge
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={handleConfirmSignature}
-                      disabled={processingWallet}
-                      className="w-full sm:w-auto"
-                    >
-                      2) Verify Signature
                     </Button>
                     {paymentReadyToPay && (
                       <Button
@@ -796,7 +727,7 @@ const Dashboard = () => {
 
             <TabsContent value="wallets" className="space-y-5">
               <div className="flex items-center justify-between">
-                <h3 className="font-display font-bold text-lg text-foreground">Linked Wallets</h3>
+                <h3 className="font-display font-bold text-lg text-foreground">KYC Verified Wallet</h3>
               </div>
               <div className="space-y-3">
                 {(dashboardData?.linkedWallets ?? []).map((wallet) => {
@@ -819,7 +750,7 @@ const Dashboard = () => {
                           </div>
                           <div className="min-w-0">
                             <p className="font-mono text-sm font-semibold text-foreground break-all">{wallet.walletAddress}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">Linked {linkedDateLabel}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">Verified {linkedDateLabel}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3 self-start sm:self-auto">
@@ -827,16 +758,6 @@ const Dashboard = () => {
                             <config.icon className="w-3 h-3 mr-1" />
                             {config.label}
                           </Badge>
-                          {(walletStatus === "active" || walletStatus === "pending") && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="rounded-lg h-9 w-9"
-                              onClick={() => void handleUnlinkWallet(wallet.walletAddress)}
-                            >
-                              <Unlink className="w-4 h-4" />
-                            </Button>
-                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -845,7 +766,7 @@ const Dashboard = () => {
                 {(dashboardData?.linkedWallets.length ?? 0) === 0 && (
                   <Card className="glass-card rounded-xl">
                     <CardContent className="p-5 text-sm text-muted-foreground">
-                      No wallets linked yet.
+                      No KYC-verified wallet yet.
                     </CardContent>
                   </Card>
                 )}

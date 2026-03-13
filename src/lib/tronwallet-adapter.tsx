@@ -24,7 +24,7 @@ const adapters: Record<string, () => TronWalletAdapter> = {
     try {
       return new TronLinkAdapter({
         openTronLinkAppOnMobile: true,
-        dappName: 'FIUlink',
+        dappName: 'FIU ID',
       } as any); // Type assertion in case options aren't in types
     } catch {
       // Fallback if options aren't supported
@@ -44,8 +44,8 @@ const adapters: Record<string, () => TronWalletAdapter> = {
     return new WalletConnectAdapter({
       projectId,
       metadata: {
-        name: 'FIUlink',
-        description: 'Web3 Identity-linked Wallet Registry',
+        name: 'FIU ID',
+        description: 'Web3 Identity Wallet Registry',
         url: typeof window !== 'undefined' ? window.location.origin : '',
         icons: [],
       },

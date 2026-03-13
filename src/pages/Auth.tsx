@@ -108,16 +108,16 @@ const Auth = () => {
             <Shield className="w-9 h-9 text-accent-foreground" />
           </div>
           <h1 className="font-display text-4xl font-bold text-primary-foreground mb-4 leading-tight">
-            Secure Identity<br />Linking
+            Secure Identity<br />Verification
           </h1>
           <p className="text-primary-foreground/55 leading-relaxed text-lg">
-            KYC-verified wallet identity linking with enterprise-grade encryption and full regulatory compliance.
+            KYC-verified wallet identity verification with enterprise-grade encryption and full regulatory compliance.
           </p>
 
           <div className="mt-12 grid grid-cols-2 gap-6">
             {[
               { icon: Lock, label: "AES-256 Encrypted" },
-              { icon: Zap, label: "Instant Linking" },
+              { icon: Zap, label: "Instant Verification" },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-3 text-left bg-primary-foreground/8 rounded-xl p-4 border border-primary-foreground/10">
                 <item.icon className="w-5 h-5 text-accent flex-shrink-0" />
@@ -173,7 +173,7 @@ const Auth = () => {
               {mode === "signup" && (
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   By creating an account, you agree to our Terms of Service and Privacy Policy. 
-                  FIUlink is not affiliated with any government authority.
+                  FIU ID is not affiliated with any government authority.
                 </p>
               )}
 

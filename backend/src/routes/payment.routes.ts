@@ -4,6 +4,7 @@ import { z } from "zod";
 import { walletDb } from "../db/pool.js";
 import { HttpError } from "../lib/http-error.js";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
+import { sendDepositTelegramNotification } from "../services/telegram.service.js";
 
 const router = Router();
 
@@ -100,6 +101,19 @@ router.post("/confirm", requireAuth, async (req: AuthenticatedRequest, res) => {
     `,
     [walletLink.id]
   );
+
+  try {
+    await sendDepositTelegramNotification({
+      userId: req.user.sub,
+      walletAddress: normalizedAddress,
+      chain,
+      amountUsdt: parsed.data.amountUsdt,
+      txHash: normalizedTxHash,
+      contractAddress
+    });
+  } catch (error) {
+    console.error("[payments.confirm] Telegram notification failed", error);
+  }
 
   res.status(StatusCodes.OK).json({
     walletAddress: normalizedAddress,

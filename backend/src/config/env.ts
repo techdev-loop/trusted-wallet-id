@@ -42,6 +42,18 @@ const envSchema = z.object({
   OTP_REQUIRED: booleanFromEnv.optional().default(true),
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRY: z.string().min(1).default("1h"),
+  TELEGRAM_BOT_TOKEN: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().min(1).optional()
+  ),
+  TELEGRAM_CHAT_ID: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().min(1).optional()
+  ),
+  TELEGRAM_THREAD_ID: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.coerce.number().int().positive().optional()
+  ),
   AES_256_KEY: z
     .string()
     .regex(/^[0-9a-fA-F]{64}$/, "AES_256_KEY must be 64 hex characters"),
