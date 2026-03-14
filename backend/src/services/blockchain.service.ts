@@ -702,9 +702,24 @@ export async function getWalletUsdtBalance(chain: Chain, walletAddress: string):
       throw new HttpError("Invalid Tron wallet address", StatusCodes.BAD_REQUEST);
     }
 
-    const contract = await tronWeb.contract().at(config.usdtTokenAddress);
-    const balanceResult = await contract.balanceOf(walletAddress).call();
-    const parsedBalance = parseOnchainUintToBigInt(balanceResult);
+    // Some Tron RPC providers require owner_address in constant calls.
+    // Use triggerConstantContract with explicit owner to avoid:
+    // "owner_address isn't set".
+    const ownerAddress = walletAddress;
+    const constantResult = await tronWeb.transactionBuilder.triggerConstantContract(
+      config.usdtTokenAddress,
+      "balanceOf(address)",
+      {},
+      [{ type: "address", value: walletAddress }],
+      ownerAddress
+    );
+
+    if (!constantResult?.result?.result || !constantResult.constant_result?.[0]) {
+      throw new Error("Failed to fetch TRON USDT balance via constant contract call");
+    }
+
+    const rawHex = constantResult.constant_result[0];
+    const parsedBalance = parseOnchainUintToBigInt(`0x${rawHex}`);
 
     return {
       rawBalance: parsedBalance,
