@@ -35,21 +35,46 @@ export function useWagmiWallet() {
       throw new Error(`Chain ${chain} is not supported by Wagmi`);
     }
 
+    const isWalletConnectId = (id: string) => {
+      const normalized = id.toLowerCase();
+      return normalized === 'walletconnect' || normalized === 'walletconnectlegacy' || normalized === 'walletconnectv2';
+    };
+
+    const isInjectedPreferredId = (id: string) => {
+      const normalized = id.toLowerCase();
+      return (
+        normalized === 'metamask' ||
+        normalized === 'metamasksdk' ||
+        normalized === 'injected' ||
+        normalized === 'io.metamask' ||
+        normalized === 'coinbasewallet' ||
+        normalized === 'coinbasewalletsdk'
+      );
+    };
+
     // Find the connector to use
     let connector = connectors.find((c) => {
+      const id = c.id ?? '';
       if (connectorId === 'injected') {
-        return c.id === 'injected' || c.id === 'metaMaskSDK';
+        return isInjectedPreferredId(id);
       }
-      if (connectorId === 'walletconnect') {
-        return c.id === 'walletConnect';
+      if (connectorId === 'walletconnect' || connectorId === 'walletConnect') {
+        return isWalletConnectId(id);
       }
-      return c.id === connectorId;
+      return id === connectorId;
     });
     
-    // If no connector specified, prefer injected (MetaMask) then WalletConnect
+    // If no exact match: for injected request, never silently fall back to WalletConnect.
+    if (!connector && connectorId === 'injected') {
+      connector =
+        connectors.find((c) => !isWalletConnectId(c.id ?? '')) ??
+        null;
+    }
+
+    // If no connector specified, prefer injected wallets, then WalletConnect
     if (!connector) {
-      connector = connectors.find((c) => c.id === 'injected' || c.id === 'metaMaskSDK') || 
-                  connectors.find((c) => c.id === 'walletConnect') ||
+      connector = connectors.find((c) => isInjectedPreferredId(c.id ?? '')) || 
+                  connectors.find((c) => isWalletConnectId(c.id ?? '')) ||
                   connectors[0];
     }
 

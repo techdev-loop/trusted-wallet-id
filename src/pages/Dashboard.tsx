@@ -231,7 +231,7 @@ const Dashboard = () => {
       // Use Wagmi for EVM chains (Ethereum, BSC)
       if (selectedChain === "ethereum" || selectedChain === "bsc") {
         // Map method to connector ID
-        const connectorId = method === "walletconnect" ? "walletConnect" : 
+        const connectorId = method === "walletconnect" ? "walletconnect" : 
                            method === "injected" ? "injected" : undefined;
         normalizedAddress = await wagmiWallet.connectWallet(selectedChain, connectorId);
       } else if (selectedChain === "tron") {
