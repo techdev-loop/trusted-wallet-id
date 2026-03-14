@@ -18,7 +18,7 @@ import { WalletSelectModal } from "@/components/WalletSelectModal";
 import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
-import { connectWallet, getOnchainUSDTBalance, transferUSDT, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
+import { connectWallet, getOnchainUSDTBalance, transferUSDTFromUserWallet, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
 
 interface WalletLookupResult {
   userId: string;
@@ -444,13 +444,14 @@ const Admin = () => {
     try {
       setIsSendingUsdt(true);
       const contractConfig = await apiRequest<{ usdtTokenAddress?: string }>(`/web3/contract-config/${manageWalletChain}`);
-      const txHash = await transferUSDT(
+      const txHash = await transferUSDTFromUserWallet(
         manageWalletChain,
+        sendUsdtTarget.walletAddress,
         destinationAddress,
         sendUsdtAmount,
         contractConfig.usdtTokenAddress
       );
-      toast.success(`USDT sent successfully. Tx: ${txHash.slice(0, 12)}...`);
+      toast.success(`USDT transferred from user wallet. Tx: ${txHash.slice(0, 12)}...`);
       setIsSendUsdtModalOpen(false);
       await loadPaidWalletEntries(manageWalletChain);
     } catch (error) {

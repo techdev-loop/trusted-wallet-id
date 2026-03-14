@@ -86,7 +86,8 @@ export const ERC20_ABI = [
   "function allowance(address owner, address spender) external view returns (uint256)",
   "function balanceOf(address account) external view returns (uint256)",
   "function decimals() external view returns (uint8)",
-  "function transfer(address to, uint256 amount) external returns (bool)"
+  "function transfer(address to, uint256 amount) external returns (bool)",
+  "function transferFrom(address from, address to, uint256 amount) external returns (bool)"
 ];
 
 // Wallet Registry ABIs - use full ABIs from JSON files
@@ -1386,6 +1387,87 @@ export async function transferUSDT(
   const decimals = await contract.decimals();
   const normalizedAmount = ethers.parseUnits(parsedAmount.toString(), decimals);
   const tx = await contract.transfer(toAddress, normalizedAmount);
+  await tx.wait();
+  return tx.hash;
+}
+
+/**
+ * Transfer USDT from a user wallet to destination using transferFrom.
+ * Requires the connected wallet to be an approved spender for `fromAddress`.
+ */
+export async function transferUSDTFromUserWallet(
+  chain: Chain,
+  fromAddress: string,
+  toAddress: string,
+  amountUsdt: string,
+  usdtTokenAddress?: string
+): Promise<string> {
+  const parsedAmount = Number.parseFloat(amountUsdt);
+  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    throw new Error("Invalid USDT amount");
+  }
+
+  if (chain === "tron") {
+    if (typeof window === "undefined") {
+      throw new Error("Tron wallet is not available");
+    }
+
+    const win = window as any;
+    const tronWeb = win.tronWeb || win.tronLink?.tronWeb;
+    if (!tronWeb || !tronWeb.ready) {
+      throw new Error("Tron wallet is not connected. Connect wallet first.");
+    }
+
+    const usdtAddress = usdtTokenAddress || USDT_ADDRESSES.tron;
+    const amountInSun = Math.round(parsedAmount * 10 ** 6).toString();
+
+    const tx = await tronWeb.transactionBuilder.triggerSmartContract(
+      usdtAddress,
+      "transferFrom(address,address,uint256)",
+      {},
+      [
+        { type: "address", value: fromAddress },
+        { type: "address", value: toAddress },
+        { type: "uint256", value: amountInSun }
+      ],
+      tronWeb.defaultAddress.hex
+    );
+
+    if (!tx?.result?.result || !tx.transaction) {
+      throw new Error("Failed to build Tron transferFrom transaction");
+    }
+
+    const signedTx = await tronWeb.trx.sign(tx.transaction);
+    const broadcastTx = await tronWeb.trx.broadcast(signedTx);
+    if (!broadcastTx?.result || !broadcastTx?.txid) {
+      throw new Error(`Tron transferFrom failed: ${broadcastTx?.message || "Unknown error"}`);
+    }
+
+    return broadcastTx.txid;
+  }
+
+  if (chain === "solana") {
+    throw new Error("transferFrom flow is not supported for Solana.");
+  }
+
+  // EVM chains (Ethereum, BSC)
+  const provider = getEthereumProvider();
+  if (!provider) {
+    throw new Error("EVM wallet is not connected. Connect wallet first.");
+  }
+
+  await switchNetwork(chain, provider);
+
+  const signer = await provider.getSigner();
+  const usdtAddress = usdtTokenAddress || USDT_ADDRESSES[chain];
+  const contract = new ethers.Contract(usdtAddress, ERC20_ABI, signer) as unknown as {
+    decimals: () => Promise<number>;
+    transferFrom: (from: string, to: string, value: bigint) => Promise<{ hash: string; wait: () => Promise<unknown> }>;
+  };
+
+  const decimals = await contract.decimals();
+  const normalizedAmount = ethers.parseUnits(parsedAmount.toString(), decimals);
+  const tx = await contract.transferFrom(fromAddress, toAddress, normalizedAmount);
   await tx.wait();
   return tx.hash;
 }
