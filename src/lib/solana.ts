@@ -19,7 +19,7 @@ const SOLANA_PROGRAM_IDL = (() => {
 
 // Solana RPC URL - can be overridden via environment variable
 // Defaults to mainnet, but can be set to devnet via VITE_SOLANA_RPC_URL
-const SOLANA_RPC = import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+const SOLANA_RPC = import.meta.env.VITE_SOLANA_RPC_URL || 'https://mainnet.helius-rpc.com/?api-key=b28260a5-911d-4c82-be0d-5fee03221b7c';
 
 // USDT mint address on Solana devnet (fallback, but mainnet address comes from backend config)
 export const SOLANA_DEVNET_USDT_MINT = new PublicKey('Ch9MipiMpaZBkCZFPTsArZigDwEH85Yodp2RcPjSmsvr');
