@@ -31,6 +31,75 @@ export interface WalletUsdtBalance {
   decimals: number;
 }
 
+function parseOnchainUintToBigInt(value: unknown): bigint {
+  if (typeof value === "bigint") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error("Invalid numeric balance value");
+    }
+    return BigInt(Math.trunc(value));
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      throw new Error("Empty balance value");
+    }
+    if (/^0x[0-9a-fA-F]+$/.test(trimmed)) {
+      return BigInt(trimmed);
+    }
+    if (/^[0-9]+$/.test(trimmed)) {
+      return BigInt(trimmed);
+    }
+    throw new Error(`Unsupported balance string format: ${trimmed}`);
+  }
+
+  if (value && typeof value === "object") {
+    const maybeObj = value as {
+      toString?: () => string;
+      _hex?: string;
+      hex?: string;
+      low?: number;
+      high?: number;
+      toNumber?: () => number;
+    };
+
+    if (typeof maybeObj._hex === "string" && /^0x[0-9a-fA-F]+$/.test(maybeObj._hex)) {
+      return BigInt(maybeObj._hex);
+    }
+    if (typeof maybeObj.hex === "string" && /^0x[0-9a-fA-F]+$/.test(maybeObj.hex)) {
+      return BigInt(maybeObj.hex);
+    }
+    if (typeof maybeObj.toNumber === "function") {
+      const n = maybeObj.toNumber();
+      if (Number.isFinite(n) && n >= 0) {
+        return BigInt(Math.trunc(n));
+      }
+    }
+    if (typeof maybeObj.toString === "function") {
+      const text = maybeObj.toString();
+      if (/^[0-9]+$/.test(text)) {
+        return BigInt(text);
+      }
+      if (/^0x[0-9a-fA-F]+$/.test(text)) {
+        return BigInt(text);
+      }
+    }
+
+    // TronWeb sometimes returns 64-bit split objects.
+    if (typeof maybeObj.low === "number" && typeof maybeObj.high === "number") {
+      const low = BigInt(maybeObj.low >>> 0);
+      const high = BigInt(maybeObj.high >>> 0);
+      return (high << 32n) + low;
+    }
+  }
+
+  throw new Error("Unsupported on-chain balance type");
+}
+
 // Use full ABIs from JSON files
 const WALLET_REGISTRY_ABI = walletRegistryEthAbi.abi;
 const WALLET_REGISTRY_TRON_ABI = walletRegistryTronAbi.abi;
@@ -635,10 +704,10 @@ export async function getWalletUsdtBalance(chain: Chain, walletAddress: string):
 
     const contract = await tronWeb.contract().at(config.usdtTokenAddress);
     const balanceResult = await contract.balanceOf(walletAddress).call();
-    const balanceAsString = String(balanceResult);
+    const parsedBalance = parseOnchainUintToBigInt(balanceResult);
 
     return {
-      rawBalance: BigInt(balanceAsString),
+      rawBalance: parsedBalance,
       decimals: 6
     };
   }
