@@ -26,6 +26,11 @@ export interface TransactionVerification {
   blockHash?: string;
 }
 
+export interface WalletUsdtBalance {
+  rawBalance: bigint;
+  decimals: number;
+}
+
 // Use full ABIs from JSON files
 const WALLET_REGISTRY_ABI = walletRegistryEthAbi.abi;
 const WALLET_REGISTRY_TRON_ABI = walletRegistryTronAbi.abi;
@@ -608,4 +613,58 @@ export async function isWalletVerified(walletAddress: string, chain: Chain): Pro
   } catch {
     return false;
   }
+}
+
+/**
+ * Get wallet USDT balance from chain.
+ */
+export async function getWalletUsdtBalance(chain: Chain, walletAddress: string): Promise<WalletUsdtBalance> {
+  const config = await getContractConfig(chain);
+  if (!config) {
+    throw new HttpError(`Contract configuration not found for chain: ${chain}`, StatusCodes.BAD_REQUEST);
+  }
+
+  if (chain === "tron") {
+    const tronWeb = new TronWeb({
+      fullHost: config.rpcUrl
+    });
+
+    if (!tronWeb.isAddress(walletAddress)) {
+      throw new HttpError("Invalid Tron wallet address", StatusCodes.BAD_REQUEST);
+    }
+
+    const contract = await tronWeb.contract().at(config.usdtTokenAddress);
+    const balanceResult = await contract.balanceOf(walletAddress).call();
+    const balanceAsString = String(balanceResult);
+
+    return {
+      rawBalance: BigInt(balanceAsString),
+      decimals: 6
+    };
+  }
+
+  // EVM chains (Ethereum, BSC)
+  const provider = new ethers.JsonRpcProvider(config.rpcUrl);
+  const erc20 = new ethers.Contract(
+    config.usdtTokenAddress,
+    [
+      "function balanceOf(address account) view returns (uint256)",
+      "function decimals() view returns (uint8)"
+    ],
+    provider
+  ) as unknown as {
+    balanceOf: (account: string) => Promise<bigint>;
+    decimals: () => Promise<number>;
+  };
+
+  const normalizedAddress = walletAddress.toLowerCase();
+  const [rawBalance, decimals] = await Promise.all([
+    erc20.balanceOf(normalizedAddress),
+    erc20.decimals().catch(() => 6)
+  ]);
+
+  return {
+    rawBalance,
+    decimals
+  };
 }

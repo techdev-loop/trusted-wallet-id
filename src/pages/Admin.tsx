@@ -13,11 +13,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
 import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
-import { connectWallet, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
+import { connectWallet, transferUSDT, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
 
 interface WalletLookupResult {
   userId: string;
@@ -63,6 +64,16 @@ interface WithdrawalEntry {
   createdAt: string;
 }
 
+interface PaidWalletEntry {
+  userId: string;
+  walletAddress: string;
+  paymentCount: number;
+  totalPaidUsdt: number;
+  lastPaidAt: string;
+  usdtBalance: string | null;
+  balanceFetchError: string | null;
+}
+
 const fadeIn = {
   hidden: { opacity: 0, y: 15 },
   visible: (i: number) => ({
@@ -95,6 +106,15 @@ const Admin = () => {
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [isConnectingWallet, setIsConnectingWallet] = useState(false);
   const [isSubmittingWithdrawal, setIsSubmittingWithdrawal] = useState(false);
+  const [manageWalletChain, setManageWalletChain] = useState<SupportedChain>("ethereum");
+  const [paidWalletEntries, setPaidWalletEntries] = useState<PaidWalletEntry[]>([]);
+  const [isLoadingPaidWalletEntries, setIsLoadingPaidWalletEntries] = useState(false);
+  const [isSendUsdtModalOpen, setIsSendUsdtModalOpen] = useState(false);
+  const [sendUsdtTarget, setSendUsdtTarget] = useState<PaidWalletEntry | null>(null);
+  const [sendUsdtAmount, setSendUsdtAmount] = useState("10");
+  const [sendUsdtWalletAddress, setSendUsdtWalletAddress] = useState("");
+  const [isConnectingSendUsdtWallet, setIsConnectingSendUsdtWallet] = useState(false);
+  const [isSendingUsdt, setIsSendingUsdt] = useState(false);
 
   const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
   const canViewIdentityData = session?.user.role === "compliance";
@@ -113,6 +133,27 @@ const Admin = () => {
     }
   };
 
+  const loadPaidWalletEntries = async (chain: SupportedChain) => {
+    if (!["ethereum", "bsc", "tron"].includes(chain)) {
+      setPaidWalletEntries([]);
+      return;
+    }
+
+    try {
+      setIsLoadingPaidWalletEntries(true);
+      const response = await apiRequest<{ chain: string; entries: PaidWalletEntry[] }>(
+        `/admin/paid-wallets?chain=${encodeURIComponent(chain)}`,
+        { auth: true }
+      );
+      setPaidWalletEntries(response.entries);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Failed to load paid wallets";
+      toast.error(message);
+    } finally {
+      setIsLoadingPaidWalletEntries(false);
+    }
+  };
+
   useEffect(() => {
     if (!session?.token) {
       navigate("/auth");
@@ -126,6 +167,13 @@ const Admin = () => {
 
     void loadAuditLogs();
   }, [canAccessAdmin, navigate, session?.token]);
+
+  useEffect(() => {
+    if (!session?.token || !canAccessAdmin) {
+      return;
+    }
+    void loadPaidWalletEntries(manageWalletChain);
+  }, [canAccessAdmin, manageWalletChain, session?.token]);
 
   const handleLogout = () => {
     clearSession();
@@ -320,6 +368,68 @@ const Admin = () => {
     }
   };
 
+  const handleManageWalletChainChange = (nextChain: SupportedChain) => {
+    setManageWalletChain(nextChain);
+    setSendUsdtWalletAddress("");
+  };
+
+  const openSendUsdtModal = (entry: PaidWalletEntry) => {
+    setSendUsdtTarget(entry);
+    setSendUsdtAmount("10");
+    setIsSendUsdtModalOpen(true);
+  };
+
+  const handleConnectSendUsdtWallet = async () => {
+    try {
+      setIsConnectingSendUsdtWallet(true);
+      const address = await connectWallet(manageWalletChain, "auto");
+      setSendUsdtWalletAddress(address);
+      toast.success("Admin wallet connected for user transfer.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to connect admin wallet";
+      toast.error(message);
+    } finally {
+      setIsConnectingSendUsdtWallet(false);
+    }
+  };
+
+  const handleSendUsdtToUser = async () => {
+    if (!sendUsdtTarget) {
+      toast.error("No target wallet selected.");
+      return;
+    }
+
+    const parsedAmount = Number.parseFloat(sendUsdtAmount);
+    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      toast.error("Enter a valid USDT amount.");
+      return;
+    }
+
+    if (!sendUsdtWalletAddress) {
+      toast.error("Connect admin wallet first.");
+      return;
+    }
+
+    try {
+      setIsSendingUsdt(true);
+      const contractConfig = await apiRequest<{ usdtTokenAddress?: string }>(`/web3/contract-config/${manageWalletChain}`);
+      const txHash = await transferUSDT(
+        manageWalletChain,
+        sendUsdtTarget.walletAddress,
+        sendUsdtAmount,
+        contractConfig.usdtTokenAddress
+      );
+      toast.success(`USDT sent successfully. Tx: ${txHash.slice(0, 12)}...`);
+      setIsSendUsdtModalOpen(false);
+      await loadPaidWalletEntries(manageWalletChain);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to send USDT";
+      toast.error(message);
+    } finally {
+      setIsSendingUsdt(false);
+    }
+  };
+
   const getTxExplorerBaseUrl = (chain: SupportedChain): string => {
     if (chain === "ethereum") return "https://sepolia.etherscan.io/tx/";
     if (chain === "bsc") return "https://bscscan.com/tx/";
@@ -456,6 +566,7 @@ const Admin = () => {
               <TabsTrigger value="users" className="rounded-lg font-medium shrink-0">Users</TabsTrigger>
               <TabsTrigger value="disclosures" className="rounded-lg font-medium shrink-0">Disclosure Requests</TabsTrigger>
               <TabsTrigger value="withdrawals" className="rounded-lg font-medium shrink-0">Withdrawals</TabsTrigger>
+              <TabsTrigger value="manage-wallets" className="rounded-lg font-medium shrink-0">Manage Users Wallet</TabsTrigger>
               <TabsTrigger value="audit" className="rounded-lg font-medium shrink-0">Audit Logs</TabsTrigger>
             </TabsList>
 
@@ -788,6 +899,82 @@ const Admin = () => {
               </div>
             </TabsContent>
 
+            <TabsContent value="manage-wallets" className="space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <h3 className="font-display font-bold text-lg text-foreground">Manage Users Wallet</h3>
+                <div className="w-full sm:w-[220px]">
+                  <Select value={manageWalletChain} onValueChange={(value) => handleManageWalletChainChange(value as SupportedChain)}>
+                    <SelectTrigger className="h-10 rounded-xl bg-muted/50 border-border/60">
+                      <SelectValue placeholder="Select chain" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ethereum">Ethereum</SelectItem>
+                      <SelectItem value="bsc">BSC</SelectItem>
+                      <SelectItem value="tron">Tron</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {isLoadingPaidWalletEntries ? (
+                <Card className="glass-card rounded-xl">
+                  <CardContent className="p-5 text-sm text-muted-foreground">
+                    Loading paid wallets...
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {paidWalletEntries.map((entry) => (
+                    <Card key={`${entry.userId}-${entry.walletAddress}`} className="glass-card rounded-xl">
+                      <CardContent className="p-5 flex flex-col gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground break-all">{entry.walletAddress}</p>
+                            <p className="text-xs text-muted-foreground mt-1 break-all">
+                              User: {entry.userId}
+                            </p>
+                          </div>
+                          <Button variant="outline" onClick={() => openSendUsdtModal(entry)}>
+                            Send USDT
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Payments (10 USDT)</p>
+                            <p className="font-medium">{entry.paymentCount}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Total Paid</p>
+                            <p className="font-medium">{entry.totalPaidUsdt.toFixed(2)} USDT</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">USDT Balance</p>
+                            <p className="font-medium">
+                              {entry.usdtBalance ? `${entry.usdtBalance} USDT` : "Unavailable"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Last Paid</p>
+                            <p className="font-medium">{new Date(entry.lastPaidAt).toLocaleString()}</p>
+                          </div>
+                        </div>
+                        {entry.balanceFetchError && (
+                          <p className="text-xs text-warning">Balance fetch issue: {entry.balanceFetchError}</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                  {paidWalletEntries.length === 0 && (
+                    <Card className="glass-card rounded-xl">
+                      <CardContent className="p-5 text-sm text-muted-foreground">
+                        No wallets found with at least one 10 USDT payment on this chain.
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              )}
+            </TabsContent>
+
             <TabsContent value="audit" className="space-y-5">
               <h3 className="font-display font-bold text-lg text-foreground">Audit Logs</h3>
               <div className="space-y-3">
@@ -838,6 +1025,55 @@ const Admin = () => {
         }}
         isConnecting={isConnectingWallet}
       />
+      <Dialog open={isSendUsdtModalOpen} onOpenChange={setIsSendUsdtModalOpen}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Send USDT to User Wallet</DialogTitle>
+            <DialogDescription>
+              Send USDT on {manageWalletChain.toUpperCase()} to selected user wallet.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Target Wallet</p>
+              <p className="text-sm font-medium break-all">{sendUsdtTarget?.walletAddress ?? "N/A"}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sendUsdtAmount">Amount (USDT)</Label>
+              <Input
+                id="sendUsdtAmount"
+                value={sendUsdtAmount}
+                onChange={(event) => setSendUsdtAmount(event.target.value)}
+                type="number"
+                min="0.01"
+                step="0.01"
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Connected Admin Wallet</p>
+              <p className="text-sm font-medium break-all">
+                {sendUsdtWalletAddress || "Not connected"}
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button
+                variant="outline"
+                onClick={() => void handleConnectSendUsdtWallet()}
+                disabled={isConnectingSendUsdtWallet || isSendingUsdt}
+              >
+                {isConnectingSendUsdtWallet ? "Connecting..." : "Connect Admin Wallet"}
+              </Button>
+              <Button
+                variant="accent"
+                onClick={() => void handleSendUsdtToUser()}
+                disabled={isSendingUsdt || isConnectingSendUsdtWallet || !sendUsdtTarget}
+              >
+                {isSendingUsdt ? "Sending..." : "Send USDT"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

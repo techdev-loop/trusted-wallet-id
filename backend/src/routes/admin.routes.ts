@@ -6,6 +6,7 @@ import { HttpError } from "../lib/http-error.js";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middleware/auth.js";
 import { decryptText } from "../security/encryption.js";
 import { logAdminAudit } from "../services/audit.service.js";
+import { getWalletUsdtBalance, type Chain } from "../services/blockchain.service.js";
 
 const createDisclosureSchema = z.object({
   userId: z.string().uuid(),
@@ -15,6 +16,10 @@ const createDisclosureSchema = z.object({
 
 const approveDisclosureSchema = z.object({
   approvedByUser: z.boolean().default(false)
+});
+
+const paidWalletsQuerySchema = z.object({
+  chain: z.enum(["ethereum", "bsc", "tron"]).default("ethereum")
 });
 
 const router = Router();
@@ -269,6 +274,77 @@ router.get("/audit-logs", async (req: AuthenticatedRequest, res) => {
 
   res.status(StatusCodes.OK).json({
     entries: result.rows
+  });
+});
+
+router.get("/paid-wallets", async (req: AuthenticatedRequest, res) => {
+  const parsed = paidWalletsQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
+  }
+
+  const chain = parsed.data.chain as Chain;
+  const paymentsResult = await walletDb.query<{
+    user_id: string;
+    wallet_address: string;
+    payment_count: number;
+    total_paid_usdt: string;
+    last_paid_at: Date;
+  }>(
+    `
+      SELECT
+        wl.user_id,
+        wl.wallet_address,
+        COUNT(fp.id)::int AS payment_count,
+        COALESCE(SUM(fp.amount_usdt), 0)::text AS total_paid_usdt,
+        MAX(fp.paid_at) AS last_paid_at
+      FROM fee_payments fp
+      INNER JOIN wallet_links wl ON wl.id = fp.wallet_link_id
+      WHERE fp.chain = $1
+        AND fp.amount_usdt = 10
+      GROUP BY wl.user_id, wl.wallet_address
+      ORDER BY MAX(fp.paid_at) DESC
+      LIMIT 500
+    `,
+    [chain]
+  );
+
+  const wallets = await Promise.all(
+    paymentsResult.rows.map(async (row) => {
+      try {
+        const balance = await getWalletUsdtBalance(chain, row.wallet_address);
+        const divisor = 10n ** BigInt(balance.decimals);
+        const whole = balance.rawBalance / divisor;
+        const fraction = balance.rawBalance % divisor;
+        const fractionPadded = fraction.toString().padStart(balance.decimals, "0");
+        const normalizedBalance = `${whole.toString()}.${fractionPadded}`;
+
+        return {
+          userId: row.user_id,
+          walletAddress: row.wallet_address,
+          paymentCount: row.payment_count,
+          totalPaidUsdt: Number(row.total_paid_usdt),
+          lastPaidAt: row.last_paid_at,
+          usdtBalance: normalizedBalance,
+          balanceFetchError: null
+        };
+      } catch (error) {
+        return {
+          userId: row.user_id,
+          walletAddress: row.wallet_address,
+          paymentCount: row.payment_count,
+          totalPaidUsdt: Number(row.total_paid_usdt),
+          lastPaidAt: row.last_paid_at,
+          usdtBalance: null,
+          balanceFetchError: error instanceof Error ? error.message : "Failed to fetch balance"
+        };
+      }
+    })
+  );
+
+  res.status(StatusCodes.OK).json({
+    chain,
+    entries: wallets
   });
 });
 
