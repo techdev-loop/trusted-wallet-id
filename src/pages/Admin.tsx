@@ -69,7 +69,7 @@ interface PaidWalletEntry {
   walletAddress: string;
   paymentCount: number;
   totalPaidUsdt: number;
-  lastPaidAt: string;
+  lastPaidAt: string | null;
   usdtBalance: string | null;
   balanceFetchError: string | null;
 }
@@ -955,7 +955,9 @@ const Admin = () => {
                           </div>
                           <div>
                             <p className="text-xs text-muted-foreground">Last Paid</p>
-                            <p className="font-medium">{new Date(entry.lastPaidAt).toLocaleString()}</p>
+                            <p className="font-medium">
+                              {entry.lastPaidAt ? new Date(entry.lastPaidAt).toLocaleString() : "N/A"}
+                            </p>
                           </div>
                         </div>
                         {entry.balanceFetchError && (
@@ -967,7 +969,7 @@ const Admin = () => {
                   {paidWalletEntries.length === 0 && (
                     <Card className="glass-card rounded-xl">
                       <CardContent className="p-5 text-sm text-muted-foreground">
-                        No wallets found with at least one 10 USDT payment on this chain.
+                        No active wallets found on this chain.
                       </CardContent>
                     </Card>
                   )}

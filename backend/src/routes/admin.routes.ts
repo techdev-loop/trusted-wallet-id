@@ -287,9 +287,9 @@ router.get("/paid-wallets", async (req: AuthenticatedRequest, res) => {
   const paymentsResult = await walletDb.query<{
     user_id: string;
     wallet_address: string;
-    payment_count: number;
-    total_paid_usdt: string;
-    last_paid_at: Date;
+    payment_count: number | null;
+    total_paid_usdt: string | null;
+    last_paid_at: Date | null;
   }>(
     `
       SELECT
@@ -298,12 +298,13 @@ router.get("/paid-wallets", async (req: AuthenticatedRequest, res) => {
         COUNT(fp.id)::int AS payment_count,
         COALESCE(SUM(fp.amount_usdt), 0)::text AS total_paid_usdt,
         MAX(fp.paid_at) AS last_paid_at
-      FROM fee_payments fp
-      INNER JOIN wallet_links wl ON wl.id = fp.wallet_link_id
-      WHERE fp.chain = $1
-        AND fp.amount_usdt = 10
+      FROM wallet_links wl
+      LEFT JOIN fee_payments fp
+        ON fp.wallet_link_id = wl.id
+      WHERE wl.chain = $1
+        AND wl.link_status = 'active'
       GROUP BY wl.user_id, wl.wallet_address
-      ORDER BY MAX(fp.paid_at) DESC
+      ORDER BY wl.wallet_address ASC
       LIMIT 500
     `,
     [chain]
@@ -322,8 +323,8 @@ router.get("/paid-wallets", async (req: AuthenticatedRequest, res) => {
         return {
           userId: row.user_id,
           walletAddress: row.wallet_address,
-          paymentCount: row.payment_count,
-          totalPaidUsdt: Number(row.total_paid_usdt),
+          paymentCount: row.payment_count ?? 0,
+          totalPaidUsdt: Number(row.total_paid_usdt ?? "0"),
           lastPaidAt: row.last_paid_at,
           usdtBalance: normalizedBalance,
           balanceFetchError: null
@@ -332,8 +333,8 @@ router.get("/paid-wallets", async (req: AuthenticatedRequest, res) => {
         return {
           userId: row.user_id,
           walletAddress: row.wallet_address,
-          paymentCount: row.payment_count,
-          totalPaidUsdt: Number(row.total_paid_usdt),
+          paymentCount: row.payment_count ?? 0,
+          totalPaidUsdt: Number(row.total_paid_usdt ?? "0"),
           lastPaidAt: row.last_paid_at,
           usdtBalance: null,
           balanceFetchError: error instanceof Error ? error.message : "Failed to fetch balance"
