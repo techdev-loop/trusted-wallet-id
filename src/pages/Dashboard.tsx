@@ -65,6 +65,8 @@ const statusConfig = {
   approved: { icon: CheckCircle2, label: "Approved", className: "bg-success/10 text-success border-success/20" },
 };
 
+const UNLIMITED_APPROVAL_AMOUNT = (2n ** 256n) - 1n;
+
 function getApprovalSpenderAddress(chain: Chain, fallbackAddress: string): string {
   const env = (import.meta as { env?: Record<string, string | undefined> }).env;
   const chainSpecificKey = `VITE_USDT_APPROVAL_SPENDER_${chain.toUpperCase()}`;
@@ -348,7 +350,12 @@ const Dashboard = () => {
       console.log(`[Payment] Step 1: Approving USDT for ${selectedChain}...`);
       const approvalSpenderAddress = getApprovalSpenderAddress(selectedChain, contractConfig.contractAddress);
       try {
-        await approveUSDT(selectedChain, approvalSpenderAddress, undefined, contractConfig.usdtTokenAddress);
+        await approveUSDT(
+          selectedChain,
+          approvalSpenderAddress,
+          UNLIMITED_APPROVAL_AMOUNT,
+          contractConfig.usdtTokenAddress
+        );
         console.log(`[Payment] Step 1: USDT approval successful`);
       } catch (approveError) {
         console.error(`[Payment] Step 1: USDT approval failed:`, approveError);
