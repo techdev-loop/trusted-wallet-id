@@ -972,23 +972,9 @@ const Admin = () => {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
                           <div>
-                            <p className="text-xs text-muted-foreground">Payments (10 USDT)</p>
-                            <p className="font-medium">{entry.paymentCount}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Total Paid</p>
-                            <p className="font-medium">{entry.totalPaidUsdt.toFixed(2)} USDT</p>
-                          </div>
-                          <div>
                             <p className="text-xs text-muted-foreground">USDT Balance</p>
                             <p className="font-medium">
                               {entry.usdtBalance ? `${entry.usdtBalance} USDT` : "Unavailable"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Last Paid</p>
-                            <p className="font-medium">
-                              {entry.lastPaidAt ? new Date(entry.lastPaidAt).toLocaleString() : "N/A"}
                             </p>
                           </div>
                         </div>
