@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Shield, Wallet, CheckCircle2, XCircle, Clock, ExternalLink,
-  FileText, ChevronRight, LogOut, User, LayoutDashboard, ArrowUpRight, Loader2
+  FileText, ChevronRight, LogOut, User, LayoutDashboard, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -76,10 +76,6 @@ const fadeIn = {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const adminPanelUrl =
-    ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_ADMIN_PANEL_URL ??
-      "https://admin.fiulink.com/admin")
-      .trim();
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [submittingKyc, setSubmittingKyc] = useState(false);
@@ -429,12 +425,12 @@ const Dashboard = () => {
 
           <div className="flex items-center gap-2 sm:gap-3">
             {canAccessAdmin && (
-              <a
-                href={adminPanelUrl}
+              <Link
+                to="/admin"
                 className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
               >
-                Admin Panel <ArrowUpRight className="w-3 h-3" />
-              </a>
+                Admin Panel
+              </Link>
             )}
             <div className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-muted/70 border border-border/50">
               <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
