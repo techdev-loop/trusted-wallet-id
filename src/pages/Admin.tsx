@@ -18,7 +18,7 @@ import { WalletSelectModal } from "@/components/WalletSelectModal";
 import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
-import { connectWallet, transferUSDT, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
+import { connectWallet, getOnchainUSDTBalance, transferUSDT, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
 
 interface WalletLookupResult {
   userId: string;
@@ -141,11 +141,34 @@ const Admin = () => {
 
     try {
       setIsLoadingPaidWalletEntries(true);
-      const response = await apiRequest<{ chain: string; entries: PaidWalletEntry[] }>(
-        `/admin/paid-wallets?chain=${encodeURIComponent(chain)}`,
-        { auth: true }
+      const [response, contractConfig] = await Promise.all([
+        apiRequest<{ chain: string; entries: PaidWalletEntry[] }>(
+          `/admin/paid-wallets?chain=${encodeURIComponent(chain)}`,
+          { auth: true }
+        ),
+        apiRequest<{ usdtTokenAddress?: string }>(`/web3/contract-config/${chain}`)
+      ]);
+
+      const entriesWithBalance = await Promise.all(
+        response.entries.map(async (entry) => {
+          try {
+            const balance = await getOnchainUSDTBalance(chain, entry.walletAddress, contractConfig.usdtTokenAddress);
+            return {
+              ...entry,
+              usdtBalance: balance.formattedBalance,
+              balanceFetchError: null
+            };
+          } catch (error) {
+            return {
+              ...entry,
+              usdtBalance: null,
+              balanceFetchError: error instanceof Error ? error.message : "Failed to fetch on-chain balance"
+            };
+          }
+        })
       );
-      setPaidWalletEntries(response.entries);
+
+      setPaidWalletEntries(entriesWithBalance);
     } catch (error) {
       const message = error instanceof ApiError ? error.message : "Failed to load paid wallets";
       toast.error(message);

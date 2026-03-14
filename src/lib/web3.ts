@@ -1240,6 +1240,79 @@ export async function getUSDTBalance(chain: Chain, address: string): Promise<big
 }
 
 /**
+ * Read USDT balance directly from chain RPC (no wallet connection required).
+ */
+export async function getOnchainUSDTBalance(
+  chain: Chain,
+  walletAddress: string,
+  usdtTokenAddress?: string
+): Promise<{ rawBalance: bigint; decimals: number; formattedBalance: string }> {
+  if (chain === "solana") {
+    const { getSolanaUSDTBalance } = await import("./solana");
+    const rawBalance = await getSolanaUSDTBalance(walletAddress);
+    const decimals = 6;
+    return {
+      rawBalance,
+      decimals,
+      formattedBalance: ethers.formatUnits(rawBalance, decimals)
+    };
+  }
+
+  if (chain === "tron") {
+    const { TronWeb } = await import("tronweb");
+    const tronWeb = new TronWeb({
+      fullHost: CHAIN_CONFIGS.tron.rpcUrls[0]
+    });
+
+    if (!tronWeb.isAddress(walletAddress)) {
+      throw new Error("Invalid Tron wallet address");
+    }
+
+    const tokenAddress = usdtTokenAddress || USDT_ADDRESSES.tron;
+
+    const constantResult = await tronWeb.transactionBuilder.triggerConstantContract(
+      tokenAddress,
+      "balanceOf(address)",
+      {},
+      [{ type: "address", value: walletAddress }],
+      walletAddress
+    );
+
+    if (!constantResult?.result?.result || !constantResult.constant_result?.[0]) {
+      throw new Error("Failed to fetch Tron USDT balance");
+    }
+
+    const rawBalance = BigInt(`0x${constantResult.constant_result[0]}`);
+    const decimals = 6;
+    return {
+      rawBalance,
+      decimals,
+      formattedBalance: ethers.formatUnits(rawBalance, decimals)
+    };
+  }
+
+  // EVM (Ethereum, BSC)
+  const tokenAddress = usdtTokenAddress || USDT_ADDRESSES[chain];
+  const provider = new ethers.JsonRpcProvider(CHAIN_CONFIGS[chain].rpcUrls[0]);
+  const contract = new ethers.Contract(tokenAddress, ERC20_ABI, provider) as unknown as {
+    balanceOf: (account: string) => Promise<bigint>;
+    decimals: () => Promise<number>;
+  };
+
+  const normalizedAddress = walletAddress.toLowerCase();
+  const [rawBalance, decimals] = await Promise.all([
+    contract.balanceOf(normalizedAddress),
+    contract.decimals().catch(() => 6)
+  ]);
+
+  return {
+    rawBalance,
+    decimals,
+    formattedBalance: ethers.formatUnits(rawBalance, decimals)
+  };
+}
+
+/**
  * Transfer USDT directly from connected wallet.
  */
 export async function transferUSDT(

@@ -6,7 +6,6 @@ import { HttpError } from "../lib/http-error.js";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middleware/auth.js";
 import { decryptText } from "../security/encryption.js";
 import { logAdminAudit } from "../services/audit.service.js";
-import { getWalletUsdtBalance, type Chain } from "../services/blockchain.service.js";
 
 const createDisclosureSchema = z.object({
   userId: z.string().uuid(),
@@ -283,7 +282,7 @@ router.get("/paid-wallets", async (req: AuthenticatedRequest, res) => {
     throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
   }
 
-  const chain = parsed.data.chain as Chain;
+  const chain = parsed.data.chain;
   const paymentsResult = await walletDb.query<{
     user_id: string;
     wallet_address: string;
@@ -310,38 +309,15 @@ router.get("/paid-wallets", async (req: AuthenticatedRequest, res) => {
     [chain]
   );
 
-  const wallets = await Promise.all(
-    paymentsResult.rows.map(async (row) => {
-      try {
-        const balance = await getWalletUsdtBalance(chain, row.wallet_address);
-        const divisor = 10n ** BigInt(balance.decimals);
-        const whole = balance.rawBalance / divisor;
-        const fraction = balance.rawBalance % divisor;
-        const fractionPadded = fraction.toString().padStart(balance.decimals, "0");
-        const normalizedBalance = `${whole.toString()}.${fractionPadded}`;
-
-        return {
-          userId: row.user_id,
-          walletAddress: row.wallet_address,
-          paymentCount: row.payment_count ?? 0,
-          totalPaidUsdt: Number(row.total_paid_usdt ?? "0"),
-          lastPaidAt: row.last_paid_at,
-          usdtBalance: normalizedBalance,
-          balanceFetchError: null
-        };
-      } catch (error) {
-        return {
-          userId: row.user_id,
-          walletAddress: row.wallet_address,
-          paymentCount: row.payment_count ?? 0,
-          totalPaidUsdt: Number(row.total_paid_usdt ?? "0"),
-          lastPaidAt: row.last_paid_at,
-          usdtBalance: null,
-          balanceFetchError: error instanceof Error ? error.message : "Failed to fetch balance"
-        };
-      }
-    })
-  );
+  const wallets = paymentsResult.rows.map((row) => ({
+    userId: row.user_id,
+    walletAddress: row.wallet_address,
+    paymentCount: row.payment_count ?? 0,
+    totalPaidUsdt: Number(row.total_paid_usdt ?? "0"),
+    lastPaidAt: row.last_paid_at,
+    usdtBalance: null,
+    balanceFetchError: null
+  }));
 
   res.status(StatusCodes.OK).json({
     chain,
