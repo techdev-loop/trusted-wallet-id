@@ -32,7 +32,7 @@ const Navbar = () => {
           <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-all duration-300">
             <Shield className="w-4 h-4 text-accent-foreground" />
           </div>
-          <span className="font-display font-bold text-lg tracking-tight text-foreground">FIUlink</span>
+          <span className="font-display font-bold text-lg tracking-tight text-foreground">FIU ID</span>
         </Link>
 
         <div className="hidden md:flex items-center gap-8">

@@ -39,14 +39,14 @@ const Footer = () => {
               <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
                 <Shield className="w-4 h-4 text-accent-foreground" />
               </div>
-              <span className="font-display font-bold text-xl">FIUlink</span>
+              <span className="font-display font-bold text-xl">FIU ID</span>
             </Link>
             <p className="text-primary-foreground/55 text-sm max-w-sm leading-relaxed mb-6">
-              A private Web3 identity-linked wallet registry platform. KYC verification with enterprise-grade encryption and full regulatory compliance.
+              A private Web3 identity wallet registry platform. KYC verification with enterprise-grade encryption and full regulatory compliance.
             </p>
             <p className="text-primary-foreground/35 text-xs leading-relaxed">
               {legalNotice?.disclaimer ??
-                "FIUlink is not affiliated with any government authority. All data handling complies with applicable regulations."}
+                "FIU ID is not affiliated with any government authority. All data handling complies with applicable regulations."}
             </p>
           </div>
 
@@ -91,7 +91,7 @@ const Footer = () => {
 
         <div className="border-t border-primary-foreground/10 pt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <p className="text-xs text-primary-foreground/35 text-left">
-            © {new Date().getFullYear()} FIUlink. All rights reserved.
+            © {new Date().getFullYear()} FIU ID. All rights reserved.
           </p>
           <div className="flex items-center gap-5">
             <a href="#" className="text-xs text-primary-foreground/35 hover:text-primary-foreground/75 transition-colors">Status</a>
