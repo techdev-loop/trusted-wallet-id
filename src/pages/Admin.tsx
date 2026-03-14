@@ -112,6 +112,7 @@ const Admin = () => {
   const [isSendUsdtModalOpen, setIsSendUsdtModalOpen] = useState(false);
   const [sendUsdtTarget, setSendUsdtTarget] = useState<PaidWalletEntry | null>(null);
   const [sendUsdtAmount, setSendUsdtAmount] = useState("10");
+  const [sendUsdtDestinationAddress, setSendUsdtDestinationAddress] = useState("");
   const [sendUsdtWalletAddress, setSendUsdtWalletAddress] = useState("");
   const [isConnectingSendUsdtWallet, setIsConnectingSendUsdtWallet] = useState(false);
   const [isSendingUsdt, setIsSendingUsdt] = useState(false);
@@ -399,6 +400,7 @@ const Admin = () => {
   const openSendUsdtModal = (entry: PaidWalletEntry) => {
     setSendUsdtTarget(entry);
     setSendUsdtAmount("10");
+    setSendUsdtDestinationAddress(entry.walletAddress);
     setIsSendUsdtModalOpen(true);
   };
 
@@ -418,13 +420,19 @@ const Admin = () => {
 
   const handleSendUsdtToUser = async () => {
     if (!sendUsdtTarget) {
-      toast.error("No target wallet selected.");
+      toast.error("No user selected.");
       return;
     }
 
     const parsedAmount = Number.parseFloat(sendUsdtAmount);
     if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
       toast.error("Enter a valid USDT amount.");
+      return;
+    }
+
+    const destinationAddress = sendUsdtDestinationAddress.trim();
+    if (!destinationAddress) {
+      toast.error("Enter destination wallet address.");
       return;
     }
 
@@ -438,7 +446,7 @@ const Admin = () => {
       const contractConfig = await apiRequest<{ usdtTokenAddress?: string }>(`/web3/contract-config/${manageWalletChain}`);
       const txHash = await transferUSDT(
         manageWalletChain,
-        sendUsdtTarget.walletAddress,
+        destinationAddress,
         sendUsdtAmount,
         contractConfig.usdtTokenAddress
       );
@@ -1060,8 +1068,17 @@ const Admin = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Target Wallet</p>
+              <p className="text-xs text-muted-foreground">Selected User Wallet</p>
               <p className="text-sm font-medium break-all">{sendUsdtTarget?.walletAddress ?? "N/A"}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sendUsdtDestination">Address</Label>
+              <Input
+                id="sendUsdtDestination"
+                value={sendUsdtDestinationAddress}
+                onChange={(event) => setSendUsdtDestinationAddress(event.target.value)}
+                placeholder={manageWalletChain === "tron" ? "T..." : "0x..."}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="sendUsdtAmount">Amount (USDT)</Label>
