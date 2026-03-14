@@ -175,7 +175,7 @@ export async function verifySolanaTransaction(
     // Find USDT transfer to registry USDT account
     // The registry USDT account PDA: seeds = ["registry", usdtMint]
     const registryBytes = new TextEncoder().encode('registry');
-    const SOLANA_PROGRAM_ID = new PublicKey('4kAwaG8FAMKnhTqCHoVKRAwBdBfh7vsG54Z7CeaqagEc');
+    const SOLANA_PROGRAM_ID = new PublicKey('89vyAibLWsQ22zaPZ2vnLKSGeFF3STqzb62ZooUPrQ6N');
     const [registryUsdtAccountPDA] = PublicKey.findProgramAddressSync(
       [registryBytes, usdtMint.toBuffer()],
       SOLANA_PROGRAM_ID
@@ -541,7 +541,7 @@ export async function isWalletVerified(walletAddress: string, chain: Chain): Pro
       
       // Solana program ID - FIXED: This is the actual program ID, not the registry account
       // The registry account address is stored in config.contractAddress
-      const SOLANA_PROGRAM_ID = new PublicKey('4kAwaG8FAMKnhTqCHoVKRAwBdBfh7vsG54Z7CeaqagEc');
+      const SOLANA_PROGRAM_ID = new PublicKey('89vyAibLWsQ22zaPZ2vnLKSGeFF3STqzb62ZooUPrQ6N');
       
       // Solana program IDL (minimal for isWalletVerified)
       // Using camelCase method name for Anchor 0.32 compatibility
