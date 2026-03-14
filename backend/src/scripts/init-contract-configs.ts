@@ -57,8 +57,8 @@ async function initContractConfigs() {
         : "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // Mainnet USDT
       networkName: process.env.SOLANA_NETWORK || "mainnet",
       rpcUrl: process.env.SOLANA_RPC_URL || (process.env.SOLANA_NETWORK === "devnet"
-        ? "https://api.devnet.solana.com"
-        : "https://api.mainnet-beta.solana.com"),
+        ? "https://mainnet.helius-rpc.com/?api-key=b28260a5-911d-4c82-be0d-5fee03221b7c"
+        : "https://mainnet.helius-rpc.com/?api-key=b28260a5-911d-4c82-be0d-5fee03221b7c"),
       isActive: true
     }
   ];

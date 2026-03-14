@@ -67,7 +67,7 @@ export const CHAIN_CONFIGS: Record<Chain, ChainConfig> = {
       symbol: "SOL",
       decimals: 9
     },
-    rpcUrls: ["https://api.mainnet-beta.solana.com"],
+    rpcUrls: ["https://mainnet.helius-rpc.com/?api-key=b28260a5-911d-4c82-be0d-5fee03221b7c"],
     blockExplorerUrls: ["https://explorer.solana.com"]
   }
 };
