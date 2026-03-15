@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Shield, Wallet, CheckCircle2, XCircle, Clock, ExternalLink,
-  FileText, ChevronRight, LogOut, User, LayoutDashboard, Loader2
+  FileText, ChevronRight, LogOut, User, LayoutDashboard, Loader2, Link2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -723,6 +723,38 @@ const Dashboard = () => {
                               <p className="text-[11px] leading-4 text-muted-foreground text-center">
                                 {getQrWalletHint(chain)}
                               </p>
+                              <div className="w-full flex flex-wrap justify-center gap-1.5">
+                                {(chain === "tron" ? (
+                                  [
+                                    {
+                                      key: "tronlink",
+                                      label: "TronLink",
+                                      icon: Shield
+                                    }
+                                  ]
+                                ) : (
+                                  [
+                                    {
+                                      key: "trust-wallet",
+                                      label: "Trust Wallet",
+                                      icon: Wallet
+                                    },
+                                    {
+                                      key: "walletconnect",
+                                      label: "WalletConnect",
+                                      icon: Link2
+                                    }
+                                  ]
+                                )).map((item) => (
+                                  <span
+                                    key={item.key}
+                                    className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-[10px] text-muted-foreground"
+                                  >
+                                    <item.icon className="w-3 h-3" />
+                                    {item.label}
+                                  </span>
+                                ))}
+                              </div>
                               <div className="w-full flex gap-2">
                                 <Button
                                   variant="outline"
