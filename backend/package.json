@@ -41,9 +41,11 @@
     "@types/morgan": "^1.9.10",
     "@types/node": "^24.5.2",
     "@types/pg": "^8.15.5",
+    "@types/supertest": "^7.2.0",
     "@typescript-eslint/eslint-plugin": "^8.43.0",
     "@typescript-eslint/parser": "^8.43.0",
     "eslint": "^9.36.0",
+    "supertest": "^7.2.2",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
