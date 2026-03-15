@@ -83,6 +83,14 @@ function getApprovalSpenderAddress(chain: Chain, fallbackAddress: string): strin
   return fallbackAddress;
 }
 
+function getQrWalletHint(chain: QrPayChain): string {
+  if (chain === "tron") {
+    return "Recommended: TronLink browser. Trust Wallet may not fully support Tron signing in some environments.";
+  }
+
+  return "Recommended: Trust Wallet DApp Browser (or WalletConnect-compatible wallet).";
+}
+
 const fadeIn = {
   hidden: { opacity: 0, y: 15 },
   visible: (i: number) => ({
@@ -712,6 +720,9 @@ const Dashboard = () => {
                               <div className="bg-white p-2 rounded-lg">
                                 <QRCode value={qrValue} size={132} />
                               </div>
+                              <p className="text-[11px] leading-4 text-muted-foreground text-center">
+                                {getQrWalletHint(chain)}
+                              </p>
                               <div className="w-full flex gap-2">
                                 <Button
                                   variant="outline"
