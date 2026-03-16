@@ -287,8 +287,18 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         return address;
       }
 
-      // Direct injected connection first (especially important for Trust Wallet mobile).
-      if (adapterType === 'auto' || adapterType === 'trust') {
+      // Trust Wallet selection: use direct injected Trust/Tron flow only.
+      if (adapterType === 'trust') {
+        const trustAddress = await connectInjectedTronDirect(15000);
+        if (trustAddress) {
+          setAddress(trustAddress);
+          return trustAddress;
+        }
+        throw new Error('Trust Wallet Tron provider not available. Open this site in Trust Wallet Discover and allow Tron account access.');
+      }
+
+      // Direct injected connection first (especially important on mobile).
+      if (adapterType === 'auto') {
         const directAddress = await connectInjectedTronDirect();
         if (directAddress) {
           setAddress(directAddress);

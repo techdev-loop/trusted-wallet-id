@@ -256,7 +256,7 @@ const Dashboard = () => {
         const tronAdapterByWalletId: Record<string, TronAdapterType> = {
           tronlink: "tronlink",
           tokenpocket: "tokenpocket",
-          trust: "auto",
+          trust: "trust",
           "metamask-tron": "metamask",
           okxwallet: "okxwallet",
           safepal: "auto",
