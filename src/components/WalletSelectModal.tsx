@@ -255,13 +255,28 @@ export function WalletSelectModal({
     return "not-installed";
   };
 
+  const openInstallLink = (url: string) => {
+    const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+    if (isMobile) {
+      window.location.href = url;
+      return;
+    }
+
+    const openedWindow = window.open(url, "_blank", "noopener,noreferrer");
+    if (!openedWindow) {
+      window.location.href = url;
+    }
+  };
+
   const handleWalletClick = async (wallet: WalletOption) => {
     // For Tron wallets, the TronWallet adapter will handle connection automatically
     // No need to show manual instructions - the adapter handles mobile app opening
 
-    // Check if wallet needs to be installed
-    if (wallet.isInstalled === false && wallet.installUrl) {
-      window.open(wallet.installUrl, "_blank");
+    const status = getWalletStatus(wallet);
+
+    // If wallet is not installed, open install page.
+    if (status === "not-installed" && wallet.installUrl) {
+      openInstallLink(wallet.installUrl);
       return;
     }
 
