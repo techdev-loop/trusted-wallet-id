@@ -160,6 +160,7 @@ export function WalletSelectModal({
     if (selectedChain === "tron") {
       if (typeof window !== "undefined") {
         const win = window as any;
+        const userAgent = String(navigator.userAgent || "").toLowerCase();
         // TronLink injects tronWeb or tronLink
         if (win.tronWeb || win.tronLink) {
           detected.push("tronlink");
@@ -177,7 +178,11 @@ export function WalletSelectModal({
             }
           }
         }
-        if (win.trustwallet?.tronLink) {
+        if (
+          win.trustwallet?.tronLink ||
+          win.ethereum?.isTrust ||
+          userAgent.includes("trustwallet")
+        ) {
           detected.push("trust");
         }
         if (win.ethereum?.isMetaMask || win.ethereum?.providers?.some((provider: any) => provider?.isMetaMask)) {

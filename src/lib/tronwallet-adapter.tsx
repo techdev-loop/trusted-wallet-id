@@ -99,15 +99,88 @@ const AUTO_ADAPTER_PRIORITY: Exclude<TronAdapterType, 'auto' | 'walletconnect'>[
   'trust',
 ];
 
-function getInjectedTronAddress(): string | null {
+type InjectedTronWeb = {
+  ready?: boolean;
+  defaultAddress?: { base58?: string };
+  trx?: {
+    signMessageV2?: (messageHex: string) => Promise<string>;
+    signMessage?: (messageHex: string) => Promise<string>;
+  };
+};
+
+type InjectedTronRequestSource = {
+  request?: (payload: { method: string }) => Promise<unknown>;
+  tronWeb?: InjectedTronWeb;
+};
+
+function getInjectedTronWeb(): InjectedTronWeb | null {
   if (typeof window === 'undefined') return null;
   const win = window as unknown as {
-    tronWeb?: { ready?: boolean; defaultAddress?: { base58?: string } };
-    tronLink?: { tronWeb?: { ready?: boolean; defaultAddress?: { base58?: string } } };
+    tronWeb?: InjectedTronWeb;
+    tronLink?: InjectedTronRequestSource;
+    trustwallet?: { tronLink?: InjectedTronRequestSource };
+    okxwallet?: { tronLink?: InjectedTronRequestSource };
   };
-  const tronWeb = win.tronWeb ?? win.tronLink?.tronWeb;
-  if (!tronWeb?.ready) return null;
+  return (
+    win.tronWeb ??
+    win.tronLink?.tronWeb ??
+    win.trustwallet?.tronLink?.tronWeb ??
+    win.okxwallet?.tronLink?.tronWeb ??
+    null
+  );
+}
+
+function getInjectedTronAddress(requireReady = true): string | null {
+  const tronWeb = getInjectedTronWeb();
+  if (!tronWeb) return null;
+  if (requireReady && !tronWeb.ready) return null;
   return tronWeb.defaultAddress?.base58 ?? null;
+}
+
+async function requestInjectedTronAccess(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  const win = window as unknown as {
+    tronLink?: InjectedTronRequestSource;
+    trustwallet?: { tronLink?: InjectedTronRequestSource };
+    okxwallet?: { tronLink?: InjectedTronRequestSource };
+    tron?: InjectedTronRequestSource;
+  };
+
+  const requestSources: InjectedTronRequestSource[] = [
+    win.tronLink,
+    win.trustwallet?.tronLink,
+    win.okxwallet?.tronLink,
+    win.tron,
+  ].filter((source): source is InjectedTronRequestSource => Boolean(source?.request));
+
+  for (const source of requestSources) {
+    try {
+      await source.request?.({ method: 'tron_requestAccounts' });
+      return;
+    } catch {
+      // Try other request sources.
+    }
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function connectInjectedTronDirect(timeoutMs = 8000): Promise<string | null> {
+  const immediate = getInjectedTronAddress(false);
+  if (immediate) return immediate;
+
+  await requestInjectedTronAccess();
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const address = getInjectedTronAddress(false);
+    if (address) return address;
+    await sleep(250);
+  }
+
+  return getInjectedTronAddress(false);
 }
 
 // TronWallet Provider component
@@ -196,15 +269,17 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         }
 
         if (lastAutoError) {
-          const injectedAddress = getInjectedTronAddress();
+          const injectedAddress = await connectInjectedTronDirect();
           if (injectedAddress) {
+            setAddress(injectedAddress);
             return injectedAddress;
           }
           throw lastAutoError;
         }
 
-        const injectedAddress = getInjectedTronAddress();
+        const injectedAddress = await connectInjectedTronDirect();
         if (injectedAddress) {
+          setAddress(injectedAddress);
           return injectedAddress;
         }
 
@@ -245,8 +320,9 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
               // Keep trying remaining detected adapters.
             }
           }
-          const injectedAddress = getInjectedTronAddress();
+          const injectedAddress = await connectInjectedTronDirect();
           if (injectedAddress) {
+            setAddress(injectedAddress);
             return injectedAddress;
           }
         }
@@ -288,10 +364,6 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
   }, [adapter]);
 
   const signMessage = useCallback(async (message: string): Promise<string> => {
-    if (!adapter) {
-      throw new Error('Wallet not connected. Please connect a wallet first.');
-    }
-
     if (!address) {
       throw new Error('No address available');
     }
@@ -302,7 +374,22 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         .map(b => b.toString(16).padStart(2, '0'))
         .join('');
 
-      const signature = await adapter.signMessage(messageHex);
+      let signature = '';
+      if (adapter) {
+        signature = await adapter.signMessage(messageHex);
+      } else {
+        const tronWeb = getInjectedTronWeb();
+        if (!tronWeb?.trx) {
+          throw new Error('Wallet not connected. Please connect a wallet first.');
+        }
+        if (typeof tronWeb.trx.signMessageV2 === 'function') {
+          signature = await tronWeb.trx.signMessageV2(messageHex);
+        } else if (typeof tronWeb.trx.signMessage === 'function') {
+          signature = await tronWeb.trx.signMessage(messageHex);
+        } else {
+          throw new Error('Injected Tron wallet does not support message signing.');
+        }
+      }
       
       if (!signature || signature.length < 16) {
         throw new Error('Invalid signature received from wallet');
@@ -320,7 +407,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
   const value: TronWalletContextType = {
     adapter,
     address,
-    isConnected: !!address && !!adapter,
+    isConnected: !!address,
     isConnecting,
     connect,
     disconnect,
