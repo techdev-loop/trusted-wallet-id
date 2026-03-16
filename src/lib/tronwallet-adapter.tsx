@@ -106,16 +106,17 @@ type InjectedTronWeb = {
   trx?: {
     signMessageV2?: (messageHex: string) => Promise<string>;
     signMessage?: (messageHex: string) => Promise<string>;
+    sign?: (payload: string) => Promise<string>;
   };
 };
 
 type InjectedTronRequestSource = {
-  request?: (payload: { method: string }) => Promise<unknown>;
+  request?: (payload: { method: string; params?: unknown[] }) => Promise<unknown>;
   tronWeb?: InjectedTronWeb;
 };
 
 type InjectedWindowLike = {
-  tronWeb?: InjectedTronWeb & { request?: (payload: { method: string }) => Promise<unknown> };
+  tronWeb?: InjectedTronWeb & { request?: (payload: { method: string; params?: unknown[] }) => Promise<unknown> };
   tronLink?: InjectedTronRequestSource;
   trustwallet?: {
     tronLink?: InjectedTronRequestSource;
@@ -171,19 +172,25 @@ async function requestInjectedTronAccess(): Promise<void> {
 
   for (const source of requestSources) {
     try {
-      await source.request?.({ method: 'tron_requestAccounts' });
+      await source.request?.({ method: 'tron_requestAccounts', params: [] });
       return;
     } catch {
       // Try alternative methods and request sources.
     }
     try {
-      await source.request?.({ method: 'tron_requestAccountsV2' });
+      await source.request?.({ method: 'tron_requestAccountsV2', params: [] });
       return;
     } catch {
       // Try next fallback method.
     }
     try {
-      await source.request?.({ method: 'requestAccounts' });
+      await source.request?.({ method: 'requestAccounts', params: [] });
+      return;
+    } catch {
+      // Try next fallback method.
+    }
+    try {
+      await source.request?.({ method: 'eth_requestAccounts', params: [] });
       return;
     } catch {
       // Try other request sources.
@@ -195,7 +202,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function connectInjectedTronDirect(timeoutMs = 3500): Promise<string | null> {
+async function connectInjectedTronDirect(timeoutMs = 12000): Promise<string | null> {
   const immediate = getInjectedTronAddress(false);
   if (immediate) return immediate;
 
@@ -205,7 +212,7 @@ async function connectInjectedTronDirect(timeoutMs = 3500): Promise<string | nul
   while (Date.now() - startedAt < timeoutMs) {
     const address = getInjectedTronAddress(false);
     if (address) return address;
-    await sleep(250);
+    await sleep(300);
   }
 
   return getInjectedTronAddress(false);
@@ -320,7 +327,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
           return injectedAddress;
         }
 
-        throw new Error("No Tron wallet detected. Open this site in your wallet app's browser or install a Tron wallet extension.");
+        throw new Error("No Tron wallet detected. Open this site in your wallet app browser and enable Tron account access.");
       }
 
       const createAdapter = adapters[adapterType];
@@ -423,6 +430,8 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
           signature = await tronWeb.trx.signMessageV2(messageHex);
         } else if (typeof tronWeb.trx.signMessage === 'function') {
           signature = await tronWeb.trx.signMessage(messageHex);
+        } else if (typeof tronWeb.trx.sign === 'function') {
+          signature = await tronWeb.trx.sign(messageHex);
         } else {
           throw new Error('Injected Tron wallet does not support message signing.');
         }
