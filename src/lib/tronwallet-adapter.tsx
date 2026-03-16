@@ -99,6 +99,17 @@ const AUTO_ADAPTER_PRIORITY: Exclude<TronAdapterType, 'auto' | 'walletconnect'>[
   'trust',
 ];
 
+function getInjectedTronAddress(): string | null {
+  if (typeof window === 'undefined') return null;
+  const win = window as unknown as {
+    tronWeb?: { ready?: boolean; defaultAddress?: { base58?: string } };
+    tronLink?: { tronWeb?: { ready?: boolean; defaultAddress?: { base58?: string } } };
+  };
+  const tronWeb = win.tronWeb ?? win.tronLink?.tronWeb;
+  if (!tronWeb?.ready) return null;
+  return tronWeb.defaultAddress?.base58 ?? null;
+}
+
 // TronWallet Provider component
 export function TronWalletProvider({ children }: { children: ReactNode }) {
   const [adapter, setAdapter] = useState<TronWalletAdapter | null>(null);
@@ -185,12 +196,19 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         }
 
         if (lastAutoError) {
+          const injectedAddress = getInjectedTronAddress();
+          if (injectedAddress) {
+            return injectedAddress;
+          }
           throw lastAutoError;
         }
 
-        throw new Error(
-          "No Tron wallet detected. Open this site in your wallet app's browser or install a Tron wallet extension."
-        );
+        const injectedAddress = getInjectedTronAddress();
+        if (injectedAddress) {
+          return injectedAddress;
+        }
+
+        throw new Error("No Tron wallet detected. Open this site in your wallet app's browser or install a Tron wallet extension.");
       }
 
       const createAdapter = adapters[adapterType];
@@ -226,6 +244,10 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
             } catch {
               // Keep trying remaining detected adapters.
             }
+          }
+          const injectedAddress = getInjectedTronAddress();
+          if (injectedAddress) {
+            return injectedAddress;
           }
         }
 
