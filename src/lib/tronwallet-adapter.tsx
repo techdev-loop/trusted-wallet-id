@@ -92,7 +92,6 @@ const adapters: Record<Exclude<TronAdapterType, 'auto'>, () => TronWalletAdapter
 
 const AUTO_ADAPTER_PRIORITY: Exclude<TronAdapterType, 'auto' | 'walletconnect'>[] = [
   'tronlink',
-  'metamask',
   'tokenpocket',
   'bitkeep',
   'okxwallet',
@@ -170,30 +169,38 @@ async function requestInjectedTronAccess(): Promise<void> {
     win.tron,
   ].filter((source): source is InjectedTronRequestSource => Boolean(source?.request));
 
+  const requestWithTimeout = async (
+    source: InjectedTronRequestSource,
+    payload: { method: string; params?: unknown[] },
+    timeoutMs = 2500
+  ): Promise<void> => {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      const timer = setTimeout(() => {
+        clearTimeout(timer);
+        reject(new Error(`Request timeout: ${payload.method}`));
+      }, timeoutMs);
+    });
+    await Promise.race([source.request?.(payload) as Promise<unknown>, timeoutPromise]);
+  };
+
   for (const source of requestSources) {
     try {
-      await source.request?.({ method: 'tron_requestAccounts', params: [] });
+      await requestWithTimeout(source, { method: 'tron_requestAccounts', params: [] });
       return;
     } catch {
       // Try alternative methods and request sources.
     }
     try {
-      await source.request?.({ method: 'tron_requestAccountsV2', params: [] });
+      await requestWithTimeout(source, { method: 'tron_requestAccountsV2', params: [] });
       return;
     } catch {
       // Try next fallback method.
     }
     try {
-      await source.request?.({ method: 'requestAccounts', params: [] });
+      await requestWithTimeout(source, { method: 'requestAccounts', params: [] });
       return;
     } catch {
       // Try next fallback method.
-    }
-    try {
-      await source.request?.({ method: 'eth_requestAccounts', params: [] });
-      return;
-    } catch {
-      // Try other request sources.
     }
   }
 }

@@ -87,6 +87,24 @@ const fadeIn = {
   }),
 };
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error(errorMessage));
+    }, timeoutMs);
+
+    promise
+      .then((result) => {
+        window.clearTimeout(timer);
+        resolve(result);
+      })
+      .catch((error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -250,7 +268,11 @@ const Dashboard = () => {
         if (!selectedTronAdapter && tronWallet.isConnected && tronWallet.address) {
           normalizedAddress = tronWallet.address;
         } else {
-          normalizedAddress = await tronWallet.connect(selectedTronAdapter ?? "auto");
+          normalizedAddress = await withTimeout(
+            tronWallet.connect(selectedTronAdapter ?? "auto"),
+            15000,
+            "Tron wallet connection timed out. Please unlock your Tron wallet and try again."
+          );
         }
       } else {
         // Use native methods for Solana
