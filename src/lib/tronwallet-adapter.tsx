@@ -199,7 +199,38 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
       }
 
       const currentAdapter = createAdapter();
-      await currentAdapter.connect();
+      try {
+        await currentAdapter.connect();
+      } catch (adapterError) {
+        // Some wallets expose a generic Tron provider while a specific adapter cannot bind.
+        // Fall back to auto-detection so users can still connect without QR flow.
+        const adapterErrorMessage =
+          adapterError instanceof Error ? adapterError.message.toLowerCase() : String(adapterError).toLowerCase();
+        const shouldFallbackToAuto =
+          adapterType !== 'walletconnect' &&
+          (adapterErrorMessage.includes('not found') || adapterErrorMessage.includes('wallet not found'));
+
+        if (shouldFallbackToAuto) {
+          for (const candidateType of AUTO_ADAPTER_PRIORITY) {
+            const candidate = adapters[candidateType]();
+            if (candidate.readyState === WalletReadyState.NotFound) {
+              continue;
+            }
+            try {
+              await candidate.connect();
+              if (candidate.address) {
+                setAdapter(candidate);
+                setAddress(candidate.address);
+                return candidate.address;
+              }
+            } catch {
+              // Keep trying remaining detected adapters.
+            }
+          }
+        }
+
+        throw adapterError;
+      }
       const connectedAddress = currentAdapter.address;
       
       if (!connectedAddress) {

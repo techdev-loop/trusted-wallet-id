@@ -177,7 +177,7 @@ export function WalletSelectModal({
             }
           }
         }
-        if (win.trustwallet?.tronLink || win.trustwallet) {
+        if (win.trustwallet?.tronLink) {
           detected.push("trust");
         }
         if (win.ethereum?.isMetaMask || win.ethereum?.providers?.some((provider: any) => provider?.isMetaMask)) {
