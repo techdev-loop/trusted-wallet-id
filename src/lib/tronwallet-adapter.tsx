@@ -1,14 +1,30 @@
-import { TronLinkAdapter, TokenPocketAdapter, WalletConnectAdapter } from '@tronweb3/tronwallet-adapters';
-import type { TronWalletAdapter } from '@tronweb3/tronwallet-abstract-adapter';
+import {
+  BitKeepAdapter,
+  OkxWalletAdapter,
+  TokenPocketAdapter,
+  TronLinkAdapter,
+  TrustAdapter,
+  WalletConnectAdapter,
+} from '@tronweb3/tronwallet-adapters';
+import { WalletReadyState, type Adapter as TronWalletAdapter } from '@tronweb3/tronwallet-abstract-adapter';
 import { ReactNode, createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 // TronWallet Adapter Context
+type TronAdapterType =
+  | 'auto'
+  | 'tronlink'
+  | 'tokenpocket'
+  | 'bitkeep'
+  | 'okxwallet'
+  | 'trust'
+  | 'walletconnect';
+
 interface TronWalletContextType {
   adapter: TronWalletAdapter | null;
   address: string | null;
   isConnected: boolean;
   isConnecting: boolean;
-  connect: (adapterType?: 'tronlink' | 'tokenpocket' | 'walletconnect') => Promise<string>;
+  connect: (adapterType?: TronAdapterType) => Promise<string>;
   disconnect: () => Promise<void>;
   signMessage: (message: string) => Promise<string>;
   error: Error | null;
@@ -17,13 +33,13 @@ interface TronWalletContextType {
 const TronWalletContext = createContext<TronWalletContextType | null>(null);
 
 // Available adapters
-const adapters: Record<string, () => TronWalletAdapter> = {
+const adapters: Record<Exclude<TronAdapterType, 'auto'>, () => TronWalletAdapter> = {
   tronlink: () => {
-    // TronLinkAdapter - automatically handles connection
-    // It will automatically open TronLink app on mobile if needed
+    // Keep auto flow non-intrusive (no forced app/browser opens when not installed)
     try {
       return new TronLinkAdapter({
-        openTronLinkAppOnMobile: true,
+        openTronLinkAppOnMobile: false,
+        openUrlWhenWalletNotFound: false,
         dappName: 'FIU ID',
       } as any); // Type assertion in case options aren't in types
     } catch {
@@ -31,7 +47,22 @@ const adapters: Record<string, () => TronWalletAdapter> = {
       return new TronLinkAdapter();
     }
   },
-  tokenpocket: () => new TokenPocketAdapter(),
+  tokenpocket: () => new TokenPocketAdapter({
+    openAppWithDeeplink: false,
+    openUrlWhenWalletNotFound: false,
+  }),
+  bitkeep: () => new BitKeepAdapter({
+    openAppWithDeeplink: false,
+    openUrlWhenWalletNotFound: false,
+  }),
+  okxwallet: () => new OkxWalletAdapter({
+    openAppWithDeeplink: false,
+    openUrlWhenWalletNotFound: false,
+  }),
+  trust: () => new TrustAdapter({
+    openAppWithDeeplink: false,
+    openUrlWhenWalletNotFound: false,
+  }),
   walletconnect: () => {
     const rawProjectId = (import.meta as { env?: Record<string, string | undefined> }).env
       ?.VITE_WALLETCONNECT_PROJECT_ID;
@@ -55,6 +86,14 @@ const adapters: Record<string, () => TronWalletAdapter> = {
     });
   },
 };
+
+const AUTO_ADAPTER_PRIORITY: Exclude<TronAdapterType, 'auto' | 'walletconnect'>[] = [
+  'tronlink',
+  'tokenpocket',
+  'bitkeep',
+  'okxwallet',
+  'trust',
+];
 
 // TronWallet Provider component
 export function TronWalletProvider({ children }: { children: ReactNode }) {
@@ -90,8 +129,8 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!adapter) return;
 
-    const handleAccountsChanged = (accounts: string[]) => {
-      setAddress(accounts[0] || null);
+    const handleAccountsChanged = (nextAddress: string) => {
+      setAddress(nextAddress || null);
     };
 
     const handleDisconnect = () => {
@@ -108,40 +147,54 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
     };
   }, [adapter]);
 
-  const connect = useCallback(async (adapterType: 'tronlink' | 'tokenpocket' | 'walletconnect' = 'tronlink'): Promise<string> => {
+  const connect = useCallback(async (adapterType: TronAdapterType = 'auto'): Promise<string> => {
     try {
       setIsConnecting(true);
       setError(null);
 
-      // Check if already connected with the same adapter
-      if (adapter && adapter.name === adapterType && address) {
+      // Reuse existing connection if available.
+      if (adapter && address) {
         return address;
       }
 
-      // Create adapter if not exists or different type
-      let currentAdapter = adapter;
-      if (!currentAdapter || currentAdapter.name !== adapterType) {
-        const createAdapter = adapters[adapterType];
-        if (!createAdapter) {
-          throw new Error(`Adapter type "${adapterType}" is not supported`);
-        }
-        currentAdapter = createAdapter();
-        setAdapter(currentAdapter);
-      }
+      // Auto mode: try detected browser/app wallets first (no QR flow).
+      if (adapterType === 'auto') {
+        let lastAutoError: Error | null = null;
 
-      // Check if adapter is ready (for TronLink, check if tronWeb is available)
-      if (adapterType === 'tronlink') {
-        const win = window as any;
-        if (!win.tronWeb && !win.tronLink) {
-          // On mobile, TronLinkAdapter will handle opening the app
-          // On desktop, throw error to show install message
-          if (typeof window !== 'undefined' && !/android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent)) {
-            throw new Error('TronLink extension not detected. Please install TronLink from https://www.tronlink.org/');
+        for (const candidateType of AUTO_ADAPTER_PRIORITY) {
+          const candidate = adapters[candidateType]();
+
+          if (candidate.readyState === WalletReadyState.NotFound) {
+            continue;
+          }
+
+          try {
+            await candidate.connect();
+            if (candidate.address) {
+              setAdapter(candidate);
+              setAddress(candidate.address);
+              return candidate.address;
+            }
+          } catch (err) {
+            lastAutoError = err instanceof Error ? err : new Error(String(err));
           }
         }
+
+        if (lastAutoError) {
+          throw lastAutoError;
+        }
+
+        throw new Error(
+          "No Tron wallet detected. Open this site in your wallet app's browser or install a Tron wallet extension."
+        );
       }
 
-      // Connect - TronLinkAdapter will automatically handle mobile app opening
+      const createAdapter = adapters[adapterType];
+      if (!createAdapter) {
+        throw new Error(`Adapter type "${adapterType}" is not supported`);
+      }
+
+      const currentAdapter = createAdapter();
       await currentAdapter.connect();
       const connectedAddress = currentAdapter.address;
       
@@ -149,6 +202,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         throw new Error('Failed to get address from wallet');
       }
 
+      setAdapter(currentAdapter);
       setAddress(connectedAddress);
       return connectedAddress;
     } catch (err: any) {

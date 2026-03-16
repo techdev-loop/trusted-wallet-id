@@ -234,16 +234,12 @@ const Dashboard = () => {
                            method === "injected" ? "injected" : undefined;
         normalizedAddress = await wagmiWallet.connectWallet(selectedChain, connectorId);
       } else if (selectedChain === "tron") {
-        // Use TronWallet Adapter for Tron - automatically connect to TronLink
+        // Use TronWallet adapter for Tron and auto-detect installed wallets.
         // If already connected, use existing connection
         if (tronWallet.isConnected && tronWallet.address) {
           normalizedAddress = tronWallet.address;
         } else {
-          // Auto-select adapter: prefer TronLink, fallback to WalletConnect on mobile
-          const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
-          const adapterType = (method === "walletconnect" || (isMobile && method === "auto")) 
-            ? "walletconnect" 
-            : "tronlink";
+          const adapterType = method === "walletconnect" ? "walletconnect" : "auto";
           normalizedAddress = await tronWallet.connect(adapterType);
         }
       } else {
@@ -309,8 +305,13 @@ const Dashboard = () => {
             ? error.message
             : "Failed to connect wallet and sign message";
       toast.error(message);
-      // Reopen modal on error so user can try again (unless user rejected)
-      if (error instanceof Error && !message.includes("User rejected") && !message.includes("user rejected")) {
+      // Reopen modal only for manual-selection chains (EVM/Solana).
+      if (
+        selectedChain !== "tron" &&
+        error instanceof Error &&
+        !message.includes("User rejected") &&
+        !message.includes("user rejected")
+      ) {
         setIsWalletModalOpen(true);
       }
     } finally {
@@ -692,12 +693,7 @@ const Dashboard = () => {
                       onClick={async (e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        
-                        const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
-                        
-                        // Always show modal to let user choose wallet
-                        // This is especially important for Tron on mobile where multiple options exist
-                        setIsWalletModalOpen(true);
+                        await handleConnectAndSignWallet("auto");
                       }}
                       disabled={processingWallet}
                       className="w-full sm:w-auto"

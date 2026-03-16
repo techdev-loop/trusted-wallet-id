@@ -74,7 +74,7 @@ const WALLET_OPTIONS: WalletOption[] = [
     icon: "🔗",
     description: "Scan QR code to connect with compatible wallets",
     method: "walletconnect",
-    supportedChains: ["ethereum", "bsc", "tron", "solana"],
+    supportedChains: ["ethereum", "bsc", "solana"],
   },
 ];
 
@@ -333,10 +333,6 @@ export function WalletSelectModal({
                                 return `Mobile: Open this page in ${wallet.name} app's browser tab`;
                               }
                             }
-                            if (selectedChain === "tron" && wallet.id === "walletconnect") {
-                              return "Use WalletConnect to connect any compatible Tron wallet (scan QR with your wallet app).";
-                            }
-                            
                             // Show mobile-specific instructions for Phantom
                             if (wallet.id === "phantom") {
                               if (isMobile) {
