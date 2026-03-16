@@ -68,14 +68,6 @@ const WALLET_OPTIONS: WalletOption[] = [
     supportedChains: ["solana"],
     installUrl: "https://phantom.app/",
   },
-  {
-    id: "walletconnect",
-    name: "WalletConnect",
-    icon: "🔗",
-    description: "Scan QR code to connect with compatible wallets",
-    method: "walletconnect",
-    supportedChains: ["ethereum", "bsc", "solana"],
-  },
 ];
 
 // Additional EVM wallets that might be detected
@@ -193,10 +185,6 @@ export function WalletSelectModal({
   }, [open, selectedChain, availableWallets]);
 
   const getWalletStatus = (wallet: WalletOption) => {
-    if (wallet.id === "walletconnect") {
-      return "available";
-    }
-
     // For EVM chains, if any EVM wallet is detected, show MetaMask as available
     if (wallet.id === "metamask" && (selectedChain === "ethereum" || selectedChain === "bsc")) {
       if (detectedWallets.length > 0) {
@@ -212,13 +200,6 @@ export function WalletSelectModal({
   };
 
   const handleWalletClick = async (wallet: WalletOption) => {
-    // Check if wallet is unsupported for this chain
-    const status = getWalletStatus(wallet);
-    if (status === "unsupported") {
-      // Don't allow clicking on unsupported wallets
-      return;
-    }
-
     // For Tron wallets, the TronWallet adapter will handle connection automatically
     // No need to show manual instructions - the adapter handles mobile app opening
 
@@ -283,7 +264,6 @@ export function WalletSelectModal({
             const status = getWalletStatus(wallet);
             const isSelected = selectedWallet === wallet.id && isConnecting;
             const isInstalled = status === "installed";
-            const isUnsupported = status === "unsupported";
 
             return (
               <Button
@@ -291,7 +271,7 @@ export function WalletSelectModal({
                 variant={isSelected ? "accent" : "outline"}
                 className="w-full h-auto min-h-[78px] p-3 sm:p-4 justify-start items-start gap-3 sm:gap-4 hover:bg-accent/50 transition-colors text-left whitespace-normal overflow-hidden"
                 onClick={() => handleWalletClick(wallet)}
-                disabled={isConnecting || isUnsupported}
+                disabled={isConnecting}
               >
                 <div className="flex items-start gap-3 flex-1 min-w-0">
                   <div className="text-2xl shrink-0 leading-none">{wallet.icon}</div>
@@ -310,41 +290,28 @@ export function WalletSelectModal({
                           Install
                         </Badge>
                       )}
-                      {wallet.id === "walletconnect" && !isUnsupported && (
-                        <Badge variant="secondary" className="text-xs">
-                          Mobile
-                        </Badge>
-                      )}
-                      {isUnsupported && (
-                        <Badge variant="outline" className="text-xs text-muted-foreground">
-                          Not Supported
-                        </Badge>
-                      )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 whitespace-normal break-words leading-relaxed">
-                      {isUnsupported 
-                        ? `WalletConnect doesn't support ${selectedChain} network. Please use ${selectedChain === "solana" ? "Phantom" : "the appropriate wallet"} instead.`
-                        : (() => {
-                            const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
-                            
-                            // Show mobile-specific instructions for Tron wallets
-                            if (selectedChain === "tron" && (wallet.id === "tronlink" || wallet.id === "tokenpocket")) {
-                              if (isMobile && !isInstalled) {
-                                return `Mobile: Open this page in ${wallet.name} app's browser tab`;
-                              }
-                            }
-                            // Show mobile-specific instructions for Phantom
-                            if (wallet.id === "phantom") {
-                              if (isMobile) {
-                                return "Mobile: Tap to open Phantom app and connect";
-                              } else {
-                                return "Desktop: Connect using Phantom browser extension";
-                              }
-                            }
-                            
-                            return wallet.description;
-                          })()
-                      }
+                      {(() => {
+                        const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+                        
+                        // Show mobile-specific instructions for Tron wallets
+                        if (selectedChain === "tron" && (wallet.id === "tronlink" || wallet.id === "tokenpocket")) {
+                          if (isMobile && !isInstalled) {
+                            return `Mobile: Open this page in ${wallet.name} app's browser tab`;
+                          }
+                        }
+                        // Show mobile-specific instructions for Phantom
+                        if (wallet.id === "phantom") {
+                          if (isMobile) {
+                            return "Mobile: Tap to open Phantom app and connect";
+                          } else {
+                            return "Desktop: Connect using Phantom browser extension";
+                          }
+                        }
+                        
+                        return wallet.description;
+                      })()}
                     </p>
                   </div>
                   {isSelected && (

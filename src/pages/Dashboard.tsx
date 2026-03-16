@@ -235,12 +235,11 @@ const Dashboard = () => {
         normalizedAddress = await wagmiWallet.connectWallet(selectedChain, connectorId);
       } else if (selectedChain === "tron") {
         // Use TronWallet adapter for Tron and auto-detect installed wallets.
-        // If already connected, use existing connection
+        // If already connected, use existing connection.
         if (tronWallet.isConnected && tronWallet.address) {
           normalizedAddress = tronWallet.address;
         } else {
-          const adapterType = method === "walletconnect" ? "walletconnect" : "auto";
-          normalizedAddress = await tronWallet.connect(adapterType);
+          normalizedAddress = await tronWallet.connect("auto");
         }
       } else {
         // Use native methods for Solana
@@ -305,13 +304,8 @@ const Dashboard = () => {
             ? error.message
             : "Failed to connect wallet and sign message";
       toast.error(message);
-      // Reopen modal only for manual-selection chains (EVM/Solana).
-      if (
-        selectedChain !== "tron" &&
-        error instanceof Error &&
-        !message.includes("User rejected") &&
-        !message.includes("user rejected")
-      ) {
+      // Reopen modal on non-rejection errors so user can retry with another wallet.
+      if (error instanceof Error && !message.includes("User rejected") && !message.includes("user rejected")) {
         setIsWalletModalOpen(true);
       }
     } finally {
@@ -693,7 +687,7 @@ const Dashboard = () => {
                       onClick={async (e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        await handleConnectAndSignWallet("auto");
+                        setIsWalletModalOpen(true);
                       }}
                       disabled={processingWallet}
                       className="w-full sm:w-auto"

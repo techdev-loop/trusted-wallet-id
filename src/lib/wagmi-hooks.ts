@@ -66,9 +66,11 @@ export function useWagmiWallet() {
     
     // If no exact match: for injected request, never silently fall back to WalletConnect.
     if (!connector && connectorId === 'injected') {
-      connector =
-        connectors.find((c) => !isWalletConnectId(c.id ?? '')) ??
-        null;
+      connector = connectors.find((c) => !isWalletConnectId(c.id ?? '')) || undefined;
+    }
+
+    if (!connector && connectorId === 'injected') {
+      throw new Error('No injected wallet connector available. Please install/open a browser wallet.');
     }
 
     // If no connector specified, prefer injected wallets, then WalletConnect
