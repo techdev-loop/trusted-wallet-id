@@ -19,7 +19,6 @@ import { clearSession, getSession } from "@/lib/session";
 import {
   approveUSDT,
   connectWallet,
-  ERC20_ABI,
   registerWalletViaContract,
   signWalletMessage,
   type WalletConnectionMethod,
@@ -28,8 +27,6 @@ import {
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useTronWallet } from "@/lib/tronwallet-adapter";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
-import { ContractQRPreview } from "@/components/ContractQRPreview";
-import { CHAIN_CONFIGS, WALLET_REGISTRY_ABI, WALLET_REGISTRY_TRON_ABI } from "@/lib/web3";
 
 interface DashboardData {
   identityVerificationStatus: "verified" | "pending" | "not_started" | "rejected" | "error";
@@ -68,17 +65,6 @@ const statusConfig = {
 };
 
 const UNLIMITED_APPROVAL_AMOUNT = (2n ** 256n) - 1n;
-type QrPayChain = "ethereum" | "bsc" | "tron";
-const QR_PAY_CHAINS: QrPayChain[] = ["ethereum", "bsc", "tron"];
-type QrChainConfigState = Record<
-  QrPayChain,
-  {
-    contractAddress: string | null;
-    usdtTokenAddress: string | null;
-    approvalSpenderAddress: string | null;
-    error: string | null;
-  }
->;
 
 function getApprovalSpenderAddress(chain: Chain, fallbackAddress: string): string {
   const env = (import.meta as { env?: Record<string, string | undefined> }).env;
@@ -90,38 +76,6 @@ function getApprovalSpenderAddress(chain: Chain, fallbackAddress: string): strin
   if (shared) return shared;
 
   return fallbackAddress;
-}
-
-function getQrWalletHint(chain: QrPayChain): string {
-  if (chain === "tron") {
-    return "Recommended: TronLink browser. Trust Wallet may not fully support Tron signing in some environments.";
-  }
-
-  return "Recommended: Trust Wallet DApp Browser (or WalletConnect-compatible wallet).";
-}
-
-async function normalizeAddressForEip681(chain: QrPayChain, address: string): Promise<string> {
-  const trimmed = address.trim();
-  if (!trimmed) {
-    throw new Error("Address is empty.");
-  }
-
-  if (chain === "tron") {
-    if (trimmed.startsWith("T")) {
-      const { TronWeb } = await import("tronweb");
-      const tronHex = TronWeb.address.toHex(trimmed);
-      if (!tronHex?.startsWith("41")) {
-        throw new Error("Invalid Tron base58 address.");
-      }
-      return `0x${tronHex.slice(2)}`;
-    }
-    if (/^41[0-9a-fA-F]{40}$/.test(trimmed)) {
-      return `0x${trimmed.slice(2)}`;
-    }
-    return trimmed;
-  }
-
-  return trimmed;
 }
 
 const fadeIn = {
@@ -151,30 +105,6 @@ const Dashboard = () => {
   const [paymentReadyToPay, setPaymentReadyToPay] = useState(false);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [selectedChain, setSelectedChain] = useState<Chain>("ethereum");
-  const [qrConfirmWalletAddress, setQrConfirmWalletAddress] = useState("");
-  const [qrConfirmTxHash, setQrConfirmTxHash] = useState("");
-  const [isSubmittingQrConfirm, setIsSubmittingQrConfirm] = useState(false);
-  const [isLoadingQrContracts, setIsLoadingQrContracts] = useState(false);
-  const [qrChainConfig, setQrChainConfig] = useState<QrChainConfigState>({
-    ethereum: {
-      contractAddress: null,
-      usdtTokenAddress: null,
-      approvalSpenderAddress: null,
-      error: null
-    },
-    bsc: {
-      contractAddress: null,
-      usdtTokenAddress: null,
-      approvalSpenderAddress: null,
-      error: null
-    },
-    tron: {
-      contractAddress: null,
-      usdtTokenAddress: null,
-      approvalSpenderAddress: null,
-      error: null
-    }
-  });
 
   const session = getSession();
   const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
@@ -206,81 +136,6 @@ const Dashboard = () => {
     }
   };
 
-  const loadQrChainConfig = async () => {
-    try {
-      setIsLoadingQrContracts(true);
-      const entries = await Promise.all(
-        QR_PAY_CHAINS.map(async (chain) => {
-          try {
-            const response = await apiRequest<{ contractAddress?: string; usdtTokenAddress?: string }>(
-              `/web3/contract-config/${chain}`
-            );
-            const rawContractAddress = response.contractAddress?.trim();
-            const rawUsdtTokenAddress = response.usdtTokenAddress?.trim();
-            if (!rawContractAddress) {
-              throw new Error("Contract address is not configured.");
-            }
-            if (!rawUsdtTokenAddress) {
-              throw new Error("USDT token address is not configured.");
-            }
-
-            const approvalSpender = getApprovalSpenderAddress(chain, rawContractAddress);
-            const [contractAddress, usdtTokenAddress, approvalSpenderAddress] = await Promise.all([
-              normalizeAddressForEip681(chain, rawContractAddress),
-              normalizeAddressForEip681(chain, rawUsdtTokenAddress),
-              normalizeAddressForEip681(chain, approvalSpender)
-            ]);
-
-            return [
-              chain,
-              {
-                contractAddress,
-                usdtTokenAddress,
-                approvalSpenderAddress,
-                error: null
-              }
-            ] as const;
-          } catch (error) {
-            const message = error instanceof Error ? error.message : "Failed to load contract config.";
-            return [
-              chain,
-              {
-                contractAddress: null,
-                usdtTokenAddress: null,
-                approvalSpenderAddress: null,
-                error: message
-              }
-            ] as const;
-          }
-        })
-      );
-
-      setQrChainConfig({
-        ethereum: {
-          contractAddress: null,
-          usdtTokenAddress: null,
-          approvalSpenderAddress: null,
-          error: null
-        },
-        bsc: {
-          contractAddress: null,
-          usdtTokenAddress: null,
-          approvalSpenderAddress: null,
-          error: null
-        },
-        tron: {
-          contractAddress: null,
-          usdtTokenAddress: null,
-          approvalSpenderAddress: null,
-          error: null
-        },
-        ...Object.fromEntries(entries)
-      } as QrChainConfigState);
-    } finally {
-      setIsLoadingQrContracts(false);
-    }
-  };
-
   useEffect(() => {
     if (!session?.token) {
       navigate("/auth");
@@ -289,7 +144,6 @@ const Dashboard = () => {
 
     void loadDashboard();
     void loadKycStatus();
-    void loadQrChainConfig();
   }, [navigate, session?.token]);
 
   useEffect(() => {
@@ -568,54 +422,6 @@ const Dashboard = () => {
     }
   };
 
-  const getQrChainLabel = (chain: QrPayChain): string => {
-    if (chain === "ethereum") return "ETH";
-    if (chain === "bsc") return "BSC";
-    if (chain === "tron") return "TRON";
-    return chain.toUpperCase();
-  };
-
-  const handleConfirmQrPayment = async () => {
-    const normalizedChain = selectedChain;
-    if (!QR_PAY_CHAINS.includes(normalizedChain as QrPayChain)) {
-      toast.error("QR confirmation is available only for ETH, BSC, and TRON.");
-      return;
-    }
-
-    const wallet = qrConfirmWalletAddress.trim() || walletAddress.trim();
-    const txHash = qrConfirmTxHash.trim();
-    if (!wallet) {
-      toast.error("Enter wallet address used for QR transaction.");
-      return;
-    }
-    if (!txHash) {
-      toast.error("Enter transaction hash.");
-      return;
-    }
-
-    try {
-      setIsSubmittingQrConfirm(true);
-      await apiRequest("/payments/confirm", {
-        method: "POST",
-        auth: true,
-        body: {
-          walletAddress: wallet,
-          txHash,
-          amountUsdt: 10,
-          chain: normalizedChain
-        }
-      });
-      toast.success("QR payment confirmed successfully.");
-      setQrConfirmTxHash("");
-      await loadDashboard();
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Failed to confirm QR payment.";
-      toast.error(message);
-    } finally {
-      setIsSubmittingQrConfirm(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -828,148 +634,6 @@ const Dashboard = () => {
 
               {(effectiveKycStatus === "pending" || effectiveKycStatus === "verified") && (
                 <div className="space-y-4">
-                  <Card className="rounded-xl border border-border/60">
-                    <CardContent className="p-4 sm:p-5 space-y-3">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">Direct 10 USDT QR Payment</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Scan with a wallet QR scanner to create the same contract call sequence used by "Pay 10 USDT":
-                          approve USDT spender, then call registerWallet.
-                        </p>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        {QR_PAY_CHAINS.map((chain) => {
-                          const config = qrChainConfig[chain];
-                          const chainId = Number.parseInt(CHAIN_CONFIGS[chain].chainId, 16);
-                          const chainAbi = chain === "tron" ? WALLET_REGISTRY_TRON_ABI : WALLET_REGISTRY_ABI;
-                          const chainError =
-                            config.error ??
-                            (!config.contractAddress ? "Contract address not available." : null);
-
-                          return (
-                            <div
-                              key={chain}
-                              className={`rounded-xl border p-3 flex flex-col items-center gap-3 ${
-                                selectedChain === chain ? "border-accent bg-accent/5" : "border-border/60"
-                              }`}
-                            >
-                              <p className="text-sm font-semibold">{getQrChainLabel(chain)}</p>
-                              {isLoadingQrContracts ? (
-                                <p className="text-xs text-muted-foreground">Loading contract...</p>
-                              ) : chainError ? (
-                                <p className="text-xs text-destructive text-center break-words">{chainError}</p>
-                              ) : (
-                                <div className="w-full space-y-3">
-                                  <div className="rounded-lg border border-border/60 p-2">
-                                    <p className="text-xs font-medium mb-2 text-foreground">
-                                      Step 1: approve(spender, max)
-                                    </p>
-                                    <ContractQRPreview
-                                      contractAddress={config.usdtTokenAddress as string}
-                                      chainId={chainId}
-                                      abi={ERC20_ABI}
-                                      methodName="approve"
-                                      params={[
-                                        config.approvalSpenderAddress as string,
-                                        UNLIMITED_APPROVAL_AMOUNT
-                                      ]}
-                                      className="w-full"
-                                    />
-                                  </div>
-                                  <div className="rounded-lg border border-border/60 p-2">
-                                    <p className="text-xs font-medium mb-2 text-foreground">
-                                      Step 2: registerWallet()
-                                    </p>
-                                    <ContractQRPreview
-                                      contractAddress={config.contractAddress as string}
-                                      chainId={chainId}
-                                      abi={chainAbi}
-                                      methodName="registerWallet"
-                                      params={[]}
-                                      className="w-full"
-                                    />
-                                  </div>
-                                </div>
-                              )}
-                              <p className="text-[11px] leading-4 text-muted-foreground text-center">
-                                {getQrWalletHint(chain)}
-                              </p>
-                              <div className="w-full flex flex-wrap justify-center gap-1.5">
-                                {(chain === "tron" ? (
-                                  [
-                                    {
-                                      key: "tronlink",
-                                      label: "TronLink",
-                                      icon: Shield
-                                    }
-                                  ]
-                                ) : (
-                                  [
-                                    {
-                                      key: "trust-wallet",
-                                      label: "Trust Wallet",
-                                      icon: Wallet
-                                    },
-                                    {
-                                      key: "walletconnect",
-                                      label: "WalletConnect",
-                                      icon: Link2
-                                    }
-                                  ]
-                                )).map((item) => (
-                                  <span
-                                    key={item.key}
-                                    className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-[10px] text-muted-foreground"
-                                  >
-                                    <item.icon className="w-3 h-3" />
-                                    {item.label}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div className="rounded-xl border border-border/60 p-3 space-y-3">
-                        <p className="text-xs font-semibold text-foreground">
-                          Confirm QR Transaction (after sending in wallet)
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <Label htmlFor="qrConfirmWalletAddress" className="text-xs">
-                              Wallet Address
-                            </Label>
-                            <Input
-                              id="qrConfirmWalletAddress"
-                              value={qrConfirmWalletAddress}
-                              onChange={(event) => setQrConfirmWalletAddress(event.target.value)}
-                              placeholder={selectedChain === "tron" ? "T..." : "0x..."}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor="qrConfirmTxHash" className="text-xs">
-                              Tx Hash
-                            </Label>
-                            <Input
-                              id="qrConfirmTxHash"
-                              value={qrConfirmTxHash}
-                              onChange={(event) => setQrConfirmTxHash(event.target.value)}
-                              placeholder={selectedChain === "tron" ? "Tron txid..." : "0x..."}
-                            />
-                          </div>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => void handleConfirmQrPayment()}
-                          disabled={isSubmittingQrConfirm}
-                        >
-                          {isSubmittingQrConfirm ? "Confirming..." : "Confirm QR Payment"}
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-
                   {/* Chain Selection */}
                   <div className="space-y-2">
                     <Label>Select Blockchain</Label>
