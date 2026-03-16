@@ -42,13 +42,16 @@ const adapters: Record<string, () => TronWalletAdapter> = {
     }
     
     return new WalletConnectAdapter({
-      projectId,
-      metadata: {
-        name: 'FIU ID',
-        description: 'Web3 Identity Wallet Registry',
-        url: typeof window !== 'undefined' ? window.location.origin : '',
-        icons: [],
-      },
+      network: 'Mainnet',
+      options: {
+        projectId,
+        metadata: {
+          name: 'FIU ID',
+          description: 'Web3 Identity Wallet Registry',
+          url: typeof window !== 'undefined' ? window.location.origin : '',
+          icons: []
+        }
+      }
     });
   },
 };
