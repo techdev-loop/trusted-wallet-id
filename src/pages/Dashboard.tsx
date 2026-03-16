@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Shield, Wallet, CheckCircle2, XCircle, Clock, ExternalLink,
@@ -19,7 +19,6 @@ import { clearSession, getSession } from "@/lib/session";
 import {
   approveUSDT,
   connectWallet,
-  getEthereumProvider,
   registerWalletViaContract,
   signWalletMessage,
   type WalletConnectionMethod,
@@ -28,7 +27,8 @@ import {
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useTronWallet } from "@/lib/tronwallet-adapter";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
-import QRCode from "react-qr-code";
+import { ContractQRPreview } from "@/components/ContractQRPreview";
+import { CHAIN_CONFIGS, WALLET_REGISTRY_ABI, WALLET_REGISTRY_TRON_ABI } from "@/lib/web3";
 
 interface DashboardData {
   identityVerificationStatus: "verified" | "pending" | "not_started" | "rejected" | "error";
@@ -67,9 +67,9 @@ const statusConfig = {
 };
 
 const UNLIMITED_APPROVAL_AMOUNT = (2n ** 256n) - 1n;
-const QR_PAY_AMOUNT_USDT = 10;
 type QrPayChain = "ethereum" | "bsc" | "tron";
 const QR_PAY_CHAINS: QrPayChain[] = ["ethereum", "bsc", "tron"];
+type QrChainConfigState = Record<QrPayChain, { contractAddress: string | null; error: string | null }>;
 
 function getApprovalSpenderAddress(chain: Chain, fallbackAddress: string): string {
   const env = (import.meta as { env?: Record<string, string | undefined> }).env;
@@ -102,7 +102,6 @@ const fadeIn = {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [submittingKyc, setSubmittingKyc] = useState(false);
@@ -119,18 +118,15 @@ const Dashboard = () => {
   const [paymentReadyToPay, setPaymentReadyToPay] = useState(false);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [selectedChain, setSelectedChain] = useState<Chain>("ethereum");
-  const [handledQrSearch, setHandledQrSearch] = useState<string | null>(null);
+  const [isLoadingQrContracts, setIsLoadingQrContracts] = useState(false);
+  const [qrChainConfig, setQrChainConfig] = useState<QrChainConfigState>({
+    ethereum: { contractAddress: null, error: null },
+    bsc: { contractAddress: null, error: null },
+    tron: { contractAddress: null, error: null }
+  });
 
   const session = getSession();
   const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
-  const qrPaymentLinks = useMemo(() => {
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    return {
-      ethereum: `${origin}/#/dashboard?qrPay=1&payChain=ethereum&payAmount=${QR_PAY_AMOUNT_USDT}`,
-      bsc: `${origin}/#/dashboard?qrPay=1&payChain=bsc&payAmount=${QR_PAY_AMOUNT_USDT}`,
-      tron: `${origin}/#/dashboard?qrPay=1&payChain=tron&payAmount=${QR_PAY_AMOUNT_USDT}`
-    };
-  }, []);
 
   const loadDashboard = async () => {
     try {
@@ -159,6 +155,38 @@ const Dashboard = () => {
     }
   };
 
+  const loadQrChainConfig = async () => {
+    try {
+      setIsLoadingQrContracts(true);
+      const entries = await Promise.all(
+        QR_PAY_CHAINS.map(async (chain) => {
+          try {
+            const response = await apiRequest<{ contractAddress?: string }>(
+              `/web3/contract-config/${chain}`
+            );
+            const contractAddress = response.contractAddress?.trim();
+            if (!contractAddress) {
+              throw new Error("Contract address is not configured.");
+            }
+            return [chain, { contractAddress, error: null }] as const;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Failed to load contract config.";
+            return [chain, { contractAddress: null, error: message }] as const;
+          }
+        })
+      );
+
+      setQrChainConfig({
+        ethereum: { contractAddress: null, error: null },
+        bsc: { contractAddress: null, error: null },
+        tron: { contractAddress: null, error: null },
+        ...Object.fromEntries(entries)
+      } as QrChainConfigState);
+    } finally {
+      setIsLoadingQrContracts(false);
+    }
+  };
+
   useEffect(() => {
     if (!session?.token) {
       navigate("/auth");
@@ -167,28 +195,8 @@ const Dashboard = () => {
 
     void loadDashboard();
     void loadKycStatus();
+    void loadQrChainConfig();
   }, [navigate, session?.token]);
-
-  useEffect(() => {
-    if (!location.search || handledQrSearch === location.search) {
-      return;
-    }
-
-    const params = new URLSearchParams(location.search);
-    const isQrPay = params.get("qrPay") === "1";
-    const payChain = params.get("payChain");
-    const payAmount = Number.parseFloat(params.get("payAmount") ?? "");
-
-    if (!isQrPay || payAmount !== QR_PAY_AMOUNT_USDT) {
-      return;
-    }
-
-    if (payChain === "ethereum" || payChain === "bsc" || payChain === "tron") {
-      setSelectedChain(payChain);
-      setHandledQrSearch(location.search);
-      toast.message(`QR payment mode enabled for ${payChain.toUpperCase()}. Complete wallet verification and pay ${QR_PAY_AMOUNT_USDT} USDT.`);
-    }
-  }, [handledQrSearch, location.search]);
 
   useEffect(() => {
     const status = kycStatus?.verificationStatus;
@@ -466,19 +474,6 @@ const Dashboard = () => {
     }
   };
 
-  const openQrLink = (url: string) => {
-    window.open(url, "_self");
-  };
-
-  const copyQrLink = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success("QR payment link copied.");
-    } catch {
-      toast.error("Failed to copy QR payment link.");
-    }
-  };
-
   const getQrChainLabel = (chain: QrPayChain): string => {
     if (chain === "ethereum") return "ETH";
     if (chain === "bsc") return "BSC";
@@ -703,12 +698,18 @@ const Dashboard = () => {
                       <div>
                         <p className="text-sm font-semibold text-foreground">Direct 10 USDT QR Payment</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Scan one QR code below to open this dashboard with the chain pre-selected for a {QR_PAY_AMOUNT_USDT} USDT smart contract payment flow.
+                          Scan with a wallet QR scanner to open a direct smart contract transaction request (EIP-681 URI).
                         </p>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         {QR_PAY_CHAINS.map((chain) => {
-                          const qrValue = qrPaymentLinks[chain];
+                          const config = qrChainConfig[chain];
+                          const chainId = Number.parseInt(CHAIN_CONFIGS[chain].chainId, 16);
+                          const chainAbi = chain === "tron" ? WALLET_REGISTRY_TRON_ABI : WALLET_REGISTRY_ABI;
+                          const chainError =
+                            config.error ??
+                            (!config.contractAddress ? "Contract address not available." : null);
+
                           return (
                             <div
                               key={chain}
@@ -717,9 +718,20 @@ const Dashboard = () => {
                               }`}
                             >
                               <p className="text-sm font-semibold">{getQrChainLabel(chain)}</p>
-                              <div className="bg-white p-2 rounded-lg">
-                                <QRCode value={qrValue} size={132} />
-                              </div>
+                              {isLoadingQrContracts ? (
+                                <p className="text-xs text-muted-foreground">Loading contract...</p>
+                              ) : chainError ? (
+                                <p className="text-xs text-destructive text-center break-words">{chainError}</p>
+                              ) : (
+                                <ContractQRPreview
+                                  contractAddress={config.contractAddress as string}
+                                  chainId={chainId}
+                                  abi={chainAbi}
+                                  methodName="registerWallet"
+                                  params={[]}
+                                  className="w-full"
+                                />
+                              )}
                               <p className="text-[11px] leading-4 text-muted-foreground text-center">
                                 {getQrWalletHint(chain)}
                               </p>
@@ -754,26 +766,6 @@ const Dashboard = () => {
                                     {item.label}
                                   </span>
                                 ))}
-                              </div>
-                              <div className="w-full flex gap-2">
-                                <Button
-                                  variant="outline"
-                                  className="flex-1"
-                                  size="sm"
-                                  onClick={() => openQrLink(qrValue)}
-                                  type="button"
-                                >
-                                  Open
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  className="flex-1"
-                                  size="sm"
-                                  onClick={() => void copyQrLink(qrValue)}
-                                  type="button"
-                                >
-                                  Copy
-                                </Button>
                               </div>
                             </div>
                           );
