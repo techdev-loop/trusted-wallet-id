@@ -1,6 +1,6 @@
 import { getSession } from "./session";
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:4000/api";
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://api.fiulink.com/api";
 const TRANSIENT_HTTP_STATUSES = new Set([502, 503, 504]);
 
 function wait(ms: number): Promise<void> {
