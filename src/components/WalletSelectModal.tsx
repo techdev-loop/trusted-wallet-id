@@ -181,7 +181,8 @@ export function WalletSelectModal({
         if (
           win.trustwallet?.tronLink ||
           win.ethereum?.isTrust ||
-          userAgent.includes("trustwallet")
+          userAgent.includes("trustwallet") ||
+          userAgent.includes("trust wallet")
         ) {
           detected.push("trust");
         }
@@ -279,8 +280,13 @@ export function WalletSelectModal({
 
     const status = getWalletStatus(wallet);
 
+    const isTronWalletOption =
+      selectedChain === "tron" &&
+      ["tronlink", "tokenpocket", "trust", "metamask-tron", "okxwallet", "safepal"].includes(wallet.id);
+
     // If wallet is not installed, open install page.
-    if (status === "not-installed" && wallet.installUrl) {
+    // For Tron wallets, try connecting first even when detection is uncertain on mobile.
+    if (!isTronWalletOption && status === "not-installed" && wallet.installUrl) {
       openInstallLink(wallet.installUrl);
       return;
     }
