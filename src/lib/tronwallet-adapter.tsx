@@ -1,5 +1,6 @@
 import {
   BitKeepAdapter,
+  MetaMaskAdapter,
   OkxWalletAdapter,
   TokenPocketAdapter,
   TronLinkAdapter,
@@ -10,10 +11,11 @@ import { WalletReadyState, type Adapter as TronWalletAdapter } from '@tronweb3/t
 import { ReactNode, createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 // TronWallet Adapter Context
-type TronAdapterType =
+export type TronAdapterType =
   | 'auto'
   | 'tronlink'
   | 'tokenpocket'
+  | 'metamask'
   | 'bitkeep'
   | 'okxwallet'
   | 'trust'
@@ -51,6 +53,7 @@ const adapters: Record<Exclude<TronAdapterType, 'auto'>, () => TronWalletAdapter
     openAppWithDeeplink: false,
     openUrlWhenWalletNotFound: false,
   }),
+  metamask: () => new MetaMaskAdapter(),
   bitkeep: () => new BitKeepAdapter({
     openAppWithDeeplink: false,
     openUrlWhenWalletNotFound: false,
@@ -89,6 +92,7 @@ const adapters: Record<Exclude<TronAdapterType, 'auto'>, () => TronWalletAdapter
 
 const AUTO_ADAPTER_PRIORITY: Exclude<TronAdapterType, 'auto' | 'walletconnect'>[] = [
   'tronlink',
+  'metamask',
   'tokenpocket',
   'bitkeep',
   'okxwallet',

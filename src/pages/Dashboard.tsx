@@ -25,7 +25,7 @@ import {
   type Chain
 } from "@/lib/web3";
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
-import { useTronWallet } from "@/lib/tronwallet-adapter";
+import { useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
 
 interface DashboardData {
@@ -220,7 +220,7 @@ const Dashboard = () => {
   const wagmiWallet = useWagmiWallet();
   const tronWallet = useTronWallet();
 
-  const handleConnectAndSignWallet = async (method: WalletConnectionMethod) => {
+  const handleConnectAndSignWallet = async (method: WalletConnectionMethod, walletId?: string) => {
     try {
       setProcessingWallet(true);
       setIsWalletModalOpen(false); // Close modal when connecting starts
@@ -234,12 +234,21 @@ const Dashboard = () => {
                            method === "injected" ? "injected" : undefined;
         normalizedAddress = await wagmiWallet.connectWallet(selectedChain, connectorId);
       } else if (selectedChain === "tron") {
-        // Use TronWallet adapter for Tron and auto-detect installed wallets.
-        // If already connected, use existing connection.
-        if (tronWallet.isConnected && tronWallet.address) {
+        // Use selected Tron wallet adapter from modal.
+        const tronAdapterByWalletId: Record<string, TronAdapterType> = {
+          tronlink: "tronlink",
+          tokenpocket: "tokenpocket",
+          trust: "trust",
+          "metamask-tron": "metamask",
+        };
+
+        const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
+
+        // Reuse existing connection only when no explicit wallet was selected.
+        if (!selectedTronAdapter && tronWallet.isConnected && tronWallet.address) {
           normalizedAddress = tronWallet.address;
         } else {
-          normalizedAddress = await tronWallet.connect("auto");
+          normalizedAddress = await tronWallet.connect(selectedTronAdapter ?? "auto");
         }
       } else {
         // Use native methods for Solana

@@ -26,7 +26,7 @@ interface WalletSelectModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   selectedChain: Chain;
-  onSelectWallet: (method: WalletConnectionMethod) => void;
+  onSelectWallet: (method: WalletConnectionMethod, walletId?: string) => void;
   isConnecting: boolean;
 }
 
@@ -58,6 +58,24 @@ const WALLET_OPTIONS: WalletOption[] = [
     method: "injected",
     supportedChains: ["tron"],
     installUrl: "https://www.tokenpocket.pro/",
+  },
+  {
+    id: "trust",
+    name: "Trust Wallet",
+    icon: "🛡️",
+    description: "Open this page in Trust Wallet app browser to connect Tron wallet",
+    method: "injected",
+    supportedChains: ["tron"],
+    installUrl: "https://trustwallet.com/",
+  },
+  {
+    id: "metamask-tron",
+    name: "MetaMask (Tron)",
+    icon: "🦊",
+    description: "Use MetaMask with Tron network support",
+    method: "injected",
+    supportedChains: ["tron"],
+    installUrl: "https://metamask.io/download/",
   },
   {
     id: "phantom",
@@ -141,6 +159,12 @@ export function WalletSelectModal({
             }
           }
         }
+        if (win.trustwallet?.tronLink || win.trustwallet) {
+          detected.push("trust");
+        }
+        if (win.ethereum?.isMetaMask || win.ethereum?.providers?.some((provider: any) => provider?.isMetaMask)) {
+          detected.push("metamask-tron");
+        }
       }
     }
 
@@ -169,6 +193,10 @@ export function WalletSelectModal({
     if (selectedChain === "tron") {
       if (a.id === "tronlink") return -1;
       if (b.id === "tronlink") return 1;
+      if (a.id === "trust") return -1;
+      if (b.id === "trust") return 1;
+      if (a.id === "metamask-tron") return -1;
+      if (b.id === "metamask-tron") return 1;
     }
     if (selectedChain === "solana") {
       if (a.id === "phantom") return -1;
@@ -209,11 +237,11 @@ export function WalletSelectModal({
       return;
     }
 
-    console.log("Wallet selected:", wallet.name, "method:", wallet.method);
+    console.log("Wallet selected:", wallet.name, "method:", wallet.method, "walletId:", wallet.id);
     setSelectedWallet(wallet.id);
     // Small delay to ensure modal state updates before connection starts
     setTimeout(() => {
-      onSelectWallet(wallet.method);
+      onSelectWallet(wallet.method, wallet.id);
     }, 100);
   };
 
@@ -296,7 +324,7 @@ export function WalletSelectModal({
                         const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
                         
                         // Show mobile-specific instructions for Tron wallets
-                        if (selectedChain === "tron" && (wallet.id === "tronlink" || wallet.id === "tokenpocket")) {
+                        if (selectedChain === "tron" && (wallet.id === "tronlink" || wallet.id === "tokenpocket" || wallet.id === "trust" || wallet.id === "metamask-tron")) {
                           if (isMobile && !isInstalled) {
                             return `Mobile: Open this page in ${wallet.name} app's browser tab`;
                           }
