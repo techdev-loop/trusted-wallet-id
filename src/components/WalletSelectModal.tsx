@@ -78,6 +78,24 @@ const WALLET_OPTIONS: WalletOption[] = [
     installUrl: "https://metamask.io/download/",
   },
   {
+    id: "okxwallet",
+    name: "OKX Wallet",
+    icon: "⭕",
+    description: "Connect with OKX Wallet for Tron",
+    method: "injected",
+    supportedChains: ["tron"],
+    installUrl: "https://www.okx.com/web3",
+  },
+  {
+    id: "safepal",
+    name: "SafePal",
+    icon: "🛡️",
+    description: "Connect SafePal in dApp browser for Tron",
+    method: "injected",
+    supportedChains: ["tron"],
+    installUrl: "https://www.safepal.com/",
+  },
+  {
     id: "phantom",
     name: "Phantom",
     icon: "👻",
@@ -165,6 +183,12 @@ export function WalletSelectModal({
         if (win.ethereum?.isMetaMask || win.ethereum?.providers?.some((provider: any) => provider?.isMetaMask)) {
           detected.push("metamask-tron");
         }
+        if (win.okxwallet?.tronLink || win.okxwallet) {
+          detected.push("okxwallet");
+        }
+        if (win.safepal || win.ethereum?.isSafePal || win.ethereum?.providers?.some((provider: any) => provider?.isSafePal)) {
+          detected.push("safepal");
+        }
       }
     }
 
@@ -197,6 +221,10 @@ export function WalletSelectModal({
       if (b.id === "trust") return 1;
       if (a.id === "metamask-tron") return -1;
       if (b.id === "metamask-tron") return 1;
+      if (a.id === "okxwallet") return -1;
+      if (b.id === "okxwallet") return 1;
+      if (a.id === "safepal") return -1;
+      if (b.id === "safepal") return 1;
     }
     if (selectedChain === "solana") {
       if (a.id === "phantom") return -1;
@@ -324,7 +352,15 @@ export function WalletSelectModal({
                         const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
                         
                         // Show mobile-specific instructions for Tron wallets
-                        if (selectedChain === "tron" && (wallet.id === "tronlink" || wallet.id === "tokenpocket" || wallet.id === "trust" || wallet.id === "metamask-tron")) {
+                        if (
+                          selectedChain === "tron" &&
+                          (wallet.id === "tronlink" ||
+                            wallet.id === "tokenpocket" ||
+                            wallet.id === "trust" ||
+                            wallet.id === "metamask-tron" ||
+                            wallet.id === "okxwallet" ||
+                            wallet.id === "safepal")
+                        ) {
                           if (isMobile && !isInstalled) {
                             return `Mobile: Open this page in ${wallet.name} app's browser tab`;
                           }

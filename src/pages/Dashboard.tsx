@@ -240,6 +240,8 @@ const Dashboard = () => {
           tokenpocket: "tokenpocket",
           trust: "trust",
           "metamask-tron": "metamask",
+          okxwallet: "okxwallet",
+          safepal: "auto",
         };
 
         const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
