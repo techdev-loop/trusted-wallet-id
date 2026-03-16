@@ -87,7 +87,13 @@ export function generateContractQR(
     throw new Error(`Failed to encode calldata for ${methodName}: ${message}`);
   }
 
-  const uri = `ethereum:${normalizedAddress}@${normalizedChainId}?data=${calldata}`;
+  // Build a wallet-friendly EIP-681 tx request URI.
+  // Including value=0 improves compatibility with scanners that expect
+  // a complete transaction request envelope.
+  const query = new URLSearchParams();
+  query.set("value", "0");
+  query.set("data", calldata);
+  const uri = `ethereum:${normalizedAddress}@${normalizedChainId}?${query.toString()}`;
 
   return {
     uri,
