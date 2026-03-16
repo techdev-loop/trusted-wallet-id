@@ -72,9 +72,9 @@ const WALLET_OPTIONS: WalletOption[] = [
     id: "walletconnect",
     name: "WalletConnect",
     icon: "🔗",
-    description: "Scan QR code to connect with mobile wallet",
+    description: "Scan QR code to connect with compatible wallets",
     method: "walletconnect",
-    supportedChains: ["ethereum", "bsc", "solana"], // Removed "tron" - WalletConnect doesn't reliably support Tron
+    supportedChains: ["ethereum", "bsc", "tron", "solana"],
   },
 ];
 
@@ -193,13 +193,8 @@ export function WalletSelectModal({
   }, [open, selectedChain, availableWallets]);
 
   const getWalletStatus = (wallet: WalletOption) => {
-    // WalletConnect doesn't reliably support Tron or Solana
-    if (wallet.id === "walletconnect" && (selectedChain === "solana" || selectedChain === "tron")) {
-      return "unsupported"; // Mark as unsupported for Solana and Tron
-    }
-
     if (wallet.id === "walletconnect") {
-      return "available"; // WalletConnect is available for EVM chains
+      return "available";
     }
 
     // For EVM chains, if any EVM wallet is detected, show MetaMask as available
@@ -328,9 +323,7 @@ export function WalletSelectModal({
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 whitespace-normal break-words leading-relaxed">
                       {isUnsupported 
-                        ? selectedChain === "tron"
-                          ? "For Tron on mobile, please open this page in a Tron wallet app's browser. On desktop, use a Tron wallet extension."
-                          : `WalletConnect doesn't support ${selectedChain} network. Please use ${selectedChain === "solana" ? "Phantom" : "the appropriate wallet"} instead.`
+                        ? `WalletConnect doesn't support ${selectedChain} network. Please use ${selectedChain === "solana" ? "Phantom" : "the appropriate wallet"} instead.`
                         : (() => {
                             const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
                             
@@ -339,6 +332,9 @@ export function WalletSelectModal({
                               if (isMobile && !isInstalled) {
                                 return `Mobile: Open this page in ${wallet.name} app's browser tab`;
                               }
+                            }
+                            if (selectedChain === "tron" && wallet.id === "walletconnect") {
+                              return "Use WalletConnect to connect any compatible Tron wallet (scan QR with your wallet app).";
                             }
                             
                             // Show mobile-specific instructions for Phantom

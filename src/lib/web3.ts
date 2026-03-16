@@ -218,25 +218,38 @@ async function connectTronLinkMobile(): Promise<string> {
 }
 
 async function createTronWalletConnectProvider(): Promise<string> {
-  // This function is deprecated - use TronWallet adapter instead
-  // For mobile, try direct connection without dialogs
-  if (isMobileDevice()) {
-    const win = window as any;
-    // Check if TronLink is already available
-    if (win.tronWeb || win.tronLink) {
-      const tronWeb = win.tronWeb || win.tronLink.tronWeb;
-      if (tronWeb && tronWeb.ready && tronWeb.defaultAddress?.base58) {
-        return tronWeb.defaultAddress.base58;
-      }
-    }
-    // If not available, throw error (no dialogs)
+  const rawProjectId = (import.meta as { env?: Record<string, string | undefined> }).env
+    ?.VITE_WALLETCONNECT_PROJECT_ID;
+  const projectId = rawProjectId?.trim();
+  if (!projectId) {
     throw new Error(
-      "TronLink not detected. Please use TronWallet adapter for automatic connection."
+      "WalletConnect is not configured. Set VITE_WALLETCONNECT_PROJECT_ID to enable Tron wallet connections."
     );
   }
-  
-  // For desktop, use TronLink extension
-  return await connectTronLink();
+
+  const { WalletConnectAdapter } = await import("@tronweb3/tronwallet-adapters");
+  const wcAdapter = new WalletConnectAdapter({
+    projectId,
+    metadata: {
+      name: "FIU ID",
+      description: "Web3 Identity Wallet Registry",
+      url: typeof window !== "undefined" ? window.location.origin : "",
+      icons: []
+    }
+  });
+
+  await wcAdapter.connect();
+  const address = wcAdapter.address;
+  if (!address) {
+    throw new Error("WalletConnect Tron connection succeeded but no wallet address was returned.");
+  }
+
+  // Preserve adapter for Tron signing path in signTronMessage().
+  if (typeof window !== "undefined") {
+    (window as unknown as { __tronWalletConnectWallet?: unknown }).__tronWalletConnectWallet = wcAdapter;
+  }
+
+  return address;
 }
 
 async function createWalletConnectProvider(chain: Chain): Promise<Eip1193Provider> {
@@ -600,7 +613,6 @@ export async function connectWallet(
     // For Tron on mobile, use Tron-specific WalletConnect provider
     if (chain === "tron") {
       if (method === "injected" || method === "auto") {
-        // TronLink mobile is handled via TronWallet adapter
         try {
           return await connectTronLinkMobile();
         } catch (error) {
@@ -648,7 +660,6 @@ export async function connectWallet(
       }
     }
     if (method === "walletconnect" || method === "auto") {
-      // Use Tron-specific WalletConnect provider for mobile TronLink support
       try {
         return await createTronWalletConnectProvider();
       } catch (error) {
