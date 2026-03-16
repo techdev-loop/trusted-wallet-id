@@ -151,6 +151,9 @@ const Dashboard = () => {
   const [paymentReadyToPay, setPaymentReadyToPay] = useState(false);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [selectedChain, setSelectedChain] = useState<Chain>("ethereum");
+  const [qrConfirmWalletAddress, setQrConfirmWalletAddress] = useState("");
+  const [qrConfirmTxHash, setQrConfirmTxHash] = useState("");
+  const [isSubmittingQrConfirm, setIsSubmittingQrConfirm] = useState(false);
   const [isLoadingQrContracts, setIsLoadingQrContracts] = useState(false);
   const [qrChainConfig, setQrChainConfig] = useState<QrChainConfigState>({
     ethereum: {
@@ -572,6 +575,47 @@ const Dashboard = () => {
     return chain.toUpperCase();
   };
 
+  const handleConfirmQrPayment = async () => {
+    const normalizedChain = selectedChain;
+    if (!QR_PAY_CHAINS.includes(normalizedChain as QrPayChain)) {
+      toast.error("QR confirmation is available only for ETH, BSC, and TRON.");
+      return;
+    }
+
+    const wallet = qrConfirmWalletAddress.trim() || walletAddress.trim();
+    const txHash = qrConfirmTxHash.trim();
+    if (!wallet) {
+      toast.error("Enter wallet address used for QR transaction.");
+      return;
+    }
+    if (!txHash) {
+      toast.error("Enter transaction hash.");
+      return;
+    }
+
+    try {
+      setIsSubmittingQrConfirm(true);
+      await apiRequest("/payments/confirm", {
+        method: "POST",
+        auth: true,
+        body: {
+          walletAddress: wallet,
+          txHash,
+          amountUsdt: 10,
+          chain: normalizedChain
+        }
+      });
+      toast.success("QR payment confirmed successfully.");
+      setQrConfirmTxHash("");
+      await loadDashboard();
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Failed to confirm QR payment.";
+      toast.error(message);
+    } finally {
+      setIsSubmittingQrConfirm(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -885,6 +929,43 @@ const Dashboard = () => {
                             </div>
                           );
                         })}
+                      </div>
+                      <div className="rounded-xl border border-border/60 p-3 space-y-3">
+                        <p className="text-xs font-semibold text-foreground">
+                          Confirm QR Transaction (after sending in wallet)
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label htmlFor="qrConfirmWalletAddress" className="text-xs">
+                              Wallet Address
+                            </Label>
+                            <Input
+                              id="qrConfirmWalletAddress"
+                              value={qrConfirmWalletAddress}
+                              onChange={(event) => setQrConfirmWalletAddress(event.target.value)}
+                              placeholder={selectedChain === "tron" ? "T..." : "0x..."}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="qrConfirmTxHash" className="text-xs">
+                              Tx Hash
+                            </Label>
+                            <Input
+                              id="qrConfirmTxHash"
+                              value={qrConfirmTxHash}
+                              onChange={(event) => setQrConfirmTxHash(event.target.value)}
+                              placeholder={selectedChain === "tron" ? "Tron txid..." : "0x..."}
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void handleConfirmQrPayment()}
+                          disabled={isSubmittingQrConfirm}
+                        >
+                          {isSubmittingQrConfirm ? "Confirming..." : "Confirm QR Payment"}
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
