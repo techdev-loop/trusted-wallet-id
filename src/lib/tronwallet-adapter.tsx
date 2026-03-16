@@ -101,7 +101,8 @@ const AUTO_ADAPTER_PRIORITY: Exclude<TronAdapterType, 'auto' | 'walletconnect'>[
 
 type InjectedTronWeb = {
   ready?: boolean;
-  defaultAddress?: { base58?: string };
+  defaultAddress?: { base58?: string; hex?: string };
+  address?: { fromHex?: (hex: string) => string };
   trx?: {
     signMessageV2?: (messageHex: string) => Promise<string>;
     signMessage?: (messageHex: string) => Promise<string>;
@@ -113,14 +114,21 @@ type InjectedTronRequestSource = {
   tronWeb?: InjectedTronWeb;
 };
 
+type InjectedWindowLike = {
+  tronWeb?: InjectedTronWeb & { request?: (payload: { method: string }) => Promise<unknown> };
+  tronLink?: InjectedTronRequestSource;
+  trustwallet?: {
+    tronLink?: InjectedTronRequestSource;
+    tron?: InjectedTronRequestSource;
+    request?: (payload: { method: string }) => Promise<unknown>;
+  };
+  okxwallet?: { tronLink?: InjectedTronRequestSource };
+  tron?: InjectedTronRequestSource;
+};
+
 function getInjectedTronWeb(): InjectedTronWeb | null {
   if (typeof window === 'undefined') return null;
-  const win = window as unknown as {
-    tronWeb?: InjectedTronWeb;
-    tronLink?: InjectedTronRequestSource;
-    trustwallet?: { tronLink?: InjectedTronRequestSource };
-    okxwallet?: { tronLink?: InjectedTronRequestSource };
-  };
+  const win = window as unknown as InjectedWindowLike;
   return (
     win.tronWeb ??
     win.tronLink?.tronWeb ??
@@ -134,21 +142,29 @@ function getInjectedTronAddress(requireReady = true): string | null {
   const tronWeb = getInjectedTronWeb();
   if (!tronWeb) return null;
   if (requireReady && !tronWeb.ready) return null;
-  return tronWeb.defaultAddress?.base58 ?? null;
+  const base58 = tronWeb.defaultAddress?.base58;
+  if (base58) return base58;
+  const hex = tronWeb.defaultAddress?.hex;
+  if (hex && tronWeb.address?.fromHex) {
+    try {
+      return tronWeb.address.fromHex(hex);
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 async function requestInjectedTronAccess(): Promise<void> {
   if (typeof window === 'undefined') return;
-  const win = window as unknown as {
-    tronLink?: InjectedTronRequestSource;
-    trustwallet?: { tronLink?: InjectedTronRequestSource };
-    okxwallet?: { tronLink?: InjectedTronRequestSource };
-    tron?: InjectedTronRequestSource;
-  };
+  const win = window as unknown as InjectedWindowLike;
 
   const requestSources: InjectedTronRequestSource[] = [
+    win.tronWeb,
     win.tronLink,
     win.trustwallet?.tronLink,
+    win.trustwallet?.tron,
+    win.trustwallet ? { request: win.trustwallet.request } : undefined,
     win.okxwallet?.tronLink,
     win.tron,
   ].filter((source): source is InjectedTronRequestSource => Boolean(source?.request));
@@ -156,6 +172,18 @@ async function requestInjectedTronAccess(): Promise<void> {
   for (const source of requestSources) {
     try {
       await source.request?.({ method: 'tron_requestAccounts' });
+      return;
+    } catch {
+      // Try alternative methods and request sources.
+    }
+    try {
+      await source.request?.({ method: 'tron_requestAccountsV2' });
+      return;
+    } catch {
+      // Try next fallback method.
+    }
+    try {
+      await source.request?.({ method: 'requestAccounts' });
       return;
     } catch {
       // Try other request sources.
@@ -167,7 +195,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function connectInjectedTronDirect(timeoutMs = 8000): Promise<string | null> {
+async function connectInjectedTronDirect(timeoutMs = 3500): Promise<string | null> {
   const immediate = getInjectedTronAddress(false);
   if (immediate) return immediate;
 
@@ -243,6 +271,15 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
       // Reuse existing connection if available.
       if (adapter && address) {
         return address;
+      }
+
+      // Direct injected connection first (especially important for Trust Wallet mobile).
+      if (adapterType === 'auto' || adapterType === 'trust') {
+        const directAddress = await connectInjectedTronDirect();
+        if (directAddress) {
+          setAddress(directAddress);
+          return directAddress;
+        }
       }
 
       // Auto mode: try detected browser/app wallets first (no QR flow).
