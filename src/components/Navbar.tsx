@@ -6,27 +6,19 @@ import { useLocation } from "react-router-dom";
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
   const isLandingPage = location.pathname === "/";
   const sectionLinks = ["How It Works", "Features", "Security"];
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
 
-  const navSurfaceClass = scrolled || !isLandingPage
-    ? "bg-card/86 backdrop-blur-xl border-b border-border/55 shadow-[var(--shadow-sm)] before:absolute before:inset-0 before:mesh-overlay before:opacity-80 before:pointer-events-none before:-z-10"
-    : "bg-transparent border-b border-transparent";
+  const navSurfaceClass =
+    "app-header-surface before:absolute before:inset-0 before:mesh-overlay before:opacity-30 before:pointer-events-none before:-z-10";
 
   return (
-    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 relative ${navSurfaceClass}`}>
+    <nav className={`app-fixed-header transition-all duration-300 relative ${navSurfaceClass}`}>
       <div className="page-container flex items-center justify-between h-16">
         <Link to="/" className="flex items-center gap-2.5 group">
           <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-all duration-300">
@@ -66,7 +58,7 @@ const Navbar = () => {
       </div>
 
       {mobileOpen && (
-        <div className="md:hidden bg-card/95 backdrop-blur-xl border-b border-border/60 animate-slide-up">
+        <div className="md:hidden bg-white/95 backdrop-blur-xl border-b border-slate-200/80 animate-slide-up">
           <div className="page-container pb-5 pt-3 space-y-2">
             {isLandingPage &&
               sectionLinks.map((item) => (

@@ -110,7 +110,7 @@ const Web3Wallet = () => {
     <div className="page-shell">
       <Navbar />
 
-      <div className="page-container py-12 md:py-16 max-w-4xl">
+      <div className="page-container pt-24 pb-12 md:pt-28 md:pb-16 max-w-4xl">
         <motion.div
           initial="hidden"
           animate="visible"

@@ -545,7 +545,7 @@ const Admin = () => {
   if (!canAccessAdmin) {
     return (
       <div className="page-shell">
-        <header className="fixed inset-x-0 top-0 z-50 border-b border-border/60 bg-card/84 backdrop-blur-xl shadow-[var(--shadow-sm)] before:absolute before:inset-0 before:mesh-overlay before:opacity-70 before:pointer-events-none before:-z-10">
+        <header className="app-fixed-header app-header-surface before:absolute before:inset-0 before:mesh-overlay before:opacity-30 before:pointer-events-none before:-z-10">
           <div className="page-container flex items-center justify-between h-14 sm:h-16">
             <Link to="/" className="flex items-center gap-2.5 group">
               <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
@@ -575,7 +575,7 @@ const Admin = () => {
 
   return (
     <div className="page-shell">
-      <header className="fixed inset-x-0 top-0 z-50 border-b border-border/60 bg-card/84 backdrop-blur-xl shadow-[var(--shadow-sm)] before:absolute before:inset-0 before:mesh-overlay before:opacity-70 before:pointer-events-none before:-z-10">
+      <header className="app-fixed-header app-header-surface before:absolute before:inset-0 before:mesh-overlay before:opacity-30 before:pointer-events-none before:-z-10">
         <div className="page-container flex items-center justify-between h-14 sm:h-16">
           <Link to="/" className="flex items-center gap-2.5 group">
             <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">

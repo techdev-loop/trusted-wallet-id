@@ -129,7 +129,7 @@ const Auth = () => {
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-8 lg:p-10">
+      <div className="relative flex-1 flex items-center justify-center p-4 sm:p-6 md:p-8 lg:p-10">
         <motion.div
           className="w-full max-w-md rounded-2xl border border-border/65 bg-card/85 backdrop-blur-sm shadow-[var(--shadow-md)] p-5 sm:p-7"
           initial={{ opacity: 0, x: 20 }}
