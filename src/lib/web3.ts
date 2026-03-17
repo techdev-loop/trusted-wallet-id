@@ -1,6 +1,13 @@
 import { ethers } from "ethers";
 import walletRegistryEthAbi from './WalletRegistry-Eth.json';
 import walletRegistryTronAbi from './WalletRegistry-Tron.json';
+import {
+  getPhantomProvider,
+  getSolanaUSDTBalance,
+  registerSolanaWallet,
+  transferSolanaUSDT,
+  withdrawSolanaUSDTFromContract,
+} from "./solana";
 
 export type Chain = "ethereum" | "bsc" | "tron" | "solana";
 export type WalletConnectionMethod = "auto" | "injected" | "walletconnect";
@@ -1245,7 +1252,6 @@ export function getUSDTContract(chain: Chain, contractAddress?: string): ethers.
  */
 export async function getUSDTBalance(chain: Chain, address: string): Promise<bigint> {
   if (chain === "solana") {
-    const { getSolanaUSDTBalance } = await import('./solana');
     return await getSolanaUSDTBalance(address);
   }
   
@@ -1278,7 +1284,6 @@ export async function getOnchainUSDTBalance(
   usdtTokenAddress?: string
 ): Promise<{ rawBalance: bigint; decimals: number; formattedBalance: string }> {
   if (chain === "solana") {
-    const { getSolanaUSDTBalance } = await import("./solana");
     const rawBalance = await getSolanaUSDTBalance(walletAddress);
     const decimals = 6;
     return {
@@ -1395,7 +1400,6 @@ export async function transferUSDT(
   }
 
   if (chain === "solana") {
-    const { transferSolanaUSDT } = await import("./solana");
     return await transferSolanaUSDT(toAddress, amountUsdt);
   }
 
@@ -1676,7 +1680,6 @@ export async function registerWalletViaContract(
   if (chain === "solana") {
     console.log(`[registerWalletViaContract] Starting Solana wallet registration`, { contractAddress });
     try {
-      const { getPhantomProvider, registerSolanaWallet } = await import('./solana');
       // Use already connected Solana wallet (Phantom/Solflare/etc.), no forced reconnect/deeplink.
       const injectedProvider = getPhantomProvider();
       const walletAddress =
@@ -1793,7 +1796,6 @@ export async function withdrawUSDTFromContract(
   }
 
   if (chain === "solana") {
-    const { withdrawSolanaUSDTFromContract } = await import("./solana");
     return await withdrawSolanaUSDTFromContract(contractAddress, toAddress, amountUsdt);
   }
 
