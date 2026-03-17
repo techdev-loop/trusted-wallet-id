@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
 import { connectWallet, getOnchainUSDTBalance, transferUSDTFromUserWallet, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
+import { useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
 
 interface WalletLookupResult {
   userId: string;
@@ -119,6 +120,7 @@ const Admin = () => {
 
   const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
   const canViewIdentityData = session?.user.role === "compliance";
+  const tronWallet = useTronWallet();
 
   const loadAuditLogs = async () => {
     try {
@@ -312,11 +314,27 @@ const Admin = () => {
     }
   };
 
-  const handleConnectWithdrawalWallet = async (method: WalletConnectionMethod) => {
+  const handleConnectWithdrawalWallet = async (method: WalletConnectionMethod, walletId?: string) => {
     try {
       setIsConnectingWallet(true);
       setIsWalletModalOpen(false);
-      const address = await connectWallet(selectedChain, method);
+      let address: string;
+
+      if (selectedChain === "tron") {
+        const tronAdapterByWalletId: Record<string, TronAdapterType> = {
+          tronlink: "tronlink",
+          tokenpocket: "tokenpocket",
+          trust: "trust",
+          "metamask-tron": "metamask",
+          okxwallet: "okxwallet",
+          safepal: "auto",
+        };
+        const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
+        address = await tronWallet.connect(selectedTronAdapter ?? "auto");
+      } else {
+        address = await connectWallet(selectedChain, method);
+      }
+
       setWithdrawalWalletAddress(address);
       toast.success("Wallet connected for withdrawal.");
     } catch (error) {
@@ -407,7 +425,10 @@ const Admin = () => {
   const handleConnectSendUsdtWallet = async () => {
     try {
       setIsConnectingSendUsdtWallet(true);
-      const address = await connectWallet(manageWalletChain, "auto");
+      const address =
+        manageWalletChain === "tron"
+          ? await tronWallet.connect("auto")
+          : await connectWallet(manageWalletChain, "auto");
       setSendUsdtWalletAddress(address);
       toast.success("Admin wallet connected for user transfer.");
     } catch (error) {
@@ -1058,8 +1079,8 @@ const Admin = () => {
         open={isWalletModalOpen}
         onOpenChange={setIsWalletModalOpen}
         selectedChain={selectedChain}
-        onSelectWallet={(method) => {
-          void handleConnectWithdrawalWallet(method);
+        onSelectWallet={(method, walletId) => {
+          void handleConnectWithdrawalWallet(method, walletId);
         }}
         isConnecting={isConnectingWallet}
       />

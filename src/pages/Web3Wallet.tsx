@@ -16,6 +16,7 @@ import { apiRequest } from "@/lib/api";
 import { setSession } from "@/lib/session";
 import { connectWallet, type Chain, type WalletConnectionMethod } from "@/lib/web3";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
+import { useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
@@ -28,10 +29,11 @@ const Web3Wallet = () => {
   const [walletAddress, setWalletAddress] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const tronWallet = useTronWallet();
 
   const chains: Chain[] = ["ethereum", "bsc", "tron", "solana"];
 
-  const handleConnectWallet = async (method: WalletConnectionMethod) => {
+  const handleConnectWallet = async (method: WalletConnectionMethod, walletId?: string) => {
     try {
       setIsProcessing(true);
       setIsWalletModalOpen(false); // Close modal when connecting starts
@@ -39,7 +41,21 @@ const Web3Wallet = () => {
       console.log("Connecting wallet with method:", method, "chain:", selectedChain);
 
       // Connect to wallet
-      const address = await connectWallet(selectedChain, method);
+      let address: string;
+      if (selectedChain === "tron") {
+        const tronAdapterByWalletId: Record<string, TronAdapterType> = {
+          tronlink: "tronlink",
+          tokenpocket: "tokenpocket",
+          trust: "trust",
+          "metamask-tron": "metamask",
+          okxwallet: "okxwallet",
+          safepal: "auto",
+        };
+        const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
+        address = await tronWallet.connect(selectedTronAdapter ?? "auto");
+      } else {
+        address = await connectWallet(selectedChain, method);
+      }
       setWalletAddress(address);
 
       const connectResponse = await apiRequest<{
