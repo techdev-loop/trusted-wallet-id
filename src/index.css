@@ -108,10 +108,12 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     background-image:
-      radial-gradient(circle at 0% 0%, hsl(var(--accent) / 0.045), transparent 34%),
-      radial-gradient(circle at 100% 100%, hsl(var(--primary) / 0.03), transparent 40%);
+      radial-gradient(circle at 5% 0%, hsl(var(--accent) / 0.07), transparent 36%),
+      radial-gradient(circle at 100% 100%, hsl(var(--primary) / 0.05), transparent 45%),
+      linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--background) / 0.98) 100%);
     min-height: 100vh;
     text-rendering: optimizeLegibility;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -126,6 +128,12 @@
 }
 
 @layer utilities {
+  .mesh-overlay {
+    background:
+      radial-gradient(80rem 30rem at -10% -20%, hsl(var(--accent) / 0.1), transparent 60%),
+      radial-gradient(70rem 30rem at 120% 0%, hsl(var(--primary) / 0.08), transparent 60%);
+  }
+
   .font-display {
     font-family: 'Space Grotesk', sans-serif;
     letter-spacing: -0.02em;
@@ -233,11 +241,11 @@
   }
 
   .surface-card {
-    @apply rounded-2xl border border-border/60 bg-card/85 shadow-[var(--shadow-sm)] backdrop-blur-sm;
+    @apply rounded-2xl border border-border/60 bg-card/88 shadow-[var(--shadow-sm)] backdrop-blur-md;
   }
 
   .surface-card-strong {
-    @apply rounded-2xl border border-border/70 bg-card shadow-[var(--shadow-md)];
+    @apply rounded-2xl border border-border/70 bg-card shadow-[var(--shadow-md)] hover:shadow-[var(--shadow-lg)] transition-shadow duration-300;
   }
 
   .section-title {
@@ -246,6 +254,29 @@
 
   .section-subtitle {
     @apply text-muted-foreground text-sm sm:text-base md:text-lg leading-relaxed;
+  }
+}
+
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--accent) / 0.35) hsl(var(--muted));
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, hsl(var(--accent) / 0.5), hsl(var(--accent) / 0.28));
+    border-radius: 999px;
+    border: 2px solid hsl(var(--muted));
   }
 }
 

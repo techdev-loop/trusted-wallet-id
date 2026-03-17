@@ -32,6 +32,7 @@ const Footer = () => {
   return (
     <footer className="relative overflow-hidden border-t border-border/60 bg-primary text-primary-foreground">
       <div className="absolute inset-0 grid-pattern opacity-[0.06]" />
+      <div className="absolute inset-0 mesh-overlay opacity-30" />
       <div className="page-container py-12 sm:py-14 md:py-16 relative">
         <div className="grid lg:grid-cols-12 gap-10 mb-10 md:mb-12">
           <div className="lg:col-span-5">

@@ -22,11 +22,11 @@ const Navbar = () => {
   }, [location.pathname]);
 
   const navSurfaceClass = scrolled || !isLandingPage
-    ? "bg-card/88 backdrop-blur-xl border-b border-border/55 shadow-[var(--shadow-sm)]"
+    ? "bg-card/86 backdrop-blur-xl border-b border-border/55 shadow-[var(--shadow-sm)] before:absolute before:inset-0 before:mesh-overlay before:opacity-80 before:pointer-events-none before:-z-10"
     : "bg-transparent border-b border-transparent";
 
   return (
-    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${navSurfaceClass}`}>
+    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 relative ${navSurfaceClass}`}>
       <div className="page-container flex items-center justify-between h-16">
         <Link to="/" className="flex items-center gap-2.5 group">
           <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-all duration-300">
