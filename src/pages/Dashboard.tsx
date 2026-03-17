@@ -370,7 +370,7 @@ const Dashboard = () => {
       console.log(`[Payment] Step 2: Registering wallet via contract for ${selectedChain}...`);
       let txHash: string;
       try {
-        txHash = await registerWalletViaContract(selectedChain, contractConfig.contractAddress);
+        txHash = await registerWalletViaContract(selectedChain, contractConfig.contractAddress, walletAddress);
         console.log(`[Payment] Step 2: Transaction successful, txHash:`, txHash);
       } catch (registerError) {
         console.error(`[Payment] Step 2: Wallet registration failed:`, registerError);

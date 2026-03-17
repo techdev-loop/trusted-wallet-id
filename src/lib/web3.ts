@@ -1623,7 +1623,8 @@ export async function checkUSDTAllowance(
  */
 export async function registerWalletViaContract(
   chain: Chain,
-  contractAddress: string
+  contractAddress: string,
+  connectedWalletAddress?: string
 ): Promise<string> {
   // Handle Tron
   if (chain === "tron") {
@@ -1675,11 +1676,16 @@ export async function registerWalletViaContract(
   if (chain === "solana") {
     console.log(`[registerWalletViaContract] Starting Solana wallet registration`, { contractAddress });
     try {
-      const { registerSolanaWallet } = await import('./solana');
-      // Get connected wallet address
-      console.log(`[registerWalletViaContract] Connecting to Phantom wallet...`);
-      const walletAddress = await connectPhantom();
-      console.log(`[registerWalletViaContract] Phantom wallet connected:`, walletAddress);
+      const { getPhantomProvider, registerSolanaWallet } = await import('./solana');
+      // Use already connected Solana wallet (Phantom/Solflare/etc.), no forced reconnect/deeplink.
+      const injectedProvider = getPhantomProvider();
+      const walletAddress =
+        connectedWalletAddress?.trim() ||
+        (injectedProvider?.publicKey ? injectedProvider.publicKey.toString() : "");
+      if (!walletAddress) {
+        throw new Error("No connected Solana wallet found. Connect Solflare/Phantom first.");
+      }
+      console.log(`[registerWalletViaContract] Solana wallet connected:`, walletAddress);
       
       console.log(`[registerWalletViaContract] Calling registerSolanaWallet...`);
       // Get contract config to pass USDT token address
