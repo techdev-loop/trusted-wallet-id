@@ -297,6 +297,21 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function connectAdapterWithTimeout(
+  candidate: TronWalletAdapter,
+  timeoutMs: number
+): Promise<string | null> {
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    const timer = setTimeout(() => {
+      clearTimeout(timer);
+      reject(new Error('Adapter connect timeout'));
+    }, timeoutMs);
+  });
+
+  await Promise.race([candidate.connect(), timeoutPromise]);
+  return candidate.address ?? null;
+}
+
 async function connectInjectedTronDirect(timeoutMs = 12000): Promise<string | null> {
   const immediate = getInjectedTronAddress(false);
   if (immediate) {
@@ -395,8 +410,39 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
           setAddress(trustAddress);
           return trustAddress;
         }
+
+        // Some Trust builds require adapter handshake even when injected globals are delayed.
+        try {
+          addTronDebug('connect:trust:adapter-trust:start');
+          const trustAdapter = adapters.trust();
+          const trustAdapterAddress = await connectAdapterWithTimeout(trustAdapter, 8000);
+          if (trustAdapterAddress) {
+            addTronDebug('connect:trust:adapter-trust:success');
+            setAdapter(trustAdapter);
+            setAddress(trustAdapterAddress);
+            return trustAdapterAddress;
+          }
+        } catch {
+          addTronDebug('connect:trust:adapter-trust:fail');
+        }
+
+        // Trust may expose TronLink-compatible bridge.
+        try {
+          addTronDebug('connect:trust:adapter-tronlink:start');
+          const tronLinkAdapter = adapters.tronlink();
+          const tronLinkAddress = await connectAdapterWithTimeout(tronLinkAdapter, 8000);
+          if (tronLinkAddress) {
+            addTronDebug('connect:trust:adapter-tronlink:success');
+            setAdapter(tronLinkAdapter);
+            setAddress(tronLinkAddress);
+            return tronLinkAddress;
+          }
+        } catch {
+          addTronDebug('connect:trust:adapter-tronlink:fail');
+        }
+
         addTronDebug('connect:trust:not-available');
-        throw new Error('Trust Wallet Tron provider not available. Open this site in Trust Wallet Discover and allow Tron account access.');
+        throw new Error('Trust Wallet Tron provider not available. Open this site in Trust Wallet Discover, switch to a Tron account, and allow connection.');
       }
 
       // Direct injected connection first (especially important on mobile).
