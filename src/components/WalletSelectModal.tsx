@@ -227,10 +227,17 @@ export function WalletSelectModal({
   }, [open, selectedChain]);
 
   // Filter wallets by selected chain
-  const availableWallets = WALLET_OPTIONS.filter((wallet) =>
-    wallet.supportedChains.includes(selectedChain)
-  ).sort((a, b) => {
-    const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+  const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+
+  const availableWallets = WALLET_OPTIONS.filter((wallet) => {
+    if (!wallet.supportedChains.includes(selectedChain)) {
+      return false;
+    }
+    if (isMobile && (wallet.id === "trust" || wallet.id === "safepal")) {
+      return false;
+    }
+    return true;
+  }).sort((a, b) => {
     if (isMobile) {
       if (a.id === "walletconnect") return -1;
       if (b.id === "walletconnect") return 1;
