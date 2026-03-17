@@ -84,34 +84,10 @@ export const USDT_ADDRESSES: Record<Chain, string> = {
   solana: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" // Solana Mainnet USDT
 };
 
-function resolveEnvUsdtAddress(chain: Chain): string | undefined {
-  const env = (import.meta as { env?: Record<string, string | undefined> }).env;
-  if (!env) return undefined;
-
-  const keysByChain: Record<Chain, string[]> = {
-    ethereum: ["VITE_ETHEREUM_USDT_ADDRESS", "VITE_USDT_ETHEREUM_ADDRESS", "ETHEREUM_USDT_ADDRESS"],
-    bsc: ["VITE_BSC_USDT_ADDRESS", "VITE_USDT_BSC_ADDRESS", "BSC_USDT_ADDRESS"],
-    tron: ["VITE_TRON_USDT_ADDRESS", "VITE_USDT_TRON_ADDRESS", "TRON_USDT_ADDRESS"],
-    solana: [
-      "VITE_SOLANA_USDT_ADDRESS",
-      "VITE_SOLANA_DEVNET_USDT_ADDRESS",
-      "SOLANA_USDT_ADDRESS",
-      "SOLANA_DEVNET_USDT_ADDRESS",
-    ],
-  };
-
-  for (const key of keysByChain[chain]) {
-    const value = env[key]?.trim();
-    if (value) return value;
-  }
-
-  return undefined;
-}
-
 export function resolveUSDTAddress(chain: Chain, overrideAddress?: string): string {
   const override = overrideAddress?.trim();
   if (override) return override;
-  return resolveEnvUsdtAddress(chain) || USDT_ADDRESSES[chain];
+  return USDT_ADDRESSES[chain];
 }
 
 // ERC20 ABI for USDT
