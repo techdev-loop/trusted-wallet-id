@@ -182,6 +182,12 @@ function getInjectedTronWeb(): InjectedTronWeb | null {
   );
 }
 
+function getTrustTronProvider(): InjectedTronRequestSource | null {
+  if (typeof window === 'undefined') return null;
+  const win = window as unknown as InjectedWindowLike;
+  return win.trustwallet?.tronLink ?? null;
+}
+
 function getInjectedTronAddress(requireReady = true): string | null {
   const tronWeb = getInjectedTronWeb();
   if (!tronWeb) return null;
@@ -257,11 +263,17 @@ async function requestInjectedTronAccess(): Promise<string | null> {
   };
 
   const requestMethods: Array<{ method: string; params?: unknown[] }> = [
+    { method: 'tron_requestAccounts' },
     { method: 'tron_requestAccounts', params: [] },
+    { method: 'tron_requestAccountsV2' },
     { method: 'tron_requestAccountsV2', params: [] },
+    { method: 'requestAccounts' },
     { method: 'requestAccounts', params: [] },
+    { method: 'tron_accounts' },
     { method: 'tron_accounts', params: [] },
+    { method: 'eth_requestAccounts' },
     { method: 'eth_requestAccounts', params: [] },
+    { method: 'eth_accounts' },
     { method: 'eth_accounts', params: [] },
   ];
 
@@ -291,6 +303,45 @@ async function requestInjectedTronAccess(): Promise<string | null> {
 
   addTronDebug('request:all-failed');
   return null;
+}
+
+async function waitForTrustProvider(timeoutMs = 15000): Promise<InjectedTronRequestSource | null> {
+  const immediate = getTrustTronProvider();
+  if (immediate) return immediate;
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const provider = getTrustTronProvider();
+    if (provider) return provider;
+    await sleep(300);
+  }
+  return getTrustTronProvider();
+}
+
+async function connectTrustProviderDirect(timeoutMs = 15000): Promise<string | null> {
+  const trustProvider = await waitForTrustProvider(timeoutMs);
+  if (!trustProvider?.request) return null;
+
+  const requestPayloads: Array<{ method: string; params?: unknown[] }> = [
+    { method: 'tron_requestAccounts' },
+    { method: 'tron_requestAccounts', params: [] },
+    { method: 'tron_requestAccountsV2' },
+    { method: 'requestAccounts' },
+  ];
+
+  for (const payload of requestPayloads) {
+    try {
+      const result = await trustProvider.request(payload);
+      const resAddress = extractAddressFromUnknown(result);
+      if (resAddress) return resAddress;
+      const injectedAddress = getInjectedTronAddress(false);
+      if (injectedAddress) return injectedAddress;
+    } catch {
+      // Try next request payload.
+    }
+  }
+
+  return getInjectedTronAddress(false);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -404,6 +455,12 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
       // Trust Wallet selection: use direct injected Trust/Tron flow only.
       if (adapterType === 'trust') {
         addTronDebug('connect:trust:start');
+        const trustDirectAddress = await connectTrustProviderDirect(18000);
+        if (trustDirectAddress) {
+          addTronDebug('connect:trust:provider-success');
+          setAddress(trustDirectAddress);
+          return trustDirectAddress;
+        }
         const trustAddress = await connectInjectedTronDirect(15000);
         if (trustAddress) {
           addTronDebug('connect:trust:success');
