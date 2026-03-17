@@ -3,7 +3,7 @@ import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { useAccount, useDisconnect, useSwitchChain, useSignMessage, useConfig } from 'wagmi';
 import { bsc, mainnet } from 'wagmi/chains';
 import { getAccount } from 'wagmi/actions';
-import type { Chain } from './web3';
+import { setActiveEip1193Provider, type Chain } from './web3';
 
 // Map our Chain type to Wagmi chain IDs
 export const CHAIN_TO_WAGMI_ID: Record<Chain, number | null> = {
@@ -43,6 +43,26 @@ export function useWagmiWallet() {
     [config]
   );
 
+  const syncConnectedProvider = useCallback(async (): Promise<void> => {
+    const state = getAccount(config);
+    const connector = state.connector;
+    if (!connector || typeof connector.getProvider !== 'function') return;
+
+    try {
+      const provider = await connector.getProvider();
+      if (
+        provider &&
+        typeof provider === 'object' &&
+        'request' in provider &&
+        typeof (provider as { request?: unknown }).request === 'function'
+      ) {
+        setActiveEip1193Provider(provider as unknown as import('ethers').Eip1193Provider);
+      }
+    } catch {
+      // Best effort: some connectors don't expose an EIP-1193 provider directly.
+    }
+  }, [config]);
+
   const connectWallet = useCallback(async (chain: Chain): Promise<string> => {
     if (chain === 'tron' || chain === 'solana') {
       throw new Error('RainbowKit only supports EVM chains.');
@@ -62,13 +82,15 @@ export function useWagmiWallet() {
       connectedAddress = await waitForConnection();
     }
 
+    await syncConnectedProvider();
+
     const current = getAccount(config);
     if (current.chainId !== targetChainId) {
       await switchChainAsync({ chainId: targetChainId });
     }
 
     return connectedAddress;
-  }, [address, config, isConnected, openConnectModal, switchChainAsync, waitForConnection]);
+  }, [address, config, isConnected, openConnectModal, switchChainAsync, syncConnectedProvider, waitForConnection]);
 
   // Message signing hook
   const { signMessageAsync } = useSignMessage();

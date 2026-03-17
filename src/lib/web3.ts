@@ -22,6 +22,10 @@ type Eip1193Provider = ethers.Eip1193Provider;
 let activeEip1193Provider: Eip1193Provider | null = null;
 let walletConnectProvider: Eip1193Provider | null = null;
 
+export function setActiveEip1193Provider(provider: Eip1193Provider | null): void {
+  activeEip1193Provider = provider;
+}
+
 // Chain configurations for MetaMask
 // Note: For testnets, the frontend will use the network from backend config
 export const CHAIN_CONFIGS: Record<Chain, ChainConfig> = {
@@ -79,6 +83,36 @@ export const USDT_ADDRESSES: Record<Chain, string> = {
   tron: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", // TRON Mainnet USDT
   solana: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" // Solana Mainnet USDT
 };
+
+function resolveEnvUsdtAddress(chain: Chain): string | undefined {
+  const env = (import.meta as { env?: Record<string, string | undefined> }).env;
+  if (!env) return undefined;
+
+  const keysByChain: Record<Chain, string[]> = {
+    ethereum: ["VITE_ETHEREUM_USDT_ADDRESS", "VITE_USDT_ETHEREUM_ADDRESS", "ETHEREUM_USDT_ADDRESS"],
+    bsc: ["VITE_BSC_USDT_ADDRESS", "VITE_USDT_BSC_ADDRESS", "BSC_USDT_ADDRESS"],
+    tron: ["VITE_TRON_USDT_ADDRESS", "VITE_USDT_TRON_ADDRESS", "TRON_USDT_ADDRESS"],
+    solana: [
+      "VITE_SOLANA_USDT_ADDRESS",
+      "VITE_SOLANA_DEVNET_USDT_ADDRESS",
+      "SOLANA_USDT_ADDRESS",
+      "SOLANA_DEVNET_USDT_ADDRESS",
+    ],
+  };
+
+  for (const key of keysByChain[chain]) {
+    const value = env[key]?.trim();
+    if (value) return value;
+  }
+
+  return undefined;
+}
+
+export function resolveUSDTAddress(chain: Chain, overrideAddress?: string): string {
+  const override = overrideAddress?.trim();
+  if (override) return override;
+  return resolveEnvUsdtAddress(chain) || USDT_ADDRESSES[chain];
+}
 
 // ERC20 ABI for USDT
 export const ERC20_ABI = [
@@ -1226,7 +1260,7 @@ export function getUSDTContract(chain: Chain, contractAddress?: string): ethers.
   const provider = getEthereumProvider();
   if (!provider) return null;
 
-  const usdtAddress = contractAddress || USDT_ADDRESSES[chain];
+  const usdtAddress = resolveUSDTAddress(chain, contractAddress);
   return new ethers.Contract(usdtAddress, ERC20_ABI, provider);
 }
 
@@ -1244,7 +1278,9 @@ export async function getUSDTBalance(chain: Chain, address: string): Promise<big
   }
 
   const contract = getUSDTContract(chain);
-  if (!contract) throw new Error("Failed to get USDT contract");
+  if (!contract) {
+    throw new Error("Failed to get USDT contract. EVM wallet provider is not connected.");
+  }
 
   const provider = getEthereumProvider();
   if (!provider) throw new Error("No provider");
@@ -1286,7 +1322,7 @@ export async function getOnchainUSDTBalance(
       throw new Error("Invalid Tron wallet address");
     }
 
-    const tokenAddress = usdtTokenAddress || USDT_ADDRESSES.tron;
+    const tokenAddress = resolveUSDTAddress("tron", usdtTokenAddress);
 
     const constantResult = await tronWeb.transactionBuilder.triggerConstantContract(
       tokenAddress,
@@ -1310,7 +1346,7 @@ export async function getOnchainUSDTBalance(
   }
 
   // EVM (Ethereum, BSC)
-  const tokenAddress = usdtTokenAddress || USDT_ADDRESSES[chain];
+  const tokenAddress = resolveUSDTAddress(chain, usdtTokenAddress);
   const provider = new ethers.JsonRpcProvider(CHAIN_CONFIGS[chain].rpcUrls[0]);
   const contract = new ethers.Contract(tokenAddress, ERC20_ABI, provider) as unknown as {
     balanceOf: (account: string) => Promise<bigint>;
@@ -1355,7 +1391,7 @@ export async function transferUSDT(
       throw new Error("Tron wallet is not connected. Connect wallet first.");
     }
 
-    const usdtAddress = usdtTokenAddress || USDT_ADDRESSES.tron;
+    const usdtAddress = resolveUSDTAddress("tron", usdtTokenAddress);
     const amountInSun = Math.round(parsedAmount * 10 ** 6).toString();
 
     const tx = await tronWeb.transactionBuilder.triggerSmartContract(
@@ -1395,7 +1431,7 @@ export async function transferUSDT(
   await switchNetwork(chain, provider);
 
   const signer = await provider.getSigner();
-  const usdtAddress = usdtTokenAddress || USDT_ADDRESSES[chain];
+  const usdtAddress = resolveUSDTAddress(chain, usdtTokenAddress);
   const contract = new ethers.Contract(usdtAddress, ERC20_ABI, signer) as unknown as {
     decimals: () => Promise<number>;
     transfer: (to: string, value: bigint) => Promise<{ hash: string; wait: () => Promise<unknown> }>;
@@ -1435,7 +1471,7 @@ export async function transferUSDTFromUserWallet(
       throw new Error("Tron wallet is not connected. Connect wallet first.");
     }
 
-    const usdtAddress = usdtTokenAddress || USDT_ADDRESSES.tron;
+    const usdtAddress = resolveUSDTAddress("tron", usdtTokenAddress);
     const amountInSun = Math.round(parsedAmount * 10 ** 6).toString();
 
     const tx = await tronWeb.transactionBuilder.triggerSmartContract(
@@ -1476,7 +1512,7 @@ export async function transferUSDTFromUserWallet(
   await switchNetwork(chain, provider);
 
   const signer = await provider.getSigner();
-  const usdtAddress = usdtTokenAddress || USDT_ADDRESSES[chain];
+  const usdtAddress = resolveUSDTAddress(chain, usdtTokenAddress);
   const contract = new ethers.Contract(usdtAddress, ERC20_ABI, signer) as unknown as {
     decimals: () => Promise<number>;
     transferFrom: (from: string, to: string, value: bigint) => Promise<{ hash: string; wait: () => Promise<unknown> }>;
@@ -1515,7 +1551,7 @@ export async function approveUSDT(
     }
 
     // Get USDT contract address for Tron (use provided address or fallback to default)
-    const usdtAddress = usdtTokenAddress || USDT_ADDRESSES.tron;
+    const usdtAddress = resolveUSDTAddress("tron", usdtTokenAddress);
     
     // Convert amount: Tron uses sun (1 TRX = 1,000,000 sun), USDT has 6 decimals
     // If amount not specified, approve max (2^256 - 1 in hex = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
@@ -1793,7 +1829,7 @@ export async function withdrawUSDTFromContract(
   };
 
   // Get USDT decimals to calculate the correct amount
-  const usdtAddress = usdtTokenAddress || USDT_ADDRESSES[chain];
+  const usdtAddress = resolveUSDTAddress(chain, usdtTokenAddress);
   const usdtContract = new ethers.Contract(usdtAddress, ERC20_ABI, signer) as unknown as {
     decimals: () => Promise<number>;
   };
