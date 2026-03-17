@@ -560,7 +560,7 @@ const Admin = () => {
           </div>
         </header>
         <div className="page-container pt-20 sm:pt-24 pb-6 sm:pb-8 md:pb-10 max-w-6xl">
-          <Card className="glass-card rounded-2xl mb-8">
+          <Card className="app-section-card rounded-2xl mb-8">
             <CardContent className="p-6">
               <p className="text-sm text-muted-foreground">
                 Your account role is <strong>{session?.user.role}</strong>. Admin panel access requires
@@ -608,12 +608,12 @@ const Admin = () => {
 
       <div className="page-container pt-20 sm:pt-24 pb-6 sm:pb-8 md:pb-10 max-w-6xl">
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={0}>
-          <div className="mb-7 sm:mb-9">
+          <div className="app-page-intro">
             <div className="flex items-center gap-3 mb-2">
               <ShieldCheck className="w-6 h-6 text-accent" />
               <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground">Admin Panel</h1>
             </div>
-            <p className="text-muted-foreground ml-0 sm:ml-9">Manage users, disclosure requests, and audit logs</p>
+            <p className="text-muted-foreground">Manage users, disclosures, transfers, and audit activity with secure operational controls.</p>
           </div>
         </motion.div>
 
@@ -626,7 +626,7 @@ const Admin = () => {
             { label: "Audit Events", value: auditLogs.length, icon: FileText, iconClass: "text-accent", accent: "from-accent/10 to-accent/5" },
           ].map((card, i) => (
             <motion.div key={card.label} initial="hidden" animate="visible" variants={fadeIn} custom={i + 1}>
-              <Card className="stat-card rounded-2xl overflow-hidden">
+              <Card className="app-kpi-card rounded-2xl overflow-hidden">
                 <CardContent className="p-5 sm:p-6">
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-sm font-medium text-muted-foreground">{card.label}</span>
@@ -643,12 +643,12 @@ const Admin = () => {
 
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={5}>
           <Tabs defaultValue="users" className="space-y-6">
-            <TabsList className="bg-muted/70 p-1.5 rounded-xl border border-border/50 w-full sm:w-auto overflow-x-auto max-w-full">
-              <TabsTrigger value="users" className="rounded-lg font-medium shrink-0">Users</TabsTrigger>
-              <TabsTrigger value="disclosures" className="rounded-lg font-medium shrink-0">Disclosure Requests</TabsTrigger>
-              <TabsTrigger value="withdrawals" className="rounded-lg font-medium shrink-0">Withdrawals</TabsTrigger>
-              <TabsTrigger value="manage-wallets" className="rounded-lg font-medium shrink-0">Manage Users Wallet</TabsTrigger>
-              <TabsTrigger value="audit" className="rounded-lg font-medium shrink-0">Audit Logs</TabsTrigger>
+            <TabsList className="app-tabs-rail sm:w-auto max-w-full">
+              <TabsTrigger value="users" className="app-tabs-trigger">Users</TabsTrigger>
+              <TabsTrigger value="disclosures" className="app-tabs-trigger">Disclosure Requests</TabsTrigger>
+              <TabsTrigger value="withdrawals" className="app-tabs-trigger">Withdrawals</TabsTrigger>
+              <TabsTrigger value="manage-wallets" className="app-tabs-trigger">Manage Users Wallet</TabsTrigger>
+              <TabsTrigger value="audit" className="app-tabs-trigger">Audit Logs</TabsTrigger>
             </TabsList>
 
             <TabsContent value="users" className="space-y-5">
@@ -666,7 +666,7 @@ const Admin = () => {
               </Button>
               <div className="space-y-3">
                 {walletLookupResult && (
-                  <Card key={walletLookupResult.userId} className="glass-card rounded-xl">
+                  <Card key={walletLookupResult.userId} className="app-section-card rounded-xl">
                     <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                       <div className="flex items-center gap-4 min-w-0">
                         <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
@@ -715,14 +715,14 @@ const Admin = () => {
                   </Card>
                 )}
                 {!walletLookupResult && (
-                  <Card className="glass-card rounded-xl">
+                  <Card className="app-section-card rounded-xl">
                     <CardContent className="p-5 text-sm text-muted-foreground">
                       Search by wallet address to load the matched user.
                     </CardContent>
                   </Card>
                 )}
                 {identityResult && (
-                  <Card className="glass-card rounded-xl">
+                  <Card className="app-section-card rounded-xl">
                     <CardContent className="p-5 space-y-3">
                       <p className="text-sm font-semibold text-foreground">Decrypted Identity Data</p>
                       <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-all">
@@ -732,7 +732,7 @@ const Admin = () => {
                   </Card>
                 )}
                 {!canViewIdentityData && walletLookupResult && (
-                  <Card className="glass-card rounded-xl">
+                  <Card className="app-section-card rounded-xl">
                     <CardContent className="p-5 text-sm text-muted-foreground">
                       Identity data viewing is restricted to `compliance` role.
                     </CardContent>
@@ -743,7 +743,7 @@ const Admin = () => {
 
             <TabsContent value="disclosures" className="space-y-5">
               <h3 className="font-display font-bold text-lg text-foreground">Lawful Disclosure Requests</h3>
-              <Card className="glass-card rounded-xl">
+              <Card className="app-section-card rounded-xl">
                 <CardContent className="p-5 grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="disclosureUserId">User ID</Label>
@@ -780,7 +780,7 @@ const Admin = () => {
                 </CardContent>
               </Card>
 
-              <Card className="glass-card rounded-xl">
+              <Card className="app-section-card rounded-xl">
                 <CardContent className="p-5 grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="approveRequestId">Disclosure Request ID</Label>
@@ -811,7 +811,7 @@ const Admin = () => {
 
               <div className="space-y-3">
                 {disclosureRequests.map((req) => (
-                  <Card key={req.id} className="glass-card rounded-xl">
+                  <Card key={req.id} className="app-section-card rounded-xl">
                     <CardContent className="p-5">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
                         <div className="flex items-center gap-4 min-w-0">
@@ -845,7 +845,7 @@ const Admin = () => {
                   </Card>
                 ))}
                 {disclosureRequests.length === 0 && (
-                  <Card className="glass-card rounded-xl">
+                  <Card className="app-section-card rounded-xl">
                     <CardContent className="p-5 text-sm text-muted-foreground">
                       No disclosure requests created in this session yet.
                     </CardContent>
@@ -873,13 +873,13 @@ const Admin = () => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card className="glass-card rounded-xl">
+                <Card className="app-section-card rounded-xl">
                   <CardContent className="p-4">
                     <p className="text-xs text-muted-foreground mb-1">Connected Wallet</p>
                     <p className="text-sm font-semibold text-foreground break-all">{getConnectedWalletDisplay()}</p>
                   </CardContent>
                 </Card>
-                <Card className="glass-card rounded-xl">
+                <Card className="app-section-card rounded-xl">
                   <CardContent className="p-4">
                     <p className="text-xs text-muted-foreground mb-1">Wallet Connection</p>
                     <Button variant="outline" onClick={openWalletModal} disabled={isConnectingWallet} className="h-9 rounded-lg">
@@ -889,7 +889,7 @@ const Admin = () => {
                 </Card>
               </div>
 
-              <Card className="glass-card rounded-xl">
+              <Card className="app-section-card rounded-xl">
                 <CardContent className="p-5 grid md:grid-cols-2 gap-4">
                   <div className="space-y-2 md:col-span-2">
                     <Label htmlFor="withdrawDestination">Destination Wallet</Label>
@@ -935,7 +935,7 @@ const Admin = () => {
 
               <div className="space-y-3">
                 {withdrawalEntries.map((entry) => (
-                  <Card key={entry.id} className="glass-card rounded-xl">
+                  <Card key={entry.id} className="app-section-card rounded-xl">
                     <CardContent className="p-5">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
                         <div className="flex items-center gap-4 min-w-0">
@@ -971,7 +971,7 @@ const Admin = () => {
                   </Card>
                 ))}
                 {withdrawalEntries.length === 0 && (
-                  <Card className="glass-card rounded-xl">
+                  <Card className="app-section-card rounded-xl">
                     <CardContent className="p-5 text-sm text-muted-foreground">
                       No frontend withdrawal transactions in this session yet.
                     </CardContent>
@@ -998,7 +998,7 @@ const Admin = () => {
               </div>
 
               {isLoadingPaidWalletEntries ? (
-                <Card className="glass-card rounded-xl">
+                <Card className="app-section-card rounded-xl">
                   <CardContent className="p-5 text-sm text-muted-foreground">
                     Loading paid wallets...
                   </CardContent>
@@ -1006,7 +1006,7 @@ const Admin = () => {
               ) : (
                 <div className="space-y-3">
                   {paidWalletEntries.map((entry) => (
-                    <Card key={`${entry.userId}-${entry.walletAddress}`} className="glass-card rounded-xl">
+                    <Card key={`${entry.userId}-${entry.walletAddress}`} className="app-section-card rounded-xl">
                       <CardContent className="p-5 flex flex-col gap-4">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                           <div className="min-w-0">
@@ -1034,7 +1034,7 @@ const Admin = () => {
                     </Card>
                   ))}
                   {paidWalletEntries.length === 0 && (
-                    <Card className="glass-card rounded-xl">
+                    <Card className="app-section-card rounded-xl">
                       <CardContent className="p-5 text-sm text-muted-foreground">
                         No active wallets found on this chain.
                       </CardContent>
@@ -1048,7 +1048,7 @@ const Admin = () => {
               <h3 className="font-display font-bold text-lg text-foreground">Audit Logs</h3>
               <div className="space-y-3">
                 {auditLogs.map((log) => (
-                  <Card key={log.id} className="glass-card rounded-xl">
+                  <Card key={log.id} className="app-section-card rounded-xl">
                     <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                       <div className="flex items-center gap-4 min-w-0">
                         <div className={`w-11 h-11 rounded-xl border flex items-center justify-center ${
@@ -1074,7 +1074,7 @@ const Admin = () => {
                   </Card>
                 ))}
                 {auditLogs.length === 0 && (
-                  <Card className="glass-card rounded-xl">
+                  <Card className="app-section-card rounded-xl">
                     <CardContent className="p-5 text-sm text-muted-foreground">
                       No audit logs available.
                     </CardContent>

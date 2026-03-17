@@ -283,6 +283,26 @@
   .app-header-surface {
     @apply border-b border-slate-200/80 bg-white/95 backdrop-blur-xl shadow-[var(--shadow-sm)] relative;
   }
+
+  .app-page-intro {
+    @apply mb-7 sm:mb-9 rounded-2xl border border-slate-200/70 bg-white/85 backdrop-blur-sm shadow-[var(--shadow-xs)] px-5 py-4 sm:px-6 sm:py-5;
+  }
+
+  .app-kpi-card {
+    @apply rounded-2xl border border-slate-200/70 bg-white/90 shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)] transition-all duration-300;
+  }
+
+  .app-section-card {
+    @apply rounded-2xl border border-slate-200/70 bg-white/90 backdrop-blur-sm shadow-[var(--shadow-sm)];
+  }
+
+  .app-tabs-rail {
+    @apply w-full overflow-x-auto rounded-xl border border-slate-200/80 bg-slate-50/90 p-1.5 shadow-[var(--shadow-xs)];
+  }
+
+  .app-tabs-trigger {
+    @apply rounded-lg font-medium shrink-0;
+  }
 }
 
 @layer base {

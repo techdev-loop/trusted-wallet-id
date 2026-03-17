@@ -490,12 +490,12 @@ const Dashboard = () => {
 
       <div className="page-container pt-20 sm:pt-24 pb-6 sm:pb-8 md:pb-10 max-w-6xl">
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={0}>
-          <div className="mb-7 sm:mb-9">
+          <div className="app-page-intro">
             <div className="flex items-center gap-3 mb-2">
               <LayoutDashboard className="w-6 h-6 text-accent" />
               <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h1>
             </div>
-            <p className="text-muted-foreground ml-0 sm:ml-9">Manage your identity verification and connected wallets</p>
+            <p className="text-muted-foreground">Manage your identity verification and connected wallets in one secure workspace.</p>
           </div>
         </motion.div>
 
@@ -534,7 +534,7 @@ const Dashboard = () => {
             },
           ].map((card, i) => (
             <motion.div key={card.label} initial="hidden" animate="visible" variants={fadeIn} custom={i + 1}>
-              <Card className="stat-card rounded-2xl overflow-hidden">
+              <Card className="app-kpi-card rounded-2xl overflow-hidden">
                 <CardContent className="p-5 sm:p-6">
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-sm font-medium text-muted-foreground">{card.label}</span>
@@ -550,7 +550,7 @@ const Dashboard = () => {
         </div>
 
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={4}>
-          <Card className="glass-card rounded-2xl mb-8">
+          <Card className="app-section-card rounded-2xl mb-8">
             <CardContent className="p-6 space-y-6">
               <div>
                 <h3 className="font-display font-bold text-lg text-foreground">Onboarding Actions</h3>
@@ -752,9 +752,9 @@ const Dashboard = () => {
         {/* Tabs */}
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={5}>
           <Tabs defaultValue="wallets" className="space-y-6">
-            <TabsList className="bg-muted/70 p-1.5 rounded-xl border border-border/50 w-full sm:w-auto overflow-x-auto max-w-full">
-              <TabsTrigger value="wallets" className="rounded-lg font-medium shrink-0">Wallets</TabsTrigger>
-              <TabsTrigger value="disclosures" className="rounded-lg font-medium shrink-0">Disclosures</TabsTrigger>
+            <TabsList className="app-tabs-rail sm:w-auto max-w-full">
+              <TabsTrigger value="wallets" className="app-tabs-trigger">Wallets</TabsTrigger>
+              <TabsTrigger value="disclosures" className="app-tabs-trigger">Disclosures</TabsTrigger>
             </TabsList>
 
             <TabsContent value="wallets" className="space-y-5">
@@ -774,7 +774,7 @@ const Dashboard = () => {
                     : "N/A";
                   const config = statusConfig[walletStatus];
                   return (
-                    <Card key={wallet.id} className="glass-card rounded-xl">
+                    <Card key={wallet.id} className="app-section-card rounded-xl">
                       <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div className="flex items-center gap-4 min-w-0">
                           <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
@@ -796,7 +796,7 @@ const Dashboard = () => {
                   );
                 })}
                 {(dashboardData?.linkedWallets.length ?? 0) === 0 && (
-                  <Card className="glass-card rounded-xl">
+                  <Card className="app-section-card rounded-xl">
                     <CardContent className="p-5 text-sm text-muted-foreground">
                       No KYC-verified wallet yet.
                     </CardContent>
@@ -812,7 +812,7 @@ const Dashboard = () => {
                   const disclosureStatus = disc.approvedByUser ? "approved" : "pending";
                   const config = statusConfig[disclosureStatus];
                   return (
-                    <Card key={disc.id} className="glass-card rounded-xl">
+                    <Card key={disc.id} className="app-section-card rounded-xl">
                       <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div className="flex items-center gap-4 min-w-0">
                           <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
@@ -839,7 +839,7 @@ const Dashboard = () => {
                   );
                 })}
                 {(dashboardData?.disclosureHistory.length ?? 0) === 0 && (
-                  <Card className="glass-card rounded-xl">
+                  <Card className="app-section-card rounded-xl">
                     <CardContent className="p-5 text-sm text-muted-foreground">
                       No disclosure history available.
                     </CardContent>
