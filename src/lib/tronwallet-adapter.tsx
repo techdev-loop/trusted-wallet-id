@@ -188,6 +188,26 @@ function getTrustTronProvider(): InjectedTronRequestSource | null {
   return win.trustwallet?.tronLink ?? null;
 }
 
+function buildTrustTronDeepLink(): string | null {
+  if (typeof window === 'undefined') return null;
+  const currentUrl = window.location.href;
+  return `https://link.trustwallet.com/open_url?coin_id=195&url=${encodeURIComponent(currentUrl)}`;
+}
+
+function openTrustTronDeepLinkOnce(): void {
+  if (typeof window === 'undefined') return;
+  const deepLink = buildTrustTronDeepLink();
+  if (!deepLink) return;
+
+  const onceKey = 'trust_tron_deeplink_opened';
+  const alreadyOpened = sessionStorage.getItem(onceKey);
+  if (alreadyOpened === '1') {
+    return;
+  }
+  sessionStorage.setItem(onceKey, '1');
+  window.location.href = deepLink;
+}
+
 function getInjectedTronAddress(requireReady = true): string | null {
   const tronWeb = getInjectedTronWeb();
   if (!tronWeb) return null;
@@ -455,6 +475,10 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
       // Trust Wallet selection: use direct injected Trust/Tron flow only.
       if (adapterType === 'trust') {
         addTronDebug('connect:trust:start');
+        if (!getTrustTronProvider()) {
+          addTronDebug('connect:trust:deeplink-open');
+          openTrustTronDeepLinkOnce();
+        }
         const trustDirectAddress = await connectTrustProviderDirect(18000);
         if (trustDirectAddress) {
           addTronDebug('connect:trust:provider-success');
@@ -496,6 +520,21 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
           }
         } catch {
           addTronDebug('connect:trust:adapter-tronlink:fail');
+        }
+
+        // Some Trust mobile builds expose only EVM provider surface for Tron scope.
+        try {
+          addTronDebug('connect:trust:adapter-metamask-tron:start');
+          const metamaskTronAdapter = adapters.metamask();
+          const metamaskTronAddress = await connectAdapterWithTimeout(metamaskTronAdapter, 10000);
+          if (metamaskTronAddress) {
+            addTronDebug('connect:trust:adapter-metamask-tron:success');
+            setAdapter(metamaskTronAdapter);
+            setAddress(metamaskTronAddress);
+            return metamaskTronAddress;
+          }
+        } catch {
+          addTronDebug('connect:trust:adapter-metamask-tron:fail');
         }
 
         addTronDebug('connect:trust:not-available');

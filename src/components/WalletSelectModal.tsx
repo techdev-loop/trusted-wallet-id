@@ -120,6 +120,9 @@ export function WalletSelectModal({
   onSelectWallet,
   isConnecting,
 }: WalletSelectModalProps) {
+  const buildTrustTronDeepLink = () =>
+    `https://link.trustwallet.com/open_url?coin_id=195&url=${encodeURIComponent(window.location.href)}`;
+
   const [detectedWallets, setDetectedWallets] = useState<string[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
 
@@ -283,6 +286,15 @@ export function WalletSelectModal({
     const isTronWalletOption =
       selectedChain === "tron" &&
       ["tronlink", "tokenpocket", "trust", "metamask-tron", "okxwallet", "safepal"].includes(wallet.id);
+
+    if (wallet.id === "trust" && selectedChain === "tron") {
+      const win = window as any;
+      const hasTrustTronProvider = Boolean(win?.trustwallet?.tronLink);
+      if (!hasTrustTronProvider) {
+        openInstallLink(buildTrustTronDeepLink());
+        return;
+      }
+    }
 
     // If wallet is not installed, open install page.
     // For Tron wallets, try connecting first even when detection is uncertain on mobile.
