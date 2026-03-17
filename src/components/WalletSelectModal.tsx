@@ -50,15 +50,6 @@ const WALLET_OPTIONS: WalletOption[] = [
     installUrl: "https://www.tronlink.org/",
   },
   {
-    id: "tokenpocket",
-    name: "TokenPocket",
-    icon: "💼",
-    description: "Mobile: Open in TokenPocket app's browser | Desktop: Browser extension",
-    method: "injected",
-    supportedChains: ["tron"],
-    installUrl: "https://www.tokenpocket.pro/",
-  },
-  {
     id: "trust",
     name: "Trust Wallet",
     icon: "🛡️",
@@ -66,15 +57,6 @@ const WALLET_OPTIONS: WalletOption[] = [
     method: "injected",
     supportedChains: ["tron"],
     installUrl: "https://trustwallet.com/",
-  },
-  {
-    id: "metamask-tron",
-    name: "MetaMask (Tron)",
-    icon: "🦊",
-    description: "Use MetaMask with Tron network support",
-    method: "injected",
-    supportedChains: ["tron"],
-    installUrl: "https://metamask.io/download/",
   },
   {
     id: "okxwallet",
@@ -155,18 +137,8 @@ export function WalletSelectModal({
         if (win.tronWeb || win.tronLink) {
           detected.push("tronlink");
         }
-        // TokenPocket also injects tronWeb
-        if (win.tronWeb && win.tronWeb.isTokenPocket) {
-          detected.push("tokenpocket");
-        }
         // Check for other Tron wallets that might inject tronWeb
         if (win.tronWeb) {
-          // TokenPocket detection
-          if (win.tronWeb.isTokenPocket || win.isTokenPocket) {
-            if (!detected.includes("tokenpocket")) {
-              detected.push("tokenpocket");
-            }
-          }
         }
         if (
           win.trustwallet?.tronLink ||
@@ -175,9 +147,6 @@ export function WalletSelectModal({
           userAgent.includes("trust wallet")
         ) {
           detected.push("trust");
-        }
-        if (win.ethereum?.isMetaMask || win.ethereum?.providers?.some((provider: any) => provider?.isMetaMask)) {
-          detected.push("metamask-tron");
         }
         if (win.okxwallet?.tronLink || win.okxwallet) {
           detected.push("okxwallet");
@@ -227,8 +196,6 @@ export function WalletSelectModal({
       if (b.id === "tronlink") return 1;
       if (a.id === "trust") return -1;
       if (b.id === "trust") return 1;
-      if (a.id === "metamask-tron") return -1;
-      if (b.id === "metamask-tron") return 1;
       if (a.id === "okxwallet") return -1;
       if (b.id === "okxwallet") return 1;
       if (a.id === "safepal") return -1;
@@ -287,7 +254,7 @@ export function WalletSelectModal({
 
     const isTronWalletOption =
       selectedChain === "tron" &&
-      ["tronlink", "tokenpocket", "trust", "metamask-tron", "okxwallet", "safepal", "walletconnect"].includes(wallet.id);
+      ["tronlink", "trust", "okxwallet", "safepal", "walletconnect"].includes(wallet.id);
 
     if (wallet.id === "trust" && selectedChain === "tron") {
       const win = window as any;
@@ -400,9 +367,7 @@ export function WalletSelectModal({
                         if (
                           selectedChain === "tron" &&
                           (wallet.id === "tronlink" ||
-                            wallet.id === "tokenpocket" ||
                             wallet.id === "trust" ||
-                            wallet.id === "metamask-tron" ||
                             wallet.id === "okxwallet" ||
                             wallet.id === "safepal")
                         ) {
