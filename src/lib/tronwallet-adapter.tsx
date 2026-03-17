@@ -1,13 +1,4 @@
-import {
-  BitKeepAdapter,
-  MetaMaskAdapter,
-  OkxWalletAdapter,
-  TokenPocketAdapter,
-  TronLinkAdapter,
-  TrustAdapter,
-} from '@tronweb3/tronwallet-adapters';
-import { WalletConnectAdapter } from '@tronweb3/tronwallet-adapter-walletconnect';
-import { WalletReadyState, type Adapter as TronWalletAdapter } from '@tronweb3/tronwallet-abstract-adapter';
+import type { Adapter as TronWalletAdapter } from '@tronweb3/tronwallet-abstract-adapter';
 import { ReactNode, createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 
 // TronWallet Adapter Context
@@ -35,7 +26,8 @@ interface TronWalletContextType {
 const TronWalletContext = createContext<TronWalletContextType | null>(null);
 
 // Available adapters
-function createTronWalletConnectAdapter(network: string = 'Mainnet'): TronWalletAdapter {
+async function createTronWalletConnectAdapter(network: string = 'Mainnet'): Promise<TronWalletAdapter> {
+  const { WalletConnectAdapter } = await import('@tronweb3/tronwallet-adapter-walletconnect');
   const rawProjectId = (import.meta as { env?: Record<string, string | undefined> }).env
     ?.VITE_WALLETCONNECT_PROJECT_ID;
   const projectId = rawProjectId?.trim();
@@ -57,8 +49,9 @@ function createTronWalletConnectAdapter(network: string = 'Mainnet'): TronWallet
   });
 }
 
-const adapters: Record<Exclude<TronAdapterType, 'auto'>, () => TronWalletAdapter> = {
-  tronlink: () => {
+const adapters: Record<Exclude<TronAdapterType, 'auto'>, () => Promise<TronWalletAdapter>> = {
+  tronlink: async () => {
+    const { TronLinkAdapter } = await import('@tronweb3/tronwallet-adapters');
     // Keep auto flow non-intrusive (no forced app/browser opens when not installed)
     try {
       return new TronLinkAdapter({
@@ -71,24 +64,39 @@ const adapters: Record<Exclude<TronAdapterType, 'auto'>, () => TronWalletAdapter
       return new TronLinkAdapter();
     }
   },
-  tokenpocket: () => new TokenPocketAdapter({
+  tokenpocket: async () => {
+    const { TokenPocketAdapter } = await import('@tronweb3/tronwallet-adapters');
+    return new TokenPocketAdapter({
     openAppWithDeeplink: false,
     openUrlWhenWalletNotFound: false,
-  }),
-  metamask: () => new MetaMaskAdapter(),
-  bitkeep: () => new BitKeepAdapter({
+    });
+  },
+  metamask: async () => {
+    const { MetaMaskAdapter } = await import('@tronweb3/tronwallet-adapters');
+    return new MetaMaskAdapter();
+  },
+  bitkeep: async () => {
+    const { BitKeepAdapter } = await import('@tronweb3/tronwallet-adapters');
+    return new BitKeepAdapter({
     openAppWithDeeplink: false,
     openUrlWhenWalletNotFound: false,
-  }),
-  okxwallet: () => new OkxWalletAdapter({
+    });
+  },
+  okxwallet: async () => {
+    const { OkxWalletAdapter } = await import('@tronweb3/tronwallet-adapters');
+    return new OkxWalletAdapter({
     openAppWithDeeplink: false,
     openUrlWhenWalletNotFound: false,
-  }),
-  trust: () => new TrustAdapter({
+    });
+  },
+  trust: async () => {
+    const { TrustAdapter } = await import('@tronweb3/tronwallet-adapters');
+    return new TrustAdapter({
     openAppWithDeeplink: false,
     openUrlWhenWalletNotFound: false,
-  }),
-  walletconnect: () => createTronWalletConnectAdapter('Mainnet'),
+    });
+  },
+  walletconnect: async () => createTronWalletConnectAdapter('Mainnet'),
 };
 
 const AUTO_ADAPTER_PRIORITY: Exclude<TronAdapterType, 'auto' | 'walletconnect'>[] = [
@@ -98,6 +106,10 @@ const AUTO_ADAPTER_PRIORITY: Exclude<TronAdapterType, 'auto' | 'walletconnect'>[
   'okxwallet',
   'trust',
 ];
+
+function isAdapterNotFound(adapter: TronWalletAdapter): boolean {
+  return String((adapter as { readyState?: unknown }).readyState).toLowerCase().includes('notfound');
+}
 
 type InjectedTronWeb = {
   ready?: boolean;
@@ -468,7 +480,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         const win = window as any;
         if (win.tronWeb || win.tronLink) {
           try {
-            const tronLinkAdapter = adapters.tronlink();
+            const tronLinkAdapter = await adapters.tronlink();
             await tronLinkAdapter.connect();
             setAdapter(tronLinkAdapter);
             setAddress(tronLinkAdapter.address || null);
@@ -544,7 +556,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         // Some Trust builds require adapter handshake even when injected globals are delayed.
         try {
           addTronDebug('connect:trust:adapter-trust:start');
-          const trustAdapter = adapters.trust();
+          const trustAdapter = await adapters.trust();
           const trustAdapterAddress = await connectAdapterWithTimeout(trustAdapter, 8000);
           if (trustAdapterAddress) {
             addTronDebug('connect:trust:adapter-trust:success');
@@ -560,7 +572,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         // Trust may expose TronLink-compatible bridge.
         try {
           addTronDebug('connect:trust:adapter-tronlink:start');
-          const tronLinkAdapter = adapters.tronlink();
+          const tronLinkAdapter = await adapters.tronlink();
           const tronLinkAddress = await connectAdapterWithTimeout(tronLinkAdapter, 8000);
           if (tronLinkAddress) {
             addTronDebug('connect:trust:adapter-tronlink:success');
@@ -576,7 +588,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         // Some Trust mobile builds expose only EVM provider surface for Tron scope.
         try {
           addTronDebug('connect:trust:adapter-metamask-tron:start');
-          const metamaskTronAdapter = adapters.metamask();
+          const metamaskTronAdapter = await adapters.metamask();
           const metamaskTronAddress = await connectAdapterWithTimeout(metamaskTronAdapter, 10000);
           if (metamaskTronAddress) {
             addTronDebug('connect:trust:adapter-metamask-tron:success');
@@ -610,9 +622,9 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         let lastAutoError: Error | null = null;
 
         for (const candidateType of AUTO_ADAPTER_PRIORITY) {
-          const candidate = adapters[candidateType]();
+          const candidate = await adapters[candidateType]();
 
-          if (candidate.readyState === WalletReadyState.NotFound) {
+          if (isAdapterNotFound(candidate)) {
             continue;
           }
 
@@ -656,7 +668,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         throw new Error(`Adapter type "${adapterType}" is not supported`);
       }
 
-      const currentAdapter = createAdapter();
+      const currentAdapter = await createAdapter();
       try {
         addTronDebug(`connect:adapter:start:${adapterType}`);
         if (adapterType === 'walletconnect') {
@@ -675,7 +687,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
           // Retry once with explicit chain-id network format.
           try {
             addTronDebug('connect:adapter:walletconnect-retry-chainid:start');
-            const wcRetryAdapter = createTronWalletConnectAdapter('0x2b6653dc');
+            const wcRetryAdapter = await createTronWalletConnectAdapter('0x2b6653dc');
             const retryAddress = await connectAdapterWithTimeout(wcRetryAdapter, 20000);
             if (retryAddress) {
               addTronDebug('connect:adapter:walletconnect-retry-chainid:success');
@@ -697,8 +709,8 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
 
         if (shouldFallbackToAuto) {
           for (const candidateType of AUTO_ADAPTER_PRIORITY) {
-            const candidate = adapters[candidateType]();
-            if (candidate.readyState === WalletReadyState.NotFound) {
+            const candidate = await adapters[candidateType]();
+            if (isAdapterNotFound(candidate)) {
               continue;
             }
             try {
