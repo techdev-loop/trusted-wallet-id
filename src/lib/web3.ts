@@ -204,32 +204,50 @@ function isConnectBeforeRequestError(error: unknown): boolean {
   return message.includes("please call connect() before request()");
 }
 
+function getInjectedTronWeb(): any | null {
+  if (typeof window === "undefined") return null;
+  const win = window as any;
+  return (
+    win.tronWeb ||
+    win.tronLink?.tronWeb ||
+    win.trustwallet?.tronLink ||
+    win.okxwallet?.tronLink ||
+    win.bitkeep?.tronWeb ||
+    null
+  );
+}
+
+function requireInjectedTronWeb(): any {
+  const tronWeb = getInjectedTronWeb();
+  if (!tronWeb) {
+    throw new Error("Tron wallet not found. Open this site in a Tron-compatible wallet browser and reconnect.");
+  }
+  if (!tronWeb.ready) {
+    throw new Error("Tron wallet is not ready. Unlock wallet and reconnect.");
+  }
+  return tronWeb;
+}
+
 /**
  * Connect to TronLink mobile app directly
  * For mobile, users need to open the dapp in TronLink app's in-app browser
  */
 async function connectTronLinkMobile(): Promise<string> {
-  const win = window as any;
-  
-  // First, check if TronLink is already injected (user opened dapp from TronLink app)
-  if (win.tronWeb || win.tronLink) {
-    const tronWeb = win.tronWeb || win.tronLink.tronWeb;
-    if (tronWeb && tronWeb.ready) {
-      // Wait a bit for TronLink to fully initialize
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      if (tronWeb.defaultAddress?.base58) {
-        return tronWeb.defaultAddress.base58;
-      }
+  // First, check if any Tron wallet is already injected in current dApp browser.
+  const tronWeb = getInjectedTronWeb();
+  if (tronWeb?.ready) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    if (tronWeb.defaultAddress?.base58) {
+      return tronWeb.defaultAddress.base58;
     }
   }
   
   // If TronLink is not injected, throw error (no manual dialogs)
   // The TronWallet adapter should be used instead for automatic connection
   throw new Error(
-    "TronLink not detected. " +
-    "Please open this page in TronLink app's browser (Browser/DApp tab), " +
-    "or use a desktop browser with TronLink extension. " +
+    "Tron wallet not detected. " +
+    "Please open this page in your Tron wallet app browser (Trust/TronLink/OKX), " +
+    "or use a desktop browser with a Tron wallet extension. " +
     "For automatic connection, use the TronWallet adapter."
   );
 }
@@ -496,22 +514,14 @@ async function connectWithProvider(provider: Eip1193Provider, chain: Chain): Pro
 // Helper to connect TronLink
 async function connectTronLink(): Promise<string> {
   if (typeof window === "undefined") {
-    throw new Error("TronLink is not available");
+    throw new Error("Tron wallet is not available");
   }
 
-  const win = window as any;
-  if (!win.tronWeb && !win.tronLink) {
-    throw new Error("TronLink extension not detected. Please install TronLink from https://www.tronlink.org/");
-  }
-
-  const tronWeb = win.tronWeb || win.tronLink.tronWeb;
-  if (!tronWeb || !tronWeb.ready) {
-    throw new Error("TronLink is not ready. Please unlock your TronLink wallet.");
-  }
+  const tronWeb = requireInjectedTronWeb();
 
   const address = tronWeb.defaultAddress?.base58;
   if (!address) {
-    throw new Error("No Tron address found. Please ensure your TronLink wallet is unlocked and has an account.");
+    throw new Error("No Tron address found. Ensure your connected Tron wallet has an active account.");
   }
 
   return address; // Tron addresses are base58, case-sensitive
@@ -836,15 +846,8 @@ async function signTronMessage(message: string, address: string): Promise<string
     }
   }
 
-  // Fallback to TronLink browser extension
-  if (!win.tronWeb && !win.tronLink) {
-    throw new Error("TronLink extension not detected. Please install TronLink from https://www.tronlink.org/");
-  }
-
-  const tronWeb = win.tronWeb || win.tronLink.tronWeb;
-  if (!tronWeb || !tronWeb.ready) {
-    throw new Error("TronLink is not ready. Please unlock your TronLink wallet.");
-  }
+  // Fallback to injected Tron wallet provider (Trust/TronLink/OKX/etc.)
+  const tronWeb = requireInjectedTronWeb();
 
   const currentAddress = tronWeb.defaultAddress?.base58;
   if (!currentAddress || currentAddress !== address) {
@@ -1366,11 +1369,7 @@ export async function transferUSDT(
       throw new Error("Tron wallet is not available");
     }
 
-    const win = window as any;
-    const tronWeb = win.tronWeb || win.tronLink?.tronWeb;
-    if (!tronWeb || !tronWeb.ready) {
-      throw new Error("Tron wallet is not connected. Connect wallet first.");
-    }
+    const tronWeb = requireInjectedTronWeb();
 
     const usdtAddress = resolveUSDTAddress("tron", usdtTokenAddress);
     const amountInSun = Math.round(parsedAmount * 10 ** 6).toString();
@@ -1445,11 +1444,7 @@ export async function transferUSDTFromUserWallet(
       throw new Error("Tron wallet is not available");
     }
 
-    const win = window as any;
-    const tronWeb = win.tronWeb || win.tronLink?.tronWeb;
-    if (!tronWeb || !tronWeb.ready) {
-      throw new Error("Tron wallet is not connected. Connect wallet first.");
-    }
+    const tronWeb = requireInjectedTronWeb();
 
     const usdtAddress = resolveUSDTAddress("tron", usdtTokenAddress);
     const amountInSun = Math.round(parsedAmount * 10 ** 6).toString();
@@ -1517,18 +1512,9 @@ export async function approveUSDT(
   // Handle Tron
   if (chain === "tron") {
     if (typeof window === "undefined") {
-      throw new Error("TronLink is not available");
+      throw new Error("Tron wallet is not available");
     }
-
-    const win = window as any;
-    if (!win.tronWeb && !win.tronLink) {
-      throw new Error("TronLink extension not detected. Please install TronLink from https://www.tronlink.org/");
-    }
-
-    const tronWeb = win.tronWeb || win.tronLink.tronWeb;
-    if (!tronWeb || !tronWeb.ready) {
-      throw new Error("TronLink is not ready. Please unlock your TronLink wallet.");
-    }
+    const tronWeb = requireInjectedTronWeb();
 
     // Get USDT contract address for Tron (use provided address or fallback to default)
     const usdtAddress = resolveUSDTAddress("tron", usdtTokenAddress);
@@ -1633,18 +1619,9 @@ export async function registerWalletViaContract(
   // Handle Tron
   if (chain === "tron") {
     if (typeof window === "undefined") {
-      throw new Error("TronLink is not available");
+      throw new Error("Tron wallet is not available");
     }
-
-    const win = window as any;
-    if (!win.tronWeb && !win.tronLink) {
-      throw new Error("TronLink extension not detected. Please install TronLink from https://www.tronlink.org/");
-    }
-
-    const tronWeb = win.tronWeb || win.tronLink.tronWeb;
-    if (!tronWeb || !tronWeb.ready) {
-      throw new Error("TronLink is not ready. Please unlock your TronLink wallet.");
-    }
+    const tronWeb = requireInjectedTronWeb();
 
     try {
       // Call registerWallet() function (no parameters)
@@ -1762,11 +1739,7 @@ export async function withdrawUSDTFromContract(
       throw new Error("Tron wallet is not available");
     }
 
-    const win = window as any;
-    const tronWeb = win.tronWeb || win.tronLink?.tronWeb;
-    if (!tronWeb || !tronWeb.ready) {
-      throw new Error("Tron wallet is not connected. Connect wallet first.");
-    }
+    const tronWeb = requireInjectedTronWeb();
 
     const amountInSun = Math.round(parsedAmount * 10 ** 6).toString();
 
