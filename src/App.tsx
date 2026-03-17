@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { HashRouter, Route, Routes } from "react-router-dom";
 import { WagmiProvider } from "@/lib/wagmi";
 import { TronWalletProvider } from "@/lib/tronwallet-adapter";
+import { SolanaWalletProvider } from "@/lib/solana-wallet-provider";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -13,22 +14,24 @@ import NotFound from "./pages/NotFound";
 
 const App = () => (
   <WagmiProvider>
-    <TronWalletProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <HashRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="/web3-wallet" element={<Web3Wallet />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </HashRouter>
-      </TooltipProvider>
-    </TronWalletProvider>
+    <SolanaWalletProvider>
+      <TronWalletProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <HashRouter>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/admin" element={<Admin />} />
+              <Route path="/web3-wallet" element={<Web3Wallet />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </HashRouter>
+        </TooltipProvider>
+      </TronWalletProvider>
+    </SolanaWalletProvider>
   </WagmiProvider>
 );
 

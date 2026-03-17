@@ -33,13 +33,12 @@ interface WalletSelectModalProps {
 // Wallet definitions
 const WALLET_OPTIONS: WalletOption[] = [
   {
-    id: "metamask",
-    name: "MetaMask",
-    icon: "🦊",
-    description: "Connect using MetaMask browser extension",
-    method: "injected",
+    id: "rainbowkit",
+    name: "RainbowKit",
+    icon: "🌈",
+    description: "Open RainbowKit to choose any EVM wallet (MetaMask, WalletConnect, Coinbase, etc.)",
+    method: "auto",
     supportedChains: ["ethereum", "bsc"],
-    installUrl: "https://metamask.io/download/",
   },
   {
     id: "tronlink",
@@ -99,26 +98,28 @@ const WALLET_OPTIONS: WalletOption[] = [
     id: "phantom",
     name: "Phantom",
     icon: "👻",
-    description: "Desktop: Browser extension | Mobile: Open Phantom app",
+    description: "Connect with Phantom via Solana Wallet Adapter",
     method: "injected",
     supportedChains: ["solana"],
     installUrl: "https://phantom.app/",
   },
   {
+    id: "solflare",
+    name: "Solflare",
+    icon: "☀️",
+    description: "Connect with Solflare via Solana Wallet Adapter",
+    method: "injected",
+    supportedChains: ["solana"],
+    installUrl: "https://solflare.com/",
+  },
+  {
     id: "walletconnect",
     name: "WalletConnect (QR)",
     icon: "🔗",
-    description: "Connect by scanning WalletConnect QR code",
+    description: "Connect Tron wallets by scanning WalletConnect QR code",
     method: "walletconnect",
-    supportedChains: ["ethereum", "bsc", "tron"],
+    supportedChains: ["tron"],
   },
-];
-
-// Additional EVM wallets that might be detected
-const EVM_WALLETS = [
-  { id: "coinbase", name: "Coinbase Wallet", icon: "🔵" },
-  { id: "brave", name: "Brave Wallet", icon: "🦁" },
-  { id: "trust", name: "Trust Wallet", icon: "🛡️" },
 ];
 
 export function WalletSelectModal({
@@ -140,31 +141,9 @@ export function WalletSelectModal({
 
     const detected: string[] = [];
 
-    // Check for MetaMask and other EVM wallets
+    // RainbowKit handles EVM wallet discovery itself.
     if (selectedChain === "ethereum" || selectedChain === "bsc") {
-      if (typeof window !== "undefined") {
-        const win = window as any;
-        if (win.ethereum) {
-          detected.push("metamask");
-          
-          // Check for other EVM wallets
-          const ethereum = win.ethereum;
-          if (ethereum.isCoinbaseWallet) detected.push("coinbase");
-          if (ethereum.isBraveWallet) detected.push("brave");
-          if (ethereum.isTrust) detected.push("trust");
-          if (ethereum.providers && Array.isArray(ethereum.providers)) {
-            // Multiple wallets detected
-            ethereum.providers.forEach((provider: any) => {
-              if (provider.isCoinbaseWallet && !detected.includes("coinbase")) {
-                detected.push("coinbase");
-              }
-              if (provider.isBraveWallet && !detected.includes("brave")) {
-                detected.push("brave");
-              }
-            });
-          }
-        }
-      }
+      detected.push("rainbowkit");
     }
 
     // Check for Tron wallets
@@ -216,9 +195,8 @@ export function WalletSelectModal({
         if (win.phantom) {
           detected.push("phantom");
         }
-        // Check for other Solana wallets
         if (win.solflare) {
-          // Solflare detected but not in our list, could add it
+          detected.push("solflare");
         }
       }
     }
@@ -259,6 +237,8 @@ export function WalletSelectModal({
     if (selectedChain === "solana") {
       if (a.id === "phantom") return -1;
       if (b.id === "phantom") return 1;
+      if (a.id === "solflare") return -1;
+      if (b.id === "solflare") return 1;
     }
     return 0;
   });
@@ -275,11 +255,8 @@ export function WalletSelectModal({
       return "installed";
     }
 
-    // For EVM chains, if any EVM wallet is detected, show MetaMask as available
-    if (wallet.id === "metamask" && (selectedChain === "ethereum" || selectedChain === "bsc")) {
-      if (detectedWallets.length > 0) {
-        return "installed";
-      }
+    if (wallet.id === "rainbowkit" && (selectedChain === "ethereum" || selectedChain === "bsc")) {
+      return "installed";
     }
 
     const isDetected = detectedWallets.includes(wallet.id);

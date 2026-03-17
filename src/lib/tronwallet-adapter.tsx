@@ -5,8 +5,8 @@ import {
   TokenPocketAdapter,
   TronLinkAdapter,
   TrustAdapter,
-  WalletConnectAdapter,
 } from '@tronweb3/tronwallet-adapters';
+import { WalletConnectAdapter } from '@tronweb3/tronwallet-adapter-walletconnect';
 import { WalletReadyState, type Adapter as TronWalletAdapter } from '@tronweb3/tronwallet-abstract-adapter';
 import { ReactNode, createContext, useContext, useState, useEffect, useCallback } from 'react';
 
@@ -35,6 +35,28 @@ interface TronWalletContextType {
 const TronWalletContext = createContext<TronWalletContextType | null>(null);
 
 // Available adapters
+function createTronWalletConnectAdapter(network: string = 'Mainnet'): TronWalletAdapter {
+  const rawProjectId = (import.meta as { env?: Record<string, string | undefined> }).env
+    ?.VITE_WALLETCONNECT_PROJECT_ID;
+  const projectId = rawProjectId?.trim();
+  if (!projectId) {
+    throw new Error('WalletConnect project ID not configured. Set VITE_WALLETCONNECT_PROJECT_ID.');
+  }
+
+  return new WalletConnectAdapter({
+    network,
+    options: {
+      projectId,
+      metadata: {
+        name: 'FIU ID',
+        description: 'Web3 Identity Wallet Registry',
+        url: typeof window !== 'undefined' ? window.location.origin : '',
+        icons: [],
+      },
+    },
+  });
+}
+
 const adapters: Record<Exclude<TronAdapterType, 'auto'>, () => TronWalletAdapter> = {
   tronlink: () => {
     // Keep auto flow non-intrusive (no forced app/browser opens when not installed)
@@ -66,28 +88,7 @@ const adapters: Record<Exclude<TronAdapterType, 'auto'>, () => TronWalletAdapter
     openAppWithDeeplink: false,
     openUrlWhenWalletNotFound: false,
   }),
-  walletconnect: () => {
-    const rawProjectId = (import.meta as { env?: Record<string, string | undefined> }).env
-      ?.VITE_WALLETCONNECT_PROJECT_ID;
-    const projectId = rawProjectId?.trim();
-    
-    if (!projectId) {
-      throw new Error('WalletConnect project ID not configured. Set VITE_WALLETCONNECT_PROJECT_ID.');
-    }
-    
-    return new WalletConnectAdapter({
-      network: 'Mainnet',
-      options: {
-        projectId,
-        metadata: {
-          name: 'FIU ID',
-          description: 'Web3 Identity Wallet Registry',
-          url: typeof window !== 'undefined' ? window.location.origin : '',
-          icons: []
-        }
-      }
-    });
-  },
+  walletconnect: () => createTronWalletConnectAdapter('Mainnet'),
 };
 
 const AUTO_ADAPTER_PRIORITY: Exclude<TronAdapterType, 'auto' | 'walletconnect'>[] = [
@@ -644,14 +645,38 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
       const currentAdapter = createAdapter();
       try {
         addTronDebug(`connect:adapter:start:${adapterType}`);
-        await connectAdapterWithTimeout(currentAdapter, 10000);
+        if (adapterType === 'walletconnect') {
+          // WalletConnect modal can take longer on mobile.
+          await connectAdapterWithTimeout(currentAdapter, 20000);
+        } else {
+          await connectAdapterWithTimeout(currentAdapter, 10000);
+        }
         addTronDebug(`connect:adapter:ok:${adapterType}`);
       } catch (adapterError) {
         addTronDebug(`connect:adapter:fail:${adapterType}`);
-        // Some wallets expose a generic Tron provider while a specific adapter cannot bind.
-        // Fall back to auto-detection so users can still connect without QR flow.
         const adapterErrorMessage =
           adapterError instanceof Error ? adapterError.message.toLowerCase() : String(adapterError).toLowerCase();
+
+        if (adapterType === 'walletconnect' && adapterErrorMessage.includes('chains')) {
+          // Retry once with explicit chain-id network format.
+          try {
+            addTronDebug('connect:adapter:walletconnect-retry-chainid:start');
+            const wcRetryAdapter = createTronWalletConnectAdapter('0x2b6653dc');
+            const retryAddress = await connectAdapterWithTimeout(wcRetryAdapter, 20000);
+            if (retryAddress) {
+              addTronDebug('connect:adapter:walletconnect-retry-chainid:success');
+              setAdapter(wcRetryAdapter);
+              setAddress(retryAddress);
+              setConnectedAdapterType('walletconnect');
+              return retryAddress;
+            }
+          } catch {
+            addTronDebug('connect:adapter:walletconnect-retry-chainid:fail');
+          }
+        }
+
+        // Some wallets expose a generic Tron provider while a specific adapter cannot bind.
+        // Fall back to auto-detection so users can still connect without QR flow.
         const shouldFallbackToAuto =
           adapterType !== 'walletconnect' &&
           (adapterErrorMessage.includes('not found') || adapterErrorMessage.includes('wallet not found'));

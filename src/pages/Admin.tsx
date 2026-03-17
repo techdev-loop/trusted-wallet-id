@@ -18,7 +18,9 @@ import { WalletSelectModal } from "@/components/WalletSelectModal";
 import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
-import { connectWallet, getOnchainUSDTBalance, transferUSDTFromUserWallet, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
+import { getOnchainUSDTBalance, transferUSDTFromUserWallet, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
+import { useWagmiWallet } from "@/lib/wagmi-hooks";
+import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
 import { useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
 
 interface WalletLookupResult {
@@ -120,6 +122,8 @@ const Admin = () => {
 
   const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
   const canViewIdentityData = session?.user.role === "compliance";
+  const wagmiWallet = useWagmiWallet();
+  const solanaWallet = useSolanaWallet();
   const tronWallet = useTronWallet();
 
   const loadAuditLogs = async () => {
@@ -332,8 +336,11 @@ const Admin = () => {
         };
         const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
         address = await tronWallet.connect(selectedTronAdapter ?? "auto");
+      } else if (selectedChain === "ethereum" || selectedChain === "bsc") {
+        address = await wagmiWallet.connectWallet(selectedChain);
       } else {
-        address = await connectWallet(selectedChain, method);
+        const requestedSolanaWallet = walletId === "solflare" ? "solflare" : walletId === "phantom" ? "phantom" : undefined;
+        address = await solanaWallet.connectWallet(requestedSolanaWallet);
       }
 
       setWithdrawalWalletAddress(address);
@@ -429,7 +436,9 @@ const Admin = () => {
       const address =
         manageWalletChain === "tron"
           ? await tronWallet.connect("auto")
-          : await connectWallet(manageWalletChain, "auto");
+          : manageWalletChain === "ethereum" || manageWalletChain === "bsc"
+            ? await wagmiWallet.connectWallet(manageWalletChain)
+            : await solanaWallet.connectWallet();
       setSendUsdtWalletAddress(address);
       toast.success("Admin wallet connected for user transfer.");
     } catch (error) {

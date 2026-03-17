@@ -227,21 +227,34 @@ async function createTronWalletConnectProvider(): Promise<string> {
     );
   }
 
-  const { WalletConnectAdapter } = await import("@tronweb3/tronwallet-adapters");
-  const wcAdapter = new WalletConnectAdapter({
-    network: "Mainnet",
-    options: {
-      projectId,
-      metadata: {
-        name: "FIU ID",
-        description: "Web3 Identity Wallet Registry",
-        url: typeof window !== "undefined" ? window.location.origin : "",
-        icons: []
-      }
-    }
-  });
+  const { WalletConnectAdapter } = await import("@tronweb3/tronwallet-adapter-walletconnect");
+  const buildAdapter = (network: string) =>
+    new WalletConnectAdapter({
+      network,
+      options: {
+        projectId,
+        metadata: {
+          name: "FIU ID",
+          description: "Web3 Identity Wallet Registry",
+          url: typeof window !== "undefined" ? window.location.origin : "",
+          icons: [],
+        },
+      },
+    });
 
-  await wcAdapter.connect();
+  let wcAdapter = buildAdapter("Mainnet");
+  try {
+    await wcAdapter.connect();
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    // Some mobile wallets fail namespace parsing with "chains" on symbolic network names.
+    if (!message.includes("chains")) {
+      throw error;
+    }
+    wcAdapter = buildAdapter("0x2b6653dc");
+    await wcAdapter.connect();
+  }
+
   const address = wcAdapter.address;
   if (!address) {
     throw new Error("WalletConnect Tron connection succeeded but no wallet address was returned.");

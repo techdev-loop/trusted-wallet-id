@@ -18,13 +18,12 @@ import { apiRequest, ApiError } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
 import {
   approveUSDT,
-  connectWallet,
   registerWalletViaContract,
-  signWalletMessage,
   type WalletConnectionMethod,
   type Chain
 } from "@/lib/web3";
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
+import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
 import { getTronProviderDebugSnapshot, useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
 
@@ -218,6 +217,7 @@ const Dashboard = () => {
 
   // Use Wagmi for EVM chains, TronWallet Adapter for Tron, native methods for Solana
   const wagmiWallet = useWagmiWallet();
+  const solanaWallet = useSolanaWallet();
   const tronWallet = useTronWallet();
 
   const handleConnectAndSignWallet = async (method: WalletConnectionMethod, walletId?: string) => {
@@ -229,10 +229,7 @@ const Dashboard = () => {
       
       // Use Wagmi for EVM chains (Ethereum, BSC)
       if (selectedChain === "ethereum" || selectedChain === "bsc") {
-        // Map method to connector ID
-        const connectorId = method === "walletconnect" ? "walletconnect" : 
-                           method === "injected" ? "injected" : undefined;
-        normalizedAddress = await wagmiWallet.connectWallet(selectedChain, connectorId);
+        normalizedAddress = await wagmiWallet.connectWallet(selectedChain);
       } else if (selectedChain === "tron") {
         // Use selected Tron wallet adapter from modal.
         const tronAdapterByWalletId: Record<string, TronAdapterType> = {
@@ -254,8 +251,8 @@ const Dashboard = () => {
           normalizedAddress = await tronWallet.connect(selectedTronAdapter ?? "auto");
         }
       } else {
-        // Use native methods for Solana
-        normalizedAddress = await connectWallet(selectedChain, method);
+        const requestedSolanaWallet = walletId === "solflare" ? "solflare" : walletId === "phantom" ? "phantom" : undefined;
+        normalizedAddress = await solanaWallet.connectWallet(requestedSolanaWallet);
       }
       
       setWalletAddress(normalizedAddress);
@@ -282,8 +279,7 @@ const Dashboard = () => {
         // Use TronWallet Adapter for Tron
         signedMessage = await tronWallet.signMessage(challengeMessage);
       } else {
-        // Use native methods for Solana
-        signedMessage = await signWalletMessage(challengeMessage, normalizedAddress, selectedChain);
+        signedMessage = await solanaWallet.signMessage(challengeMessage);
       }
       setSignature(signedMessage);
 
