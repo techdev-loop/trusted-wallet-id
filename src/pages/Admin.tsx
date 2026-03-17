@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Shield, Search, Users, FileText, Clock, CheckCircle2,
-  Eye, ChevronRight, LogOut, User, ShieldCheck, AlertTriangle, Wallet, Loader2
+  Eye, LogOut, User, ShieldCheck, AlertTriangle, Wallet, Loader2, MoreHorizontal
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
@@ -119,6 +125,7 @@ const Admin = () => {
   const [sendUsdtWalletAddress, setSendUsdtWalletAddress] = useState("");
   const [isConnectingSendUsdtWallet, setIsConnectingSendUsdtWallet] = useState(false);
   const [isSendingUsdt, setIsSendingUsdt] = useState(false);
+  const [activeTab, setActiveTab] = useState("users");
 
   const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
   const canViewIdentityData = session?.user.role === "compliance";
@@ -534,6 +541,57 @@ const Admin = () => {
     setIsWalletModalOpen(true);
   };
 
+  const handleCopyToClipboard = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied.`);
+    } catch {
+      toast.error(`Failed to copy ${label.toLowerCase()}.`);
+    }
+  };
+
+  const handleQuickAction = () => {
+    if (activeTab === "users") {
+      void handleWalletLookup();
+      return;
+    }
+    if (activeTab === "disclosures") {
+      void handleCreateDisclosureRequest();
+      return;
+    }
+    if (activeTab === "withdrawals") {
+      void handleCreateWithdrawalRequest();
+      return;
+    }
+    if (activeTab === "manage-wallets") {
+      void loadPaidWalletEntries(manageWalletChain);
+      return;
+    }
+    void loadAuditLogs();
+  };
+
+  const quickActionLabel =
+    activeTab === "users"
+      ? "Search Wallet"
+      : activeTab === "disclosures"
+        ? "Create Disclosure"
+        : activeTab === "withdrawals"
+          ? "Submit Withdrawal"
+          : activeTab === "manage-wallets"
+            ? "Refresh Wallets"
+            : "Refresh Audit";
+
+  const quickActionDisabled =
+    activeTab === "users"
+      ? !canAccessAdmin
+      : activeTab === "disclosures"
+        ? !canAccessAdmin
+        : activeTab === "withdrawals"
+          ? isSubmittingWithdrawal || isConnectingWallet || !canAccessAdmin
+          : activeTab === "manage-wallets"
+            ? isLoadingPaidWalletEntries
+            : loading;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -618,7 +676,7 @@ const Admin = () => {
         </div>
       </header>
 
-      <div className="page-container pt-20 sm:pt-24 pb-6 sm:pb-8 md:pb-10 max-w-6xl">
+      <div className="page-container pt-20 sm:pt-24 pb-28 sm:pb-8 md:pb-10 max-w-6xl">
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={0}>
           <div className="app-page-intro">
             <div className="flex items-center gap-3 mb-2">
@@ -654,7 +712,7 @@ const Admin = () => {
         </div>
 
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={5}>
-          <Tabs defaultValue="users" className="space-y-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="app-tabs-rail sm:w-auto max-w-full">
               <TabsTrigger value="users" className="app-tabs-trigger">Users</TabsTrigger>
               <TabsTrigger value="disclosures" className="app-tabs-trigger">Disclosure Requests</TabsTrigger>
@@ -664,18 +722,22 @@ const Admin = () => {
             </TabsList>
 
             <TabsContent value="users" className="space-y-5">
-              <div className="relative max-w-md">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by wallet address..."
-                  className="pl-11 h-11 rounded-xl bg-muted/50 border-border/60 focus:bg-card transition-colors"
-                  value={searchWalletAddress}
-                  onChange={(event) => setSearchWalletAddress(event.target.value)}
-                />
+              <div className="app-sticky-subheader">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative max-w-md w-full">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by wallet address..."
+                      className="pl-11 h-11 rounded-xl bg-muted/50 border-border/60 focus:bg-card transition-colors"
+                      value={searchWalletAddress}
+                      onChange={(event) => setSearchWalletAddress(event.target.value)}
+                    />
+                  </div>
+                  <Button variant="accent" onClick={() => void handleWalletLookup()} disabled={!canAccessAdmin} className="w-full sm:w-auto h-11">
+                    Search Wallet
+                  </Button>
+                </div>
               </div>
-              <Button variant="accent" onClick={() => void handleWalletLookup()} disabled={!canAccessAdmin} className="w-full sm:w-auto">
-                Search Wallet
-              </Button>
               <div className="space-y-3">
                 {walletLookupResult && (
                   <Card key={walletLookupResult.userId} className="app-section-card app-list-card rounded-xl">
@@ -693,7 +755,7 @@ const Admin = () => {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 self-start sm:self-auto">
+                      <div className="flex items-center gap-2 self-start sm:self-auto">
                         <Badge
                           variant="outline"
                           className={`rounded-lg px-2.5 ${
@@ -708,20 +770,32 @@ const Admin = () => {
                             <><Clock className="w-3 h-3 mr-1" /> Pending</>
                           )}
                         </Badge>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="rounded-lg h-9 w-9"
-                          onClick={() => void handleViewIdentity()}
-                          disabled={!canViewIdentityData}
-                          title={
-                            canViewIdentityData
-                              ? "View decrypted identity data"
-                              : "Only compliance role can view decrypted identity data"
-                          }
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => void handleViewIdentity()}
+                              disabled={!canViewIdentityData}
+                            >
+                              <Eye className="w-4 h-4 mr-2" />
+                              View Identity
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => void handleCopyToClipboard(walletLookupResult.walletAddress, "Wallet address")}
+                            >
+                              Copy Wallet
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => void handleCopyToClipboard(walletLookupResult.userId, "User ID")}
+                            >
+                              Copy User ID
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </CardContent>
                   </Card>
@@ -760,7 +834,9 @@ const Admin = () => {
             </TabsContent>
 
             <TabsContent value="disclosures" className="space-y-5">
-              <h3 className="font-display font-bold text-lg text-foreground">Lawful Disclosure Requests</h3>
+              <div className="app-sticky-subheader">
+                <h3 className="font-display font-bold text-lg text-foreground">Lawful Disclosure Requests</h3>
+              </div>
               <Card className="app-section-card rounded-xl">
                 <CardContent className="p-5 grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -843,20 +919,40 @@ const Admin = () => {
                             </p>
                           </div>
                         </div>
-                        <Badge
-                          variant="outline"
-                          className={`rounded-lg px-2.5 ${
-                            req.status === "pending"
-                              ? "bg-warning/10 text-warning border-warning/20"
-                              : "bg-success/10 text-success border-success/20"
-                          }`}
-                        >
-                          {req.status === "pending" ? (
-                            <><Clock className="w-3 h-3 mr-1" /> Pending</>
-                          ) : (
-                            <><CheckCircle2 className="w-3 h-3 mr-1" /> Approved</>
-                          )}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={`rounded-lg px-2.5 ${
+                              req.status === "pending"
+                                ? "bg-warning/10 text-warning border-warning/20"
+                                : "bg-success/10 text-success border-success/20"
+                            }`}
+                          >
+                            {req.status === "pending" ? (
+                              <><Clock className="w-3 h-3 mr-1" /> Pending</>
+                            ) : (
+                              <><CheckCircle2 className="w-3 h-3 mr-1" /> Approved</>
+                            )}
+                          </Badge>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => setApproveRequestId(req.id)}>
+                                Use In Approve Form
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(req.id, "Disclosure request ID")}>
+                                Copy Request ID
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(req.walletAddress, "Wallet address")}>
+                                Copy Wallet
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </div>
                       <p className="text-sm text-muted-foreground sm:ml-[60px] break-words">{req.lawfulRequestReference}</p>
                     </CardContent>
@@ -879,7 +975,8 @@ const Admin = () => {
             </TabsContent>
 
             <TabsContent value="withdrawals" className="space-y-5">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="app-sticky-subheader">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <h3 className="font-display font-bold text-lg text-foreground">Chain Withdrawal Management</h3>
                 <div className="w-full sm:w-[220px]">
                   <Select value={selectedChain} onValueChange={(value) => handleChainChange(value as SupportedChain)}>
@@ -893,6 +990,7 @@ const Admin = () => {
                       <SelectItem value="solana">Solana</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
                 </div>
               </div>
 
@@ -973,12 +1071,32 @@ const Admin = () => {
                             </p>
                           </div>
                         </div>
-                        <Badge
-                          variant="outline"
-                          className="rounded-lg px-2.5 bg-success/10 text-success border-success/20"
-                        >
-                          {entry.status}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className="rounded-lg px-2.5 bg-success/10 text-success border-success/20"
+                          >
+                            {entry.status}
+                          </Badge>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => window.open(`${getTxExplorerBaseUrl(entry.chain)}${entry.txHash}`, "_blank", "noopener,noreferrer")}>
+                                View Explorer
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(entry.txHash, "Transaction hash")}>
+                                Copy Tx Hash
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(entry.destinationAddress, "Destination address")}>
+                                Copy Destination
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </div>
                       <p className="text-sm text-muted-foreground break-words">
                         {entry.note || "No note"} · tx:{" "}
@@ -1011,7 +1129,8 @@ const Admin = () => {
             </TabsContent>
 
             <TabsContent value="manage-wallets" className="space-y-5">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="app-sticky-subheader">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <h3 className="font-display font-bold text-lg text-foreground">Manage Users Wallet</h3>
                 <div className="w-full sm:w-[220px]">
                   <Select value={manageWalletChain} onValueChange={(value) => handleManageWalletChainChange(value as SupportedChain)}>
@@ -1024,6 +1143,7 @@ const Admin = () => {
                       <SelectItem value="tron">Tron</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
                 </div>
               </div>
 
@@ -1053,9 +1173,29 @@ const Admin = () => {
                               User: {entry.userId}
                             </p>
                           </div>
-                          <Button variant="outline" onClick={() => openSendUsdtModal(entry)}>
-                            Send USDT
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" onClick={() => openSendUsdtModal(entry)}>
+                              Send USDT
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
+                                  <MoreHorizontal className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => openSendUsdtModal(entry)}>
+                                  Open Transfer Modal
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => void handleCopyToClipboard(entry.walletAddress, "Wallet address")}>
+                                  Copy Wallet
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => void handleCopyToClipboard(entry.userId, "User ID")}>
+                                  Copy User ID
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
                           <div>
@@ -1089,7 +1229,9 @@ const Admin = () => {
             </TabsContent>
 
             <TabsContent value="audit" className="space-y-5">
-              <h3 className="font-display font-bold text-lg text-foreground">Audit Logs</h3>
+              <div className="app-sticky-subheader">
+                <h3 className="font-display font-bold text-lg text-foreground">Audit Logs</h3>
+              </div>
               <div className="space-y-3">
                 {auditLogs.map((log) => (
                   <Card key={log.id} className="app-section-card app-list-card rounded-xl">
@@ -1113,7 +1255,24 @@ const Admin = () => {
                           </p>
                         </div>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground self-start sm:self-auto" />
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9 self-start sm:self-auto">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => void handleCopyToClipboard(log.actor_user_id, "Actor user ID")}>
+                            Copy Actor ID
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => void handleCopyToClipboard(log.action, "Action")}>
+                            Copy Action
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => void handleCopyToClipboard(JSON.stringify(log.metadata_json), "Metadata")}>
+                            Copy Metadata JSON
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </CardContent>
                   </Card>
                 ))}
@@ -1134,6 +1293,53 @@ const Admin = () => {
             </TabsContent>
           </Tabs>
         </motion.div>
+      </div>
+      <div className="app-mobile-actionbar">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2">
+          <Button
+            variant={activeTab === "users" ? "accent" : "outline"}
+            size="sm"
+            className="shrink-0"
+            onClick={() => setActiveTab("users")}
+          >
+            Users
+          </Button>
+          <Button
+            variant={activeTab === "disclosures" ? "accent" : "outline"}
+            size="sm"
+            className="shrink-0"
+            onClick={() => setActiveTab("disclosures")}
+          >
+            Disclosures
+          </Button>
+          <Button
+            variant={activeTab === "withdrawals" ? "accent" : "outline"}
+            size="sm"
+            className="shrink-0"
+            onClick={() => setActiveTab("withdrawals")}
+          >
+            Withdraw
+          </Button>
+          <Button
+            variant={activeTab === "manage-wallets" ? "accent" : "outline"}
+            size="sm"
+            className="shrink-0"
+            onClick={() => setActiveTab("manage-wallets")}
+          >
+            Wallets
+          </Button>
+          <Button
+            variant={activeTab === "audit" ? "accent" : "outline"}
+            size="sm"
+            className="shrink-0"
+            onClick={() => setActiveTab("audit")}
+          >
+            Audit
+          </Button>
+        </div>
+        <Button variant="accent" className="w-full h-11" onClick={handleQuickAction} disabled={quickActionDisabled}>
+          {quickActionLabel}
+        </Button>
       </div>
       <WalletSelectModal
         open={isWalletModalOpen}

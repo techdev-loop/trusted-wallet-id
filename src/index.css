@@ -315,6 +315,14 @@
   .app-skeleton-line {
     @apply h-3 rounded-md bg-slate-200/75 animate-pulse;
   }
+
+  .app-sticky-subheader {
+    @apply sticky top-[4.6rem] sm:top-[5rem] z-20 rounded-xl border border-slate-200/80 bg-white/95 backdrop-blur-md shadow-[var(--shadow-xs)] p-3 sm:p-4;
+  }
+
+  .app-mobile-actionbar {
+    @apply fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200/80 bg-white/95 backdrop-blur-xl shadow-[0_-8px_30px_hsl(var(--foreground)/0.08)] p-3 md:hidden;
+  }
 }
 
 @layer base {
