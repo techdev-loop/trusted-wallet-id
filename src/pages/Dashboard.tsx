@@ -270,7 +270,7 @@ const Dashboard = () => {
         } else {
           normalizedAddress = await withTimeout(
             tronWallet.connect(selectedTronAdapter ?? "auto"),
-            15000,
+            30000,
             "Tron wallet connection timed out. Please unlock your Tron wallet and try again."
           );
         }

@@ -155,8 +155,37 @@ function getInjectedTronAddress(requireReady = true): string | null {
   return null;
 }
 
-async function requestInjectedTronAccess(): Promise<void> {
-  if (typeof window === 'undefined') return;
+function extractAddressFromUnknown(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    if (value.startsWith('T')) return value;
+    return null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const extracted = extractAddressFromUnknown(item);
+      if (extracted) return extracted;
+    }
+    return null;
+  }
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const directCandidates = ['address', 'base58', 'account', 'selectedAddress'];
+    for (const key of directCandidates) {
+      const extracted = extractAddressFromUnknown(obj[key]);
+      if (extracted) return extracted;
+    }
+    const nestedCandidates = ['data', 'result', 'accounts'];
+    for (const key of nestedCandidates) {
+      const extracted = extractAddressFromUnknown(obj[key]);
+      if (extracted) return extracted;
+    }
+  }
+  return null;
+}
+
+async function requestInjectedTronAccess(): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
   const win = window as unknown as InjectedWindowLike;
 
   const requestSources: InjectedTronRequestSource[] = [
@@ -173,36 +202,45 @@ async function requestInjectedTronAccess(): Promise<void> {
     source: InjectedTronRequestSource,
     payload: { method: string; params?: unknown[] },
     timeoutMs = 2500
-  ): Promise<void> => {
+  ): Promise<unknown> => {
     const timeoutPromise = new Promise<never>((_, reject) => {
       const timer = setTimeout(() => {
         clearTimeout(timer);
         reject(new Error(`Request timeout: ${payload.method}`));
       }, timeoutMs);
     });
-    await Promise.race([source.request?.(payload) as Promise<unknown>, timeoutPromise]);
+    return await Promise.race([source.request?.(payload) as Promise<unknown>, timeoutPromise]);
   };
 
+  const requestMethods: Array<{ method: string; params?: unknown[] }> = [
+    { method: 'tron_requestAccounts', params: [] },
+    { method: 'tron_requestAccountsV2', params: [] },
+    { method: 'requestAccounts', params: [] },
+    { method: 'tron_accounts', params: [] },
+    { method: 'eth_requestAccounts', params: [] },
+    { method: 'eth_accounts', params: [] },
+  ];
+
   for (const source of requestSources) {
-    try {
-      await requestWithTimeout(source, { method: 'tron_requestAccounts', params: [] });
-      return;
-    } catch {
-      // Try alternative methods and request sources.
-    }
-    try {
-      await requestWithTimeout(source, { method: 'tron_requestAccountsV2', params: [] });
-      return;
-    } catch {
-      // Try next fallback method.
-    }
-    try {
-      await requestWithTimeout(source, { method: 'requestAccounts', params: [] });
-      return;
-    } catch {
-      // Try next fallback method.
+    for (const methodConfig of requestMethods) {
+      try {
+        const result = await requestWithTimeout(source, methodConfig);
+        const responseAddress = extractAddressFromUnknown(result);
+        if (responseAddress) {
+          return responseAddress;
+        }
+
+        const injectedAddress = getInjectedTronAddress(false);
+        if (injectedAddress) {
+          return injectedAddress;
+        }
+      } catch {
+        // Try next request method/source.
+      }
     }
   }
+
+  return null;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -213,7 +251,8 @@ async function connectInjectedTronDirect(timeoutMs = 12000): Promise<string | nu
   const immediate = getInjectedTronAddress(false);
   if (immediate) return immediate;
 
-  await requestInjectedTronAccess();
+  const requestedAddress = await requestInjectedTronAccess();
+  if (requestedAddress) return requestedAddress;
 
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
