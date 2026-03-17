@@ -296,12 +296,24 @@
     @apply rounded-2xl border border-slate-200/70 bg-white/90 backdrop-blur-sm shadow-[var(--shadow-sm)];
   }
 
+  .app-list-card {
+    @apply transition-all duration-300 hover:-translate-y-[1px] hover:shadow-[var(--shadow-md)];
+  }
+
   .app-tabs-rail {
     @apply w-full overflow-x-auto rounded-xl border border-slate-200/80 bg-slate-50/90 p-1.5 shadow-[var(--shadow-xs)];
   }
 
   .app-tabs-trigger {
     @apply rounded-lg font-medium shrink-0;
+  }
+
+  .app-empty-state {
+    @apply p-6 sm:p-7 text-center;
+  }
+
+  .app-skeleton-line {
+    @apply h-3 rounded-md bg-slate-200/75 animate-pulse;
   }
 }
 

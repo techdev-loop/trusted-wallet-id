@@ -447,7 +447,19 @@ const Dashboard = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading dashboard...</p>
+        <Card className="app-section-card w-[min(92vw,480px)]">
+          <CardContent className="p-6 sm:p-7">
+            <div className="flex items-center gap-3 mb-5">
+              <Loader2 className="w-5 h-5 animate-spin text-accent" />
+              <p className="text-sm font-medium text-foreground">Loading dashboard</p>
+            </div>
+            <div className="space-y-3">
+              <div className="app-skeleton-line w-5/6" />
+              <div className="app-skeleton-line w-2/3" />
+              <div className="app-skeleton-line w-3/4" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -774,7 +786,7 @@ const Dashboard = () => {
                     : "N/A";
                   const config = statusConfig[walletStatus];
                   return (
-                    <Card key={wallet.id} className="app-section-card rounded-xl">
+                    <Card key={wallet.id} className="app-section-card app-list-card rounded-xl">
                       <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div className="flex items-center gap-4 min-w-0">
                           <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
@@ -797,8 +809,14 @@ const Dashboard = () => {
                 })}
                 {(dashboardData?.linkedWallets.length ?? 0) === 0 && (
                   <Card className="app-section-card rounded-xl">
-                    <CardContent className="p-5 text-sm text-muted-foreground">
-                      No KYC-verified wallet yet.
+                    <CardContent className="app-empty-state">
+                      <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                        <Wallet className="w-5 h-5 text-accent" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">No verified wallet yet</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Complete wallet verification to activate your first linked wallet.
+                      </p>
                     </CardContent>
                   </Card>
                 )}
@@ -812,7 +830,7 @@ const Dashboard = () => {
                   const disclosureStatus = disc.approvedByUser ? "approved" : "pending";
                   const config = statusConfig[disclosureStatus];
                   return (
-                    <Card key={disc.id} className="app-section-card rounded-xl">
+                    <Card key={disc.id} className="app-section-card app-list-card rounded-xl">
                       <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div className="flex items-center gap-4 min-w-0">
                           <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
@@ -840,8 +858,14 @@ const Dashboard = () => {
                 })}
                 {(dashboardData?.disclosureHistory.length ?? 0) === 0 && (
                   <Card className="app-section-card rounded-xl">
-                    <CardContent className="p-5 text-sm text-muted-foreground">
-                      No disclosure history available.
+                    <CardContent className="app-empty-state">
+                      <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                        <FileText className="w-5 h-5 text-accent" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">No disclosure history</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Disclosure requests and approvals will appear here once available.
+                      </p>
                     </CardContent>
                   </Card>
                 )}

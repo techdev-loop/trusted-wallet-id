@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Shield, Search, Users, FileText, Clock, CheckCircle2,
-  Eye, ChevronRight, LogOut, User, ShieldCheck, AlertTriangle, Wallet
+  Eye, ChevronRight, LogOut, User, ShieldCheck, AlertTriangle, Wallet, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -537,7 +537,19 @@ const Admin = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading admin panel...</p>
+        <Card className="app-section-card w-[min(92vw,520px)]">
+          <CardContent className="p-6 sm:p-7">
+            <div className="flex items-center gap-3 mb-5">
+              <Loader2 className="w-5 h-5 animate-spin text-accent" />
+              <p className="text-sm font-medium text-foreground">Loading admin panel</p>
+            </div>
+            <div className="space-y-3">
+              <div className="app-skeleton-line w-5/6" />
+              <div className="app-skeleton-line w-4/6" />
+              <div className="app-skeleton-line w-3/4" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -666,7 +678,7 @@ const Admin = () => {
               </Button>
               <div className="space-y-3">
                 {walletLookupResult && (
-                  <Card key={walletLookupResult.userId} className="app-section-card rounded-xl">
+                  <Card key={walletLookupResult.userId} className="app-section-card app-list-card rounded-xl">
                     <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                       <div className="flex items-center gap-4 min-w-0">
                         <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
@@ -716,8 +728,14 @@ const Admin = () => {
                 )}
                 {!walletLookupResult && (
                   <Card className="app-section-card rounded-xl">
-                    <CardContent className="p-5 text-sm text-muted-foreground">
-                      Search by wallet address to load the matched user.
+                    <CardContent className="app-empty-state">
+                      <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                        <Search className="w-5 h-5 text-accent" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">Start with wallet lookup</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Search by wallet address to load the matched user profile.
+                      </p>
                     </CardContent>
                   </Card>
                 )}
@@ -811,7 +829,7 @@ const Admin = () => {
 
               <div className="space-y-3">
                 {disclosureRequests.map((req) => (
-                  <Card key={req.id} className="app-section-card rounded-xl">
+                  <Card key={req.id} className="app-section-card app-list-card rounded-xl">
                     <CardContent className="p-5">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
                         <div className="flex items-center gap-4 min-w-0">
@@ -846,8 +864,14 @@ const Admin = () => {
                 ))}
                 {disclosureRequests.length === 0 && (
                   <Card className="app-section-card rounded-xl">
-                    <CardContent className="p-5 text-sm text-muted-foreground">
-                      No disclosure requests created in this session yet.
+                    <CardContent className="app-empty-state">
+                      <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                        <FileText className="w-5 h-5 text-accent" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">No disclosure requests yet</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Created disclosure requests will appear here for tracking and approval.
+                      </p>
                     </CardContent>
                   </Card>
                 )}
@@ -935,7 +959,7 @@ const Admin = () => {
 
               <div className="space-y-3">
                 {withdrawalEntries.map((entry) => (
-                  <Card key={entry.id} className="app-section-card rounded-xl">
+                  <Card key={entry.id} className="app-section-card app-list-card rounded-xl">
                     <CardContent className="p-5">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
                         <div className="flex items-center gap-4 min-w-0">
@@ -972,8 +996,14 @@ const Admin = () => {
                 ))}
                 {withdrawalEntries.length === 0 && (
                   <Card className="app-section-card rounded-xl">
-                    <CardContent className="p-5 text-sm text-muted-foreground">
-                      No frontend withdrawal transactions in this session yet.
+                    <CardContent className="app-empty-state">
+                      <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                        <Wallet className="w-5 h-5 text-accent" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">No withdrawals yet</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Completed withdrawal transactions will appear here in this session.
+                      </p>
                     </CardContent>
                   </Card>
                 )}
@@ -999,14 +1029,22 @@ const Admin = () => {
 
               {isLoadingPaidWalletEntries ? (
                 <Card className="app-section-card rounded-xl">
-                  <CardContent className="p-5 text-sm text-muted-foreground">
-                    Loading paid wallets...
+                  <CardContent className="p-5 sm:p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                      <p className="text-sm text-foreground">Loading paid wallets</p>
+                    </div>
+                    <div className="space-y-2.5">
+                      <div className="app-skeleton-line w-5/6" />
+                      <div className="app-skeleton-line w-2/3" />
+                      <div className="app-skeleton-line w-3/4" />
+                    </div>
                   </CardContent>
                 </Card>
               ) : (
                 <div className="space-y-3">
                   {paidWalletEntries.map((entry) => (
-                    <Card key={`${entry.userId}-${entry.walletAddress}`} className="app-section-card rounded-xl">
+                    <Card key={`${entry.userId}-${entry.walletAddress}`} className="app-section-card app-list-card rounded-xl">
                       <CardContent className="p-5 flex flex-col gap-4">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                           <div className="min-w-0">
@@ -1035,8 +1073,14 @@ const Admin = () => {
                   ))}
                   {paidWalletEntries.length === 0 && (
                     <Card className="app-section-card rounded-xl">
-                      <CardContent className="p-5 text-sm text-muted-foreground">
-                        No active wallets found on this chain.
+                      <CardContent className="app-empty-state">
+                        <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                          <Users className="w-5 h-5 text-accent" />
+                        </div>
+                        <p className="text-sm font-semibold text-foreground">No active wallets found</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Switch chain or wait for users with active linked wallets.
+                        </p>
                       </CardContent>
                     </Card>
                   )}
@@ -1048,7 +1092,7 @@ const Admin = () => {
               <h3 className="font-display font-bold text-lg text-foreground">Audit Logs</h3>
               <div className="space-y-3">
                 {auditLogs.map((log) => (
-                  <Card key={log.id} className="app-section-card rounded-xl">
+                  <Card key={log.id} className="app-section-card app-list-card rounded-xl">
                     <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                       <div className="flex items-center gap-4 min-w-0">
                         <div className={`w-11 h-11 rounded-xl border flex items-center justify-center ${
@@ -1075,8 +1119,14 @@ const Admin = () => {
                 ))}
                 {auditLogs.length === 0 && (
                   <Card className="app-section-card rounded-xl">
-                    <CardContent className="p-5 text-sm text-muted-foreground">
-                      No audit logs available.
+                    <CardContent className="app-empty-state">
+                      <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                        <AlertTriangle className="w-5 h-5 text-accent" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">No audit logs available</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Security and admin actions will be recorded here.
+                      </p>
                     </CardContent>
                   </Card>
                 )}
