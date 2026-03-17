@@ -525,12 +525,12 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
           }
 
           try {
-            await candidate.connect();
-            if (candidate.address) {
+            const candidateAddress = await connectAdapterWithTimeout(candidate, 8000);
+            if (candidateAddress) {
               addTronDebug(`connect:auto:adapter-success:${candidateType}`);
               setAdapter(candidate);
-              setAddress(candidate.address);
-              return candidate.address;
+              setAddress(candidateAddress);
+              return candidateAddress;
             }
           } catch (err) {
             addTronDebug(`connect:auto:adapter-fail:${candidateType}`);
@@ -564,7 +564,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
       const currentAdapter = createAdapter();
       try {
         addTronDebug(`connect:adapter:start:${adapterType}`);
-        await currentAdapter.connect();
+        await connectAdapterWithTimeout(currentAdapter, 10000);
         addTronDebug(`connect:adapter:ok:${adapterType}`);
       } catch (adapterError) {
         addTronDebug(`connect:adapter:fail:${adapterType}`);
