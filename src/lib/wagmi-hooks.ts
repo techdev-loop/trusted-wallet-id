@@ -96,7 +96,8 @@ export function useWagmiWallet() {
   const { signMessageAsync } = useSignMessage();
 
   const signMessageWithWallet = useCallback(async (message: string): Promise<string> => {
-    if (!isConnected || !address) {
+    const current = getAccount(config);
+    if (!current.isConnected || !current.address) {
       throw new Error('Wallet not connected');
     }
     
@@ -110,7 +111,7 @@ export function useWagmiWallet() {
       }
       throw new Error(err?.message || 'Failed to sign message');
     }
-  }, [address, isConnected, signMessageAsync]);
+  }, [config, signMessageAsync]);
 
   return {
     address: address || null,

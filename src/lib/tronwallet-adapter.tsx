@@ -8,7 +8,7 @@ import {
 } from '@tronweb3/tronwallet-adapters';
 import { WalletConnectAdapter } from '@tronweb3/tronwallet-adapter-walletconnect';
 import { WalletReadyState, type Adapter as TronWalletAdapter } from '@tronweb3/tronwallet-abstract-adapter';
-import { ReactNode, createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { ReactNode, createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 
 // TronWallet Adapter Context
 export type TronAdapterType =
@@ -445,6 +445,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [connectedAdapterType, setConnectedAdapterType] = useState<TronAdapterType | null>(null);
+  const adapterRef = useRef<TronWalletAdapter | null>(null);
 
   // Expose current Tron wallet session globally for transaction helpers in web3.ts.
   useEffect(() => {
@@ -454,6 +455,10 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
     win.__tronSessionAddress = address ?? null;
     win.__tronSessionAdapterType = connectedAdapterType ?? null;
   }, [adapter, address, connectedAdapterType]);
+
+  useEffect(() => {
+    adapterRef.current = adapter;
+  }, [adapter]);
 
   // Auto-detect and connect to available adapter
   useEffect(() => {
@@ -755,10 +760,6 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
   }, [adapter]);
 
   const signMessage = useCallback(async (message: string): Promise<string> => {
-    if (!address) {
-      throw new Error('No address available');
-    }
-
     try {
       // Convert message to hex for Tron
       const messageHex = Array.from(new TextEncoder().encode(message))
@@ -766,8 +767,9 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         .join('');
 
       let signature = '';
-      if (adapter) {
-        signature = await adapter.signMessage(messageHex);
+      const liveAdapter = adapterRef.current ?? adapter;
+      if (liveAdapter) {
+        signature = await liveAdapter.signMessage(messageHex);
       } else {
         const tronWeb = getInjectedTronWeb();
         if (!tronWeb?.trx) {
@@ -795,7 +797,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
       }
       throw new Error(err?.message || 'Failed to sign message');
     }
-  }, [adapter, address, connectedAdapterType]);
+  }, [adapter]);
 
   const value: TronWalletContextType = {
     adapter,

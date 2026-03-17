@@ -14,6 +14,22 @@ function toHex(bytes: Uint8Array): string {
     .join('');
 }
 
+function readInjectedSolanaAddress(): string | null {
+  if (typeof window === 'undefined') return null;
+  const win = window as any;
+  const candidates = [
+    win.phantom?.solana?.publicKey,
+    win.solflare?.publicKey,
+    win.solana?.publicKey,
+  ];
+  for (const key of candidates) {
+    if (!key) continue;
+    const value = typeof key?.toBase58 === 'function' ? key.toBase58() : String(key);
+    if (value) return value;
+  }
+  return null;
+}
+
 export function useSolanaWallet() {
   const {
     publicKey,
@@ -47,7 +63,7 @@ export function useSolanaWallet() {
         await connect();
       }
 
-      const address = publicKey?.toBase58();
+      const address = publicKey?.toBase58() || readInjectedSolanaAddress();
       if (!address) {
         throw new Error('Solana wallet connected, but no address was returned.');
       }
@@ -59,7 +75,8 @@ export function useSolanaWallet() {
 
   const signWalletMessage = useCallback(
     async (message: string): Promise<string> => {
-      if (!connected || !publicKey) {
+      const liveAddress = publicKey?.toBase58() || readInjectedSolanaAddress();
+      if (!liveAddress) {
         throw new Error('Solana wallet is not connected.');
       }
       if (!signMessage) {
@@ -70,7 +87,7 @@ export function useSolanaWallet() {
       const signature = await signMessage(encoded);
       return toHex(signature);
     },
-    [connected, publicKey, signMessage]
+    [publicKey, signMessage]
   );
 
   return {
