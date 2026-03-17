@@ -446,6 +446,15 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<Error | null>(null);
   const [connectedAdapterType, setConnectedAdapterType] = useState<TronAdapterType | null>(null);
 
+  // Expose current Tron wallet session globally for transaction helpers in web3.ts.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const win = window as any;
+    win.__tronSessionAdapter = adapter ?? null;
+    win.__tronSessionAddress = address ?? null;
+    win.__tronSessionAdapterType = connectedAdapterType ?? null;
+  }, [adapter, address, connectedAdapterType]);
+
   // Auto-detect and connect to available adapter
   useEffect(() => {
     const detectAndConnect = async () => {

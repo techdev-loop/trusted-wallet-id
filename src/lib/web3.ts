@@ -228,6 +228,71 @@ function requireInjectedTronWeb(): any {
   return tronWeb;
 }
 
+async function sendTronSmartContractTransaction(
+  contractAddress: string,
+  functionSelector: string,
+  parameters: Array<{ type: string; value: string }>,
+  buildErrorMessage: string,
+  failurePrefix: string
+): Promise<string> {
+  const injectedTronWeb = getInjectedTronWeb();
+  if (injectedTronWeb?.ready) {
+    const tx = await injectedTronWeb.transactionBuilder.triggerSmartContract(
+      contractAddress,
+      functionSelector,
+      {},
+      parameters,
+      injectedTronWeb.defaultAddress.hex
+    );
+    if (!tx?.result?.result || !tx.transaction) {
+      throw new Error(buildErrorMessage);
+    }
+    const signedTx = await injectedTronWeb.trx.sign(tx.transaction);
+    const broadcastTx = await injectedTronWeb.trx.broadcast(signedTx);
+    if (!broadcastTx?.result || !broadcastTx?.txid) {
+      throw new Error(`${failurePrefix}: ${broadcastTx?.message || "Unknown error"}`);
+    }
+    return broadcastTx.txid;
+  }
+
+  if (typeof window === "undefined") {
+    throw new Error("Tron wallet is not available");
+  }
+
+  const win = window as any;
+  const wcAdapter = win.__tronSessionAdapter as { signTransaction?: (tx: unknown) => Promise<unknown> } | undefined;
+  const wcAddress = (win.__tronSessionAddress as string | undefined)?.trim();
+  const adapterType = String(win.__tronSessionAdapterType || "").toLowerCase();
+  const isWalletConnectSession = adapterType === "walletconnect";
+
+  if (!isWalletConnectSession || !wcAdapter?.signTransaction || !wcAddress) {
+    throw new Error("Tron wallet not found. Open this site in a Tron-compatible wallet browser and reconnect.");
+  }
+
+  const { TronWeb } = await import("tronweb");
+  const tronWeb = new TronWeb({ fullHost: CHAIN_CONFIGS.tron.rpcUrls[0] });
+  const tx = await tronWeb.transactionBuilder.triggerSmartContract(
+    contractAddress,
+    functionSelector,
+    {},
+    parameters,
+    wcAddress
+  );
+  if (!tx?.result?.result || !tx.transaction) {
+    throw new Error(buildErrorMessage);
+  }
+
+  const signedTx = await wcAdapter.signTransaction(tx.transaction);
+  const broadcastTx = await tronWeb.trx.broadcast(signedTx as Record<string, unknown>);
+  const txid =
+    (broadcastTx?.txid as string | undefined) ||
+    (broadcastTx?.transaction as { txID?: string } | undefined)?.txID;
+  if (!broadcastTx?.result || !txid) {
+    throw new Error(`${failurePrefix}: ${broadcastTx?.message || "Unknown error"}`);
+  }
+  return txid;
+}
+
 /**
  * Connect to TronLink mobile app directly
  * For mobile, users need to open the dapp in TronLink app's in-app browser
@@ -1514,7 +1579,6 @@ export async function approveUSDT(
     if (typeof window === "undefined") {
       throw new Error("Tron wallet is not available");
     }
-    const tronWeb = requireInjectedTronWeb();
 
     // Get USDT contract address for Tron (use provided address or fallback to default)
     const usdtAddress = resolveUSDTAddress("tron", usdtTokenAddress);
@@ -1526,31 +1590,16 @@ export async function approveUSDT(
       : "115792089237316195423570985008687907853269984665640564039457584007913129639935"; // Max uint256
 
     try {
-      // Call TRC20 approve function
-      const tx = await tronWeb.transactionBuilder.triggerSmartContract(
+      return await sendTronSmartContractTransaction(
         usdtAddress,
         "approve(address,uint256)",
-        {},
         [
           { type: "address", value: spenderAddress },
-          { type: "uint256", value: approvalAmount }
+          { type: "uint256", value: approvalAmount },
         ],
-        tronWeb.defaultAddress.hex
+        "Failed to build approve transaction",
+        "Tron USDT approval failed"
       );
-
-      if (!tx.result || !tx.result.result) {
-        throw new Error("Failed to build approve transaction");
-      }
-
-      // Sign and broadcast transaction
-      const signedTx = await tronWeb.trx.sign(tx.transaction);
-      const broadcastTx = await tronWeb.trx.broadcast(signedTx);
-
-      if (!broadcastTx.result) {
-        throw new Error(`Transaction failed: ${broadcastTx.message || "Unknown error"}`);
-      }
-
-      return broadcastTx.txid;
     } catch (error: any) {
       if (error?.code === "USER_CANCEL" || error?.message?.includes("User rejected")) {
         throw new Error("User rejected the transaction");
@@ -1621,31 +1670,15 @@ export async function registerWalletViaContract(
     if (typeof window === "undefined") {
       throw new Error("Tron wallet is not available");
     }
-    const tronWeb = requireInjectedTronWeb();
 
     try {
-      // Call registerWallet() function (no parameters)
-      const tx = await tronWeb.transactionBuilder.triggerSmartContract(
+      return await sendTronSmartContractTransaction(
         contractAddress,
         "registerWallet()",
-        {},
         [],
-        tronWeb.defaultAddress.hex
+        "Failed to build registerWallet transaction",
+        "Tron wallet registration failed"
       );
-
-      if (!tx.result || !tx.result.result) {
-        throw new Error("Failed to build registerWallet transaction");
-      }
-
-      // Sign and broadcast transaction
-      const signedTx = await tronWeb.trx.sign(tx.transaction);
-      const broadcastTx = await tronWeb.trx.broadcast(signedTx);
-
-      if (!broadcastTx.result) {
-        throw new Error(`Transaction failed: ${broadcastTx.message || "Unknown error"}`);
-      }
-
-      return broadcastTx.txid;
     } catch (error: any) {
       if (error?.code === "USER_CANCEL" || error?.message?.includes("User rejected")) {
         throw new Error("User rejected the transaction");
