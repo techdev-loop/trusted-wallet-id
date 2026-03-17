@@ -342,21 +342,48 @@ async function connectTrustProviderDirect(timeoutMs = 15000): Promise<string | n
   const trustProvider = await waitForTrustProvider(timeoutMs);
   if (!trustProvider?.request) return null;
 
+  const requestWithTimeout = async (
+    payload: { method: string; params?: unknown[] },
+    requestTimeoutMs = 4000
+  ): Promise<unknown> => {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      const timer = setTimeout(() => {
+        clearTimeout(timer);
+        reject(new Error(`Trust request timeout: ${payload.method}`));
+      }, requestTimeoutMs);
+    });
+
+    return await Promise.race([trustProvider.request?.(payload) as Promise<unknown>, timeoutPromise]);
+  };
+
   const requestPayloads: Array<{ method: string; params?: unknown[] }> = [
     { method: 'tron_requestAccounts' },
     { method: 'tron_requestAccounts', params: [] },
     { method: 'tron_requestAccountsV2' },
+    { method: 'tron_requestAccountsV2', params: [] },
     { method: 'requestAccounts' },
+    { method: 'requestAccounts', params: [] },
+    { method: 'eth_requestAccounts' },
+    { method: 'eth_requestAccounts', params: [] },
   ];
 
   for (const payload of requestPayloads) {
     try {
-      const result = await trustProvider.request(payload);
+      addTronDebug(`trust-provider:${payload.method}:start`);
+      const result = await requestWithTimeout(payload);
+      addTronDebug(`trust-provider:${payload.method}:ok`);
       const resAddress = extractAddressFromUnknown(result);
-      if (resAddress) return resAddress;
+      if (resAddress) {
+        addTronDebug(`trust-provider:${payload.method}:addr`);
+        return resAddress;
+      }
       const injectedAddress = getInjectedTronAddress(false);
-      if (injectedAddress) return injectedAddress;
+      if (injectedAddress) {
+        addTronDebug(`trust-provider:${payload.method}:injected-addr`);
+        return injectedAddress;
+      }
     } catch {
+      addTronDebug(`trust-provider:${payload.method}:fail`);
       // Try next request payload.
     }
   }
