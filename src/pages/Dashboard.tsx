@@ -25,7 +25,7 @@ import {
   type Chain
 } from "@/lib/web3";
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
-import { useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
+import { getTronProviderDebugSnapshot, useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
 
 interface DashboardData {
@@ -336,6 +336,12 @@ const Dashboard = () => {
           : error instanceof Error
             ? error.message
             : "Failed to connect wallet and sign message";
+
+      if (selectedChain === "tron") {
+        const tronDebug = getTronProviderDebugSnapshot();
+        console.error("[tron.connect.debug]", tronDebug);
+        toast.info(tronDebug);
+      }
       toast.error(message);
       // Reopen modal on non-rejection errors so user can retry with another wallet.
       if (error instanceof Error && !message.includes("User rejected") && !message.includes("user rejected")) {

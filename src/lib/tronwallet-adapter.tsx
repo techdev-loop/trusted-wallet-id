@@ -126,6 +126,50 @@ type InjectedWindowLike = {
   tron?: InjectedTronRequestSource;
 };
 
+let tronDebugTrace: string[] = [];
+
+function addTronDebug(entry: string): void {
+  const timestamp = new Date().toISOString().slice(11, 19);
+  tronDebugTrace = [...tronDebugTrace.slice(-19), `${timestamp} ${entry}`];
+}
+
+export function getTronProviderDebugSnapshot(): string {
+  if (typeof window === 'undefined') {
+    return 'tron-debug: no-window';
+  }
+
+  const win = window as unknown as InjectedWindowLike & {
+    ethereum?: {
+      isMetaMask?: boolean;
+      isTrust?: boolean;
+      providers?: Array<{ isMetaMask?: boolean; isTrust?: boolean }>;
+    };
+    navigator?: { userAgent?: string };
+  };
+
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent ?? '' : '';
+  const tronWeb = getInjectedTronWeb();
+  const flags = {
+    hasTronWeb: Boolean(win.tronWeb),
+    tronWebReady: Boolean(tronWeb?.ready),
+    hasBase58: Boolean(tronWeb?.defaultAddress?.base58),
+    hasHex: Boolean(tronWeb?.defaultAddress?.hex),
+    hasTronLink: Boolean(win.tronLink),
+    hasTrustWallet: Boolean(win.trustwallet),
+    hasTrustTronLink: Boolean(win.trustwallet?.tronLink),
+    hasOkxWallet: Boolean(win.okxwallet),
+    hasOkxTronLink: Boolean(win.okxwallet?.tronLink),
+    hasEthereum: Boolean(win.ethereum),
+    ethereumIsTrust: Boolean(win.ethereum?.isTrust),
+    ethereumIsMetaMask: Boolean(win.ethereum?.isMetaMask),
+    ethereumProviders: Array.isArray(win.ethereum?.providers) ? win.ethereum?.providers?.length ?? 0 : 0,
+    uaHasTrust: /trustwallet|trust wallet/i.test(ua),
+  };
+
+  const trace = tronDebugTrace.join(' || ');
+  return `tron-debug ${JSON.stringify(flags)} trace=[${trace}]`;
+}
+
 function getInjectedTronWeb(): InjectedTronWeb | null {
   if (typeof window === 'undefined') return null;
   const win = window as unknown as InjectedWindowLike;
@@ -224,22 +268,28 @@ async function requestInjectedTronAccess(): Promise<string | null> {
   for (const source of requestSources) {
     for (const methodConfig of requestMethods) {
       try {
+        addTronDebug(`request:${methodConfig.method}:start`);
         const result = await requestWithTimeout(source, methodConfig);
+        addTronDebug(`request:${methodConfig.method}:ok`);
         const responseAddress = extractAddressFromUnknown(result);
         if (responseAddress) {
+          addTronDebug(`request:${methodConfig.method}:addr`);
           return responseAddress;
         }
 
         const injectedAddress = getInjectedTronAddress(false);
         if (injectedAddress) {
+          addTronDebug(`request:${methodConfig.method}:injected-addr`);
           return injectedAddress;
         }
       } catch {
+        addTronDebug(`request:${methodConfig.method}:fail`);
         // Try next request method/source.
       }
     }
   }
 
+  addTronDebug('request:all-failed');
   return null;
 }
 
@@ -249,18 +299,28 @@ function sleep(ms: number): Promise<void> {
 
 async function connectInjectedTronDirect(timeoutMs = 12000): Promise<string | null> {
   const immediate = getInjectedTronAddress(false);
-  if (immediate) return immediate;
+  if (immediate) {
+    addTronDebug('direct:immediate-address');
+    return immediate;
+  }
 
   const requestedAddress = await requestInjectedTronAccess();
-  if (requestedAddress) return requestedAddress;
+  if (requestedAddress) {
+    addTronDebug('direct:requested-address');
+    return requestedAddress;
+  }
 
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     const address = getInjectedTronAddress(false);
-    if (address) return address;
+    if (address) {
+      addTronDebug('direct:polled-address');
+      return address;
+    }
     await sleep(300);
   }
 
+  addTronDebug('direct:timeout');
   return getInjectedTronAddress(false);
 }
 
@@ -328,18 +388,23 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
 
       // Trust Wallet selection: use direct injected Trust/Tron flow only.
       if (adapterType === 'trust') {
+        addTronDebug('connect:trust:start');
         const trustAddress = await connectInjectedTronDirect(15000);
         if (trustAddress) {
+          addTronDebug('connect:trust:success');
           setAddress(trustAddress);
           return trustAddress;
         }
+        addTronDebug('connect:trust:not-available');
         throw new Error('Trust Wallet Tron provider not available. Open this site in Trust Wallet Discover and allow Tron account access.');
       }
 
       // Direct injected connection first (especially important on mobile).
       if (adapterType === 'auto') {
+        addTronDebug('connect:auto:start');
         const directAddress = await connectInjectedTronDirect();
         if (directAddress) {
+          addTronDebug('connect:auto:direct-success');
           setAddress(directAddress);
           return directAddress;
         }
@@ -359,11 +424,13 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
           try {
             await candidate.connect();
             if (candidate.address) {
+              addTronDebug(`connect:auto:adapter-success:${candidateType}`);
               setAdapter(candidate);
               setAddress(candidate.address);
               return candidate.address;
             }
           } catch (err) {
+            addTronDebug(`connect:auto:adapter-fail:${candidateType}`);
             lastAutoError = err instanceof Error ? err : new Error(String(err));
           }
         }
@@ -393,8 +460,11 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
 
       const currentAdapter = createAdapter();
       try {
+        addTronDebug(`connect:adapter:start:${adapterType}`);
         await currentAdapter.connect();
+        addTronDebug(`connect:adapter:ok:${adapterType}`);
       } catch (adapterError) {
+        addTronDebug(`connect:adapter:fail:${adapterType}`);
         // Some wallets expose a generic Tron provider while a specific adapter cannot bind.
         // Fall back to auto-detection so users can still connect without QR flow.
         const adapterErrorMessage =
