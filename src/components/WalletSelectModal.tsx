@@ -110,7 +110,7 @@ const WALLET_OPTIONS: WalletOption[] = [
     icon: "🔗",
     description: "Connect by scanning WalletConnect QR code",
     method: "walletconnect",
-    supportedChains: ["ethereum", "bsc", "tron", "solana"],
+    supportedChains: ["ethereum", "bsc", "tron"],
   },
 ];
 

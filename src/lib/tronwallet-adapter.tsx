@@ -443,6 +443,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [connectedAdapterType, setConnectedAdapterType] = useState<TronAdapterType | null>(null);
 
   // Auto-detect and connect to available adapter
   useEffect(() => {
@@ -494,8 +495,12 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
       setIsConnecting(true);
       setError(null);
 
-      // Reuse existing connection if available.
-      if (adapter && address) {
+      // Reuse existing connection, except when user explicitly requested WalletConnect QR.
+      const canReuseCurrentConnection =
+        !!adapter &&
+        !!address &&
+        (adapterType !== 'walletconnect' || connectedAdapterType === 'walletconnect');
+      if (canReuseCurrentConnection) {
         return address;
       }
 
@@ -510,12 +515,14 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         if (trustDirectAddress) {
           addTronDebug('connect:trust:provider-success');
           setAddress(trustDirectAddress);
+          setConnectedAdapterType('trust');
           return trustDirectAddress;
         }
         const trustAddress = await connectInjectedTronDirect(15000);
         if (trustAddress) {
           addTronDebug('connect:trust:success');
           setAddress(trustAddress);
+          setConnectedAdapterType('trust');
           return trustAddress;
         }
 
@@ -528,6 +535,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
             addTronDebug('connect:trust:adapter-trust:success');
             setAdapter(trustAdapter);
             setAddress(trustAdapterAddress);
+            setConnectedAdapterType('trust');
             return trustAdapterAddress;
           }
         } catch {
@@ -543,6 +551,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
             addTronDebug('connect:trust:adapter-tronlink:success');
             setAdapter(tronLinkAdapter);
             setAddress(tronLinkAddress);
+            setConnectedAdapterType('tronlink');
             return tronLinkAddress;
           }
         } catch {
@@ -558,6 +567,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
             addTronDebug('connect:trust:adapter-metamask-tron:success');
             setAdapter(metamaskTronAdapter);
             setAddress(metamaskTronAddress);
+            setConnectedAdapterType('metamask');
             return metamaskTronAddress;
           }
         } catch {
@@ -575,6 +585,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         if (directAddress) {
           addTronDebug('connect:auto:direct-success');
           setAddress(directAddress);
+          setConnectedAdapterType('auto');
           return directAddress;
         }
       }
@@ -596,6 +607,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
               addTronDebug(`connect:auto:adapter-success:${candidateType}`);
               setAdapter(candidate);
               setAddress(candidateAddress);
+              setConnectedAdapterType(candidateType);
               return candidateAddress;
             }
           } catch (err) {
@@ -608,6 +620,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
           const injectedAddress = await connectInjectedTronDirect();
           if (injectedAddress) {
             setAddress(injectedAddress);
+            setConnectedAdapterType('auto');
             return injectedAddress;
           }
           throw lastAutoError;
@@ -616,6 +629,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         const injectedAddress = await connectInjectedTronDirect();
         if (injectedAddress) {
           setAddress(injectedAddress);
+          setConnectedAdapterType('auto');
           return injectedAddress;
         }
 
@@ -653,6 +667,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
               if (candidate.address) {
                 setAdapter(candidate);
                 setAddress(candidate.address);
+                setConnectedAdapterType(candidateType);
                 return candidate.address;
               }
             } catch {
@@ -662,6 +677,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
           const injectedAddress = await connectInjectedTronDirect();
           if (injectedAddress) {
             setAddress(injectedAddress);
+            setConnectedAdapterType('auto');
             return injectedAddress;
           }
         }
@@ -676,6 +692,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
 
       setAdapter(currentAdapter);
       setAddress(connectedAddress);
+      setConnectedAdapterType(adapterType);
       return connectedAddress;
     } catch (err: any) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -699,6 +716,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
       }
       setAdapter(null);
       setAddress(null);
+      setConnectedAdapterType(null);
     }
   }, [adapter]);
 
@@ -743,7 +761,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
       }
       throw new Error(err?.message || 'Failed to sign message');
     }
-  }, [adapter, address]);
+  }, [adapter, address, connectedAdapterType]);
 
   const value: TronWalletContextType = {
     adapter,

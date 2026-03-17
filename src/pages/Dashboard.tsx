@@ -255,11 +255,7 @@ const Dashboard = () => {
         }
       } else {
         // Use native methods for Solana
-        const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
-        const effectiveMethod = (isMobile && method === "auto") 
-          ? "walletconnect" 
-          : method;
-        normalizedAddress = await connectWallet(selectedChain, effectiveMethod);
+        normalizedAddress = await connectWallet(selectedChain, method);
       }
       
       setWalletAddress(normalizedAddress);

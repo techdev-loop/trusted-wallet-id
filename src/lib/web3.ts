@@ -599,18 +599,13 @@ export async function connectWallet(
         try {
           return await connectPhantom();
         } catch (error) {
-          if (method === "injected") {
-            throw error;
-          }
-          // Fall through to WalletConnect for auto mode
+          throw error;
         }
       }
-      if (method === "walletconnect" || method === "auto") {
-        const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
-        walletConnectProvider = provider;
-        return await connectWithProvider(provider, chain);
+      if (method === "walletconnect") {
+        throw new Error("WalletConnect QR is not supported for Solana in this app. Please use Phantom.");
       }
-      throw new Error("Solana wallet connection method not supported on mobile");
+      throw new Error("Solana wallet connection method not supported on mobile. Please use Phantom.");
     }
     
     // For Tron on mobile, use Tron-specific WalletConnect provider
@@ -680,18 +675,13 @@ export async function connectWallet(
       try {
         return await connectPhantom();
       } catch (error) {
-        if (method === "injected") {
-          throw error;
-        }
-        // Fall through to WalletConnect for auto mode
+        throw error;
       }
     }
-    if (method === "walletconnect" || method === "auto") {
-      const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
-      walletConnectProvider = provider;
-      return await connectWithProvider(provider, chain);
+    if (method === "walletconnect") {
+      throw new Error("WalletConnect QR is not supported for Solana in this app. Please use Phantom.");
     }
-    throw new Error("Solana wallet connection method not supported");
+    throw new Error("Solana wallet connection method not supported. Please use Phantom.");
   }
 
   // Handle EVM chains (Ethereum, BSC)
