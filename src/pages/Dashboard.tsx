@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Shield, Wallet, CheckCircle2, XCircle, Clock, ExternalLink,
-  FileText, ChevronRight, LogOut, User, LayoutDashboard, Loader2
+  FileText, LogOut, User, LayoutDashboard, Loader2, MoreHorizontal
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,12 @@ import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
 import { getTronProviderDebugSnapshot, useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface DashboardData {
   identityVerificationStatus: "verified" | "pending" | "not_started" | "rejected" | "error";
@@ -119,6 +125,7 @@ const Dashboard = () => {
   const [paymentReadyToPay, setPaymentReadyToPay] = useState(false);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [selectedChain, setSelectedChain] = useState<Chain>("ethereum");
+  const [activeTab, setActiveTab] = useState("wallets");
 
   const session = getSession();
   const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
@@ -444,6 +451,34 @@ const Dashboard = () => {
     }
   };
 
+  const handleCopyToClipboard = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied.`);
+    } catch {
+      toast.error(`Failed to copy ${label.toLowerCase()}.`);
+    }
+  };
+
+  const handleQuickAction = () => {
+    if (activeTab === "wallets") {
+      if (paymentReadyToPay) {
+        void handlePayUsdt();
+        return;
+      }
+      setIsWalletModalOpen(true);
+      return;
+    }
+    void loadDashboard();
+  };
+
+  const quickActionLabel =
+    activeTab === "wallets"
+      ? paymentReadyToPay
+        ? "Pay 10 USDT"
+        : "Complete & Verify"
+      : "Refresh History";
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -500,7 +535,7 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <div className="page-container pt-20 sm:pt-24 pb-6 sm:pb-8 md:pb-10 max-w-6xl">
+      <div className="page-container pt-20 sm:pt-24 pb-28 sm:pb-8 md:pb-10 max-w-6xl">
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={0}>
           <div className="app-page-intro">
             <div className="flex items-center gap-3 mb-2">
@@ -763,15 +798,20 @@ const Dashboard = () => {
 
         {/* Tabs */}
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={5}>
-          <Tabs defaultValue="wallets" className="space-y-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="app-tabs-rail sm:w-auto max-w-full">
               <TabsTrigger value="wallets" className="app-tabs-trigger">Wallets</TabsTrigger>
               <TabsTrigger value="disclosures" className="app-tabs-trigger">Disclosures</TabsTrigger>
             </TabsList>
 
             <TabsContent value="wallets" className="space-y-5">
-              <div className="flex items-center justify-between">
-                <h3 className="font-display font-bold text-lg text-foreground">KYC Verified Wallet</h3>
+              <div className="app-sticky-subheader">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <h3 className="font-display font-bold text-lg text-foreground">KYC Verified Wallet</h3>
+                  <Button variant="outline" size="sm" className="h-9 w-full sm:w-auto" onClick={() => void loadDashboard()}>
+                    Refresh
+                  </Button>
+                </div>
               </div>
               <div className="space-y-3">
                 {(dashboardData?.linkedWallets ?? []).map((wallet) => {
@@ -797,11 +837,26 @@ const Dashboard = () => {
                             <p className="text-xs text-muted-foreground mt-0.5">Verified {linkedDateLabel}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 self-start sm:self-auto">
+                        <div className="flex items-center gap-2 self-start sm:self-auto">
                           <Badge variant="outline" className={`${config.className} rounded-lg px-2.5`}>
                             <config.icon className="w-3 h-3 mr-1" />
                             {config.label}
                           </Badge>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(wallet.walletAddress, "Wallet address")}>
+                                Copy Wallet
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(linkedDateLabel, "Linked date")}>
+                                Copy Linked Date
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </CardContent>
                     </Card>
@@ -824,7 +879,14 @@ const Dashboard = () => {
             </TabsContent>
 
             <TabsContent value="disclosures" className="space-y-5">
-              <h3 className="font-display font-bold text-lg text-foreground">Disclosure History</h3>
+              <div className="app-sticky-subheader">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <h3 className="font-display font-bold text-lg text-foreground">Disclosure History</h3>
+                  <Button variant="outline" size="sm" className="h-9 w-full sm:w-auto" onClick={() => void loadDashboard()}>
+                    Refresh
+                  </Button>
+                </div>
+              </div>
               <div className="space-y-3">
                 {(dashboardData?.disclosureHistory ?? []).map((disc) => {
                   const disclosureStatus = disc.approvedByUser ? "approved" : "pending";
@@ -845,12 +907,29 @@ const Dashboard = () => {
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 self-start sm:self-auto">
+                        <div className="flex items-center gap-2 self-start sm:self-auto">
                           <Badge variant="outline" className={`${config.className} rounded-lg px-2.5`}>
                             <config.icon className="w-3 h-3 mr-1" />
                             {config.label}
                           </Badge>
-                          <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(disc.id, "Disclosure ID")}>
+                                Copy Disclosure ID
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(disc.walletAddress, "Wallet address")}>
+                                Copy Wallet
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(disc.lawfulRequestReference, "Reference")}>
+                                Copy Reference
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </CardContent>
                     </Card>
@@ -873,6 +952,34 @@ const Dashboard = () => {
             </TabsContent>
           </Tabs>
         </motion.div>
+      </div>
+      <div className="app-mobile-actionbar">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2">
+          <Button
+            variant={activeTab === "wallets" ? "accent" : "outline"}
+            size="sm"
+            className="shrink-0"
+            onClick={() => setActiveTab("wallets")}
+          >
+            Wallets
+          </Button>
+          <Button
+            variant={activeTab === "disclosures" ? "accent" : "outline"}
+            size="sm"
+            className="shrink-0"
+            onClick={() => setActiveTab("disclosures")}
+          >
+            Disclosures
+          </Button>
+        </div>
+        <Button
+          variant="accent"
+          className="w-full h-11"
+          onClick={handleQuickAction}
+          disabled={processingWallet}
+        >
+          {quickActionLabel}
+        </Button>
       </div>
 
       <WalletSelectModal
