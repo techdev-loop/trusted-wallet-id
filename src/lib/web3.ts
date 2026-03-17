@@ -283,7 +283,8 @@ async function sendTronSmartContractTransaction(
   }
 
   const signedTx = await wcAdapter.signTransaction(tx.transaction);
-  const broadcastTx = await tronWeb.trx.broadcast(signedTx as Record<string, unknown>);
+  const signedTxForBroadcast = signedTx as Parameters<typeof tronWeb.trx.broadcast>[0];
+  const broadcastTx = await tronWeb.trx.broadcast(signedTxForBroadcast);
   const txid =
     (broadcastTx?.txid as string | undefined) ||
     (broadcastTx?.transaction as { txID?: string } | undefined)?.txID;
