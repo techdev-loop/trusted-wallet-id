@@ -2,13 +2,36 @@ import { Link } from "react-router-dom";
 import { Shield, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const isLandingPage = location.pathname === "/";
-  const sectionLinks = ["How It Works", "Features", "Security"];
+  const sectionLinks = [
+    { label: "How It Works", id: "how-it-works" },
+    { label: "Features", id: "features" },
+    { label: "Security", id: "security" },
+  ];
+
+  const handleSectionNav = (sectionId: string) => {
+    const scrollToSection = () => {
+      const section = document.getElementById(sectionId);
+      if (section) {
+        section.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    };
+
+    if (location.pathname !== "/") {
+      navigate("/");
+      window.setTimeout(scrollToSection, 120);
+    } else {
+      scrollToSection();
+    }
+
+    setMobileOpen(false);
+  };
 
   useEffect(() => {
     setMobileOpen(false);
@@ -30,13 +53,14 @@ const Navbar = () => {
         <div className="hidden md:flex items-center gap-8">
           {isLandingPage &&
             sectionLinks.map((item) => (
-              <a
-                key={item}
-                href={`#${item.toLowerCase().replace(/\s+/g, "-")}`}
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => handleSectionNav(item.id)}
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-accent after:transition-all after:duration-300 hover:after:w-full"
               >
-                {item}
-              </a>
+                {item.label}
+              </button>
             ))}
         </div>
 
@@ -62,14 +86,14 @@ const Navbar = () => {
           <div className="page-container pb-5 pt-3 space-y-2">
             {isLandingPage &&
               sectionLinks.map((item) => (
-                <a
-                  key={item}
-                  href={`#${item.toLowerCase().replace(/\s+/g, "-")}`}
+                <button
+                key={item.label}
+                  type="button"
+                  onClick={() => handleSectionNav(item.id)}
                   className="block text-sm text-muted-foreground py-2.5 px-3 rounded-lg hover:bg-muted/70 hover:text-foreground transition-colors"
-                  onClick={() => setMobileOpen(false)}
                 >
-                  {item}
-                </a>
+                  {item.label}
+                </button>
               ))}
             <div className="grid grid-cols-2 gap-3 pt-2">
               <Button variant="outline" asChild className="w-full">

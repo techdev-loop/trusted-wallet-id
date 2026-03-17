@@ -77,6 +77,13 @@ const fadeUp = {
 };
 
 const Index = () => {
+  const handleLearnMore = () => {
+    const section = document.getElementById("how-it-works");
+    if (section) {
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   return (
     <div className="page-shell">
       <Navbar />
@@ -137,8 +144,8 @@ const Index = () => {
                 <ArrowRight className="w-4 h-4 ml-1" />
               </Link>
             </Button>
-            <Button variant="hero-outline" size="xl" asChild>
-              <a href="#how-it-works">Learn More</a>
+            <Button variant="hero-outline" size="xl" onClick={handleLearnMore}>
+              Learn More
             </Button>
           </motion.div>
 
