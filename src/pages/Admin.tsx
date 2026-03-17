@@ -545,7 +545,7 @@ const Admin = () => {
   if (!canAccessAdmin) {
     return (
       <div className="page-shell">
-        <header className="sticky top-0 z-50 bg-card/88 backdrop-blur-xl border-b border-border/55 shadow-[var(--shadow-xs)]">
+        <header className="fixed inset-x-0 top-0 z-50 border-b border-border/60 bg-card/84 backdrop-blur-xl shadow-[var(--shadow-sm)] before:absolute before:inset-0 before:mesh-overlay before:opacity-70 before:pointer-events-none before:-z-10">
           <div className="page-container flex items-center justify-between h-14 sm:h-16">
             <Link to="/" className="flex items-center gap-2.5 group">
               <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
@@ -559,7 +559,7 @@ const Admin = () => {
             </Button>
           </div>
         </header>
-        <div className="page-container py-6 sm:py-8 md:py-10 max-w-6xl">
+        <div className="page-container pt-20 sm:pt-24 pb-6 sm:pb-8 md:pb-10 max-w-6xl">
           <Card className="glass-card rounded-2xl mb-8">
             <CardContent className="p-6">
               <p className="text-sm text-muted-foreground">
@@ -575,7 +575,7 @@ const Admin = () => {
 
   return (
     <div className="page-shell">
-      <header className="sticky top-0 z-50 bg-card/88 backdrop-blur-xl border-b border-border/55 shadow-[var(--shadow-xs)]">
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-border/60 bg-card/84 backdrop-blur-xl shadow-[var(--shadow-sm)] before:absolute before:inset-0 before:mesh-overlay before:opacity-70 before:pointer-events-none before:-z-10">
         <div className="page-container flex items-center justify-between h-14 sm:h-16">
           <Link to="/" className="flex items-center gap-2.5 group">
             <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
@@ -587,11 +587,11 @@ const Admin = () => {
           <div className="flex items-center gap-2 sm:gap-3">
             <Link
               to="/dashboard"
-              className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+              className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-muted/55 px-3 py-1.5 text-xs sm:text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/75 transition-colors"
             >
               User Dashboard
             </Link>
-            <div className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-muted/70 border border-border/50">
+            <div className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-muted/60 border border-border/50 shadow-[var(--shadow-xs)]">
               <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
                 <ShieldCheck className="w-3.5 h-3.5 text-accent" />
               </div>
@@ -606,7 +606,7 @@ const Admin = () => {
         </div>
       </header>
 
-      <div className="page-container py-6 sm:py-8 md:py-10 max-w-6xl">
+      <div className="page-container pt-20 sm:pt-24 pb-6 sm:pb-8 md:pb-10 max-w-6xl">
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={0}>
           <div className="mb-7 sm:mb-9">
             <div className="flex items-center gap-3 mb-2">
