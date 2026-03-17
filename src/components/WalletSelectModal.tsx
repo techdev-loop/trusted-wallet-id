@@ -230,6 +230,12 @@ export function WalletSelectModal({
   const availableWallets = WALLET_OPTIONS.filter((wallet) =>
     wallet.supportedChains.includes(selectedChain)
   ).sort((a, b) => {
+    const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+    if (isMobile) {
+      if (a.id === "walletconnect") return -1;
+      if (b.id === "walletconnect") return 1;
+    }
+
     // Sort native wallets (TronLink, Phantom) first for their respective chains
     if (selectedChain === "tron") {
       if (a.id === "tronlink") return -1;
