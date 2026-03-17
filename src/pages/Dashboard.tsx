@@ -242,6 +242,7 @@ const Dashboard = () => {
           "metamask-tron": "metamask",
           okxwallet: "okxwallet",
           safepal: "auto",
+          walletconnect: "walletconnect",
         };
 
         const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;

@@ -104,6 +104,14 @@ const WALLET_OPTIONS: WalletOption[] = [
     supportedChains: ["solana"],
     installUrl: "https://phantom.app/",
   },
+  {
+    id: "walletconnect",
+    name: "WalletConnect (QR)",
+    icon: "🔗",
+    description: "Connect by scanning WalletConnect QR code",
+    method: "walletconnect",
+    supportedChains: ["ethereum", "bsc", "tron", "solana"],
+  },
 ];
 
 // Additional EVM wallets that might be detected
@@ -250,6 +258,10 @@ export function WalletSelectModal({
   }, [open, selectedChain, availableWallets]);
 
   const getWalletStatus = (wallet: WalletOption) => {
+    if (wallet.id === "walletconnect") {
+      return "installed";
+    }
+
     // For EVM chains, if any EVM wallet is detected, show MetaMask as available
     if (wallet.id === "metamask" && (selectedChain === "ethereum" || selectedChain === "bsc")) {
       if (detectedWallets.length > 0) {
@@ -285,7 +297,7 @@ export function WalletSelectModal({
 
     const isTronWalletOption =
       selectedChain === "tron" &&
-      ["tronlink", "tokenpocket", "trust", "metamask-tron", "okxwallet", "safepal"].includes(wallet.id);
+      ["tronlink", "tokenpocket", "trust", "metamask-tron", "okxwallet", "safepal", "walletconnect"].includes(wallet.id);
 
     if (wallet.id === "trust" && selectedChain === "tron") {
       const win = window as any;
@@ -382,6 +394,11 @@ export function WalletSelectModal({
                         <Badge variant="outline" className="text-xs">
                           <ExternalLink className="w-3 h-3 mr-1" />
                           Install
+                        </Badge>
+                      )}
+                      {wallet.id === "walletconnect" && (
+                        <Badge variant="secondary" className="text-xs">
+                          QR
                         </Badge>
                       )}
                     </div>

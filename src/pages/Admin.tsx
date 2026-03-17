@@ -328,6 +328,7 @@ const Admin = () => {
           "metamask-tron": "metamask",
           okxwallet: "okxwallet",
           safepal: "auto",
+          walletconnect: "walletconnect",
         };
         const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
         address = await tronWallet.connect(selectedTronAdapter ?? "auto");
