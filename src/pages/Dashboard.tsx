@@ -618,7 +618,7 @@ const Dashboard = () => {
                     </div>
                   </div>
                   {kycStatus?.providerSessionUrl && (
-                    <Button asChild variant="outline">
+                    <Button asChild variant="outline" className="h-11 rounded-xl w-full sm:w-auto">
                       <a href={kycStatus.providerSessionUrl} target="_blank" rel="noreferrer">
                         <ExternalLink className="w-4 h-4 mr-2" />
                         Continue Verification with Provider
@@ -677,7 +677,7 @@ const Dashboard = () => {
                     </Label>
                   </div>
                   <div className="md:col-span-2">
-                    <Button variant="accent" onClick={handleKycSubmit} disabled={submittingKyc}>
+                    <Button variant="accent" onClick={handleKycSubmit} disabled={submittingKyc} className="h-11 rounded-xl w-full sm:w-auto">
                       Start KYC Verification
                     </Button>
                   </div>
@@ -764,7 +764,7 @@ const Dashboard = () => {
                         setIsWalletModalOpen(true);
                       }}
                       disabled={processingWallet}
-                      className="w-full sm:w-auto"
+                      className="h-11 rounded-xl w-full sm:w-auto"
                       type="button"
                     >
                       {processingWallet ? (
@@ -784,7 +784,7 @@ const Dashboard = () => {
                         variant="accent"
                         onClick={handlePayUsdt}
                         disabled={processingWallet}
-                        className="w-full sm:w-auto"
+                        className="h-11 rounded-xl w-full sm:w-auto"
                       >
                         Pay 10 USDT
                       </Button>
@@ -808,7 +808,7 @@ const Dashboard = () => {
               <div className="app-sticky-subheader">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <h3 className="font-display font-bold text-lg text-foreground">KYC Verified Wallet</h3>
-                  <Button variant="outline" size="sm" className="h-9 w-full sm:w-auto" onClick={() => void loadDashboard()}>
+                  <Button variant="outline" size="sm" className="h-10 rounded-xl w-full sm:w-auto" onClick={() => void loadDashboard()}>
                     Refresh
                   </Button>
                 </div>
@@ -882,7 +882,7 @@ const Dashboard = () => {
               <div className="app-sticky-subheader">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <h3 className="font-display font-bold text-lg text-foreground">Disclosure History</h3>
-                  <Button variant="outline" size="sm" className="h-9 w-full sm:w-auto" onClick={() => void loadDashboard()}>
+                  <Button variant="outline" size="sm" className="h-10 rounded-xl w-full sm:w-auto" onClick={() => void loadDashboard()}>
                     Refresh
                   </Button>
                 </div>

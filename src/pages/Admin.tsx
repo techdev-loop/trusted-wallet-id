@@ -867,7 +867,7 @@ const Admin = () => {
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <Button variant="accent" onClick={() => void handleCreateDisclosureRequest()} disabled={!canAccessAdmin}>
+                    <Button variant="accent" onClick={() => void handleCreateDisclosureRequest()} disabled={!canAccessAdmin} className="h-11 rounded-xl w-full sm:w-auto">
                       Create Disclosure Request
                     </Button>
                   </div>
@@ -896,7 +896,7 @@ const Admin = () => {
                     </div>
                   </div>
                   <div className="md:col-span-2">
-                    <Button variant="outline" onClick={() => void handleApproveDisclosure()} disabled={!canAccessAdmin}>
+                    <Button variant="outline" onClick={() => void handleApproveDisclosure()} disabled={!canAccessAdmin} className="h-11 rounded-xl w-full sm:w-auto">
                       Approve Disclosure Request
                     </Button>
                   </div>
@@ -1004,7 +1004,7 @@ const Admin = () => {
                 <Card className="app-section-card rounded-xl">
                   <CardContent className="p-4">
                     <p className="text-xs text-muted-foreground mb-1">Wallet Connection</p>
-                    <Button variant="outline" onClick={openWalletModal} disabled={isConnectingWallet} className="h-9 rounded-lg">
+                    <Button variant="outline" onClick={openWalletModal} disabled={isConnectingWallet} className="h-10 rounded-xl">
                       {withdrawalWalletAddress ? "Reconnect Wallet" : "Connect Wallet"}
                     </Button>
                   </CardContent>
@@ -1048,6 +1048,7 @@ const Admin = () => {
                       variant="accent"
                       onClick={() => void handleCreateWithdrawalRequest()}
                       disabled={!canAccessAdmin || isSubmittingWithdrawal || isConnectingWallet}
+                      className="h-11 rounded-xl w-full sm:w-auto"
                     >
                       {isSubmittingWithdrawal ? "Submitting..." : "Withdraw With Connected Wallet"}
                     </Button>
@@ -1174,7 +1175,7 @@ const Admin = () => {
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Button variant="outline" onClick={() => openSendUsdtModal(entry)}>
+                            <Button variant="outline" onClick={() => openSendUsdtModal(entry)} className="h-10 rounded-xl">
                               Send USDT
                             </Button>
                             <DropdownMenu>
@@ -1394,6 +1395,7 @@ const Admin = () => {
                 variant="outline"
                 onClick={() => void handleConnectSendUsdtWallet()}
                 disabled={isConnectingSendUsdtWallet || isSendingUsdt}
+                className="h-11 rounded-xl"
               >
                 {isConnectingSendUsdtWallet ? "Connecting..." : "Connect Admin Wallet"}
               </Button>
@@ -1401,6 +1403,7 @@ const Admin = () => {
                 variant="accent"
                 onClick={() => void handleSendUsdtToUser()}
                 disabled={isSendingUsdt || isConnectingSendUsdtWallet || !sendUsdtTarget}
+                className="h-11 rounded-xl"
               >
                 {isSendingUsdt ? "Sending..." : "Send USDT"}
               </Button>
