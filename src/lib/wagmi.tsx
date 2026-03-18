@@ -1,8 +1,7 @@
-import { RainbowKitProvider, connectorsForWallets } from '@rainbow-me/rainbowkit';
-import { injectedWallet, walletConnectWallet } from '@rainbow-me/rainbowkit/wallets';
+import { getDefaultConfig, RainbowKitProvider } from '@rainbow-me/rainbowkit';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode } from 'react';
-import { WagmiProvider as WagmiProviderBase, createConfig, http } from 'wagmi';
+import { WagmiProvider as WagmiProviderBase } from 'wagmi';
 import { bsc, mainnet } from 'wagmi/chains';
 
 // Get WalletConnect project ID from environment
@@ -12,31 +11,11 @@ const projectId = rawProjectId?.trim() || '';
 
 const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://trusted-wallet-id.vercel.app';
 
-const appName = 'FIU ID';
-const walletConnectProjectId = projectId || '00000000000000000000000000000000';
-const chains = [mainnet, bsc] as const;
-
-const connectors = connectorsForWallets(
-  [
-    {
-      groupName: 'Recommended',
-      wallets: [injectedWallet, walletConnectWallet],
-    },
-  ],
-  {
-    appName,
-    projectId: walletConnectProjectId,
-  }
-);
-
-// Create a lean Wagmi config with only required wallets/chains.
-export const wagmiConfig = createConfig({
-  connectors,
-  chains,
-  transports: {
-    [mainnet.id]: http(),
-    [bsc.id]: http(),
-  },
+// RainbowKit builds the Wagmi config for EVM wallet connections.
+export const wagmiConfig = getDefaultConfig({
+  appName: 'FIU ID',
+  projectId: projectId || '00000000000000000000000000000000',
+  chains: [mainnet, bsc],
   ssr: false,
 });
 
@@ -56,7 +35,7 @@ export function WagmiProvider({ children }: { children: ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
           appInfo={{
-            appName,
+            appName: 'FIU ID',
             learnMoreUrl: appUrl,
           }}
         >

@@ -3,8 +3,7 @@ import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { useAccount, useDisconnect, useSwitchChain, useSignMessage, useConfig } from 'wagmi';
 import { bsc, mainnet } from 'wagmi/chains';
 import { getAccount } from 'wagmi/actions';
-import { setActiveEip1193Provider } from './evm-provider-store';
-import type { Chain } from './web3';
+import { setActiveEip1193Provider, type Chain } from './web3';
 
 // Map our Chain type to Wagmi chain IDs
 export const CHAIN_TO_WAGMI_ID: Record<Chain, number | null> = {

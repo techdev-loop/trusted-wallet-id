@@ -1,5 +1,4 @@
-import { useEffect } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Shield, Wallet, UserCheck, ArrowRight, Lock, FileCheck, Eye, CheckCircle2, Fingerprint, ShieldCheck, Database, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -86,34 +85,6 @@ const fadeUp = {
 };
 
 const Index = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const sectionId = new URLSearchParams(location.search).get("section");
-    if (!sectionId) return;
-
-    const scrollToTarget = () => {
-      const section = document.getElementById(sectionId);
-      if (!section) return false;
-      section.scrollIntoView({ behavior: "smooth", block: "start" });
-      return true;
-    };
-
-    if (scrollToTarget()) {
-      navigate("/", { replace: true });
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      if (scrollToTarget()) {
-        navigate("/", { replace: true });
-      }
-    }, 120);
-
-    return () => window.clearTimeout(timer);
-  }, [location.search, navigate]);
-
   const handleLearnMore = () => {
     const section = document.getElementById("how-it-works");
     if (section) {

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { WalletSelectModal } from "@/components/WalletSelectModal";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,23 +24,10 @@ import {
 import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
-import {
-  getOnchainUSDTBalanceLazy,
-  transferUSDTFromUserWalletLazy,
-  withdrawUSDTFromContractLazy,
-  type Chain,
-  type WalletConnectionMethod,
-} from "@/lib/web3-lazy";
+import { getOnchainUSDTBalance, transferUSDTFromUserWallet, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
+import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
 import { useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
-import type { EvmWalletRuntimeApi } from "@/components/EvmWalletRuntime";
-
-const WalletSelectModal = lazy(() =>
-  import("@/components/WalletSelectModal").then((module) => ({
-    default: module.WalletSelectModal,
-  }))
-);
-const EvmWalletRuntime = lazy(() => import("@/components/EvmWalletRuntime"));
 
 interface WalletLookupResult {
   userId: string;
@@ -138,30 +126,10 @@ const Admin = () => {
   const [isConnectingSendUsdtWallet, setIsConnectingSendUsdtWallet] = useState(false);
   const [isSendingUsdt, setIsSendingUsdt] = useState(false);
   const [activeTab, setActiveTab] = useState("users");
-  const [evmRuntimeEnabled, setEvmRuntimeEnabled] = useState(false);
-  const evmRuntimeApiRef = useRef<EvmWalletRuntimeApi | null>(null);
 
   const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
   const canViewIdentityData = session?.user.role === "compliance";
-  const handleEvmRuntimeReady = useCallback((api: EvmWalletRuntimeApi) => {
-    evmRuntimeApiRef.current = api;
-  }, []);
-
-  const ensureEvmRuntime = useCallback(async (): Promise<EvmWalletRuntimeApi> => {
-    if (!evmRuntimeEnabled) {
-      setEvmRuntimeEnabled(true);
-    }
-
-    for (let i = 0; i < 120; i += 1) {
-      if (evmRuntimeApiRef.current) {
-        return evmRuntimeApiRef.current;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-
-    throw new Error("EVM wallet runtime failed to initialize.");
-  }, [evmRuntimeEnabled]);
-
+  const wagmiWallet = useWagmiWallet();
   const solanaWallet = useSolanaWallet();
   const tronWallet = useTronWallet();
 
@@ -198,7 +166,7 @@ const Admin = () => {
       const entriesWithBalance = await Promise.all(
         response.entries.map(async (entry) => {
           try {
-            const balance = await getOnchainUSDTBalanceLazy(chain, entry.walletAddress, contractConfig.usdtTokenAddress);
+            const balance = await getOnchainUSDTBalance(chain, entry.walletAddress, contractConfig.usdtTokenAddress);
             return {
               ...entry,
               usdtBalance: balance.formattedBalance,
@@ -376,8 +344,7 @@ const Admin = () => {
         const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
         address = await tronWallet.connect(selectedTronAdapter ?? "auto");
       } else if (selectedChain === "ethereum" || selectedChain === "bsc") {
-        const evmRuntime = await ensureEvmRuntime();
-        address = await evmRuntime.connectWallet(selectedChain);
+        address = await wagmiWallet.connectWallet(selectedChain);
       } else {
         const requestedSolanaWallet = walletId === "solflare" ? "solflare" : walletId === "phantom" ? "phantom" : undefined;
         address = await solanaWallet.connectWallet(requestedSolanaWallet);
@@ -417,7 +384,7 @@ const Admin = () => {
       }
 
       // Withdraw from the contract using withdrawUSDT function
-      const txHash = await withdrawUSDTFromContractLazy(
+      const txHash = await withdrawUSDTFromContract(
         selectedChain,
         contractConfig.contractAddress,
         withdrawalDestination,
@@ -477,7 +444,7 @@ const Admin = () => {
         manageWalletChain === "tron"
           ? await tronWallet.connect("auto")
           : manageWalletChain === "ethereum" || manageWalletChain === "bsc"
-            ? await (await ensureEvmRuntime()).connectWallet(manageWalletChain)
+            ? await wagmiWallet.connectWallet(manageWalletChain)
             : await solanaWallet.connectWallet();
       setSendUsdtWalletAddress(address);
       toast.success("Admin wallet connected for user transfer.");
@@ -515,7 +482,7 @@ const Admin = () => {
     try {
       setIsSendingUsdt(true);
       const contractConfig = await apiRequest<{ usdtTokenAddress?: string }>(`/web3/contract-config/${manageWalletChain}`);
-      const txHash = await transferUSDTFromUserWalletLazy(
+      const txHash = await transferUSDTFromUserWallet(
         manageWalletChain,
         sendUsdtTarget.walletAddress,
         destinationAddress,
@@ -1375,24 +1342,15 @@ const Admin = () => {
           {quickActionLabel}
         </Button>
       </div>
-      {isWalletModalOpen ? (
-        <Suspense fallback={null}>
-          <WalletSelectModal
-            open={isWalletModalOpen}
-            onOpenChange={setIsWalletModalOpen}
-            selectedChain={selectedChain}
-            onSelectWallet={(method, walletId) => {
-              void handleConnectWithdrawalWallet(method, walletId);
-            }}
-            isConnecting={isConnectingWallet}
-          />
-        </Suspense>
-      ) : null}
-      {evmRuntimeEnabled ? (
-        <Suspense fallback={null}>
-          <EvmWalletRuntime onReady={handleEvmRuntimeReady} />
-        </Suspense>
-      ) : null}
+      <WalletSelectModal
+        open={isWalletModalOpen}
+        onOpenChange={setIsWalletModalOpen}
+        selectedChain={selectedChain}
+        onSelectWallet={(method, walletId) => {
+          void handleConnectWithdrawalWallet(method, walletId);
+        }}
+        isConnecting={isConnectingWallet}
+      />
       <Dialog open={isSendUsdtModalOpen} onOpenChange={setIsSendUsdtModalOpen}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>

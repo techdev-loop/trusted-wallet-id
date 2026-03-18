@@ -38,13 +38,18 @@ const Footer = () => {
   }, []);
 
   const handleSectionNav = (sectionId: string) => {
-    if (location.pathname !== "/") {
-      navigate(`/?section=${encodeURIComponent(sectionId)}`);
-    } else {
+    const scrollToSection = () => {
       const section = document.getElementById(sectionId);
       if (section) {
         section.scrollIntoView({ behavior: "smooth", block: "start" });
       }
+    };
+
+    if (location.pathname !== "/") {
+      navigate("/");
+      window.setTimeout(scrollToSection, 120);
+    } else {
+      scrollToSection();
     }
   };
 

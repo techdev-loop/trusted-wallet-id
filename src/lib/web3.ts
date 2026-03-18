@@ -8,11 +8,6 @@ import {
   transferSolanaUSDT,
   withdrawSolanaUSDTFromContract,
 } from "./solana";
-import { apiRequest } from "./api";
-import {
-  getActiveEip1193Provider,
-  setActiveEip1193Provider,
-} from "./evm-provider-store";
 
 export type Chain = "ethereum" | "bsc" | "tron" | "solana";
 export type WalletConnectionMethod = "auto" | "injected" | "walletconnect";
@@ -31,7 +26,12 @@ export interface ChainConfig {
 
 type Eip1193Provider = ethers.Eip1193Provider;
 
+let activeEip1193Provider: Eip1193Provider | null = null;
 let walletConnectProvider: Eip1193Provider | null = null;
+
+export function setActiveEip1193Provider(provider: Eip1193Provider | null): void {
+  activeEip1193Provider = provider;
+}
 
 // Chain configurations for MetaMask
 // Note: For testnets, the frontend will use the network from backend config
@@ -436,8 +436,8 @@ async function resetWalletConnectProvider(): Promise<void> {
       // Ignore stale disconnect errors.
     }
   }
-  if (getActiveEip1193Provider() === walletConnectProvider) {
-    setActiveEip1193Provider(null);
+  if (activeEip1193Provider === walletConnectProvider) {
+    activeEip1193Provider = null;
   }
   walletConnectProvider = null;
 }
@@ -475,13 +475,13 @@ async function ensureWalletConnectSession(provider: Eip1193Provider, chain: Chai
  * Get Ethereum provider (MetaMask, etc.)
  */
 export function getEthereumProvider(): ethers.BrowserProvider | null {
-  const provider = (getActiveEip1193Provider() as Eip1193Provider | null) ?? getInjectedProvider();
+  const provider = activeEip1193Provider ?? getInjectedProvider();
   if (!provider) return null;
   return new ethers.BrowserProvider(provider);
 }
 
 async function connectWithProvider(provider: Eip1193Provider, chain: Chain): Promise<string> {
-  setActiveEip1193Provider(provider);
+  activeEip1193Provider = provider;
   const browserProvider = new ethers.BrowserProvider(provider);
   const rawProvider = getRawProvider(browserProvider);
   let requestAccountsError: unknown = null;
@@ -1128,7 +1128,7 @@ export async function signWalletMessage(
       const reconnectError = initialError as { message?: string };
       const lowerMessage = `${reconnectError?.message ?? ""}`.toLowerCase();
       if (isConnectBeforeRequestError(initialError) || lowerMessage.includes("missing or invalid request()")) {
-        const activeProvider = getActiveEip1193Provider() as Eip1193Provider | null;
+        const activeProvider = activeEip1193Provider;
         if (activeProvider) {
           await ensureWalletConnectSession(activeProvider, chain);
           await requestAccountsWithFallback();
@@ -1703,6 +1703,7 @@ export async function registerWalletViaContract(
       
       console.log(`[registerWalletViaContract] Calling registerSolanaWallet...`);
       // Get contract config to pass USDT token address
+      const { apiRequest } = await import('./api');
       let usdtTokenAddress: string | undefined;
       try {
         const contractConfig = await apiRequest<{ usdtTokenAddress?: string }>(`/web3/contract-config/solana`);

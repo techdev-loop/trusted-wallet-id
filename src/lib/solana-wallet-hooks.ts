@@ -1,6 +1,12 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback } from 'react';
+import { useWallet } from '@solana/wallet-adapter-react';
 
 type SolanaWalletId = 'phantom' | 'solflare';
+
+const WALLET_NAME_BY_ID: Record<SolanaWalletId, string> = {
+  phantom: 'Phantom',
+  solflare: 'Solflare',
+};
 
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes)
@@ -24,111 +30,72 @@ function readInjectedSolanaAddress(): string | null {
   return null;
 }
 
-function detectPreferredWalletId(): SolanaWalletId {
-  if (typeof window === 'undefined') return 'phantom';
-  const win = window as any;
-  if (win.phantom?.solana?.isPhantom || win.solana?.isPhantom) return 'phantom';
-  if (win.solflare?.isSolflare || win.solana?.isSolflare) return 'solflare';
-  return 'phantom';
-}
-
-type SolanaAdapter = {
-  connected?: boolean;
-  publicKey?: { toBase58: () => string } | null;
-  connect: () => Promise<void>;
-  disconnect: () => Promise<void>;
-  signMessage?: (message: Uint8Array) => Promise<Uint8Array>;
-};
-
-async function createAdapter(walletId: SolanaWalletId): Promise<SolanaAdapter> {
-  if (walletId === 'solflare') {
-    const { SolflareWalletAdapter } = await import('@solana/wallet-adapter-solflare');
-    return new SolflareWalletAdapter();
-  }
-  const { PhantomWalletAdapter } = await import('@solana/wallet-adapter-phantom');
-  return new PhantomWalletAdapter();
-}
-
 export function useSolanaWallet() {
-  const adaptersRef = useRef<Partial<Record<SolanaWalletId, SolanaAdapter>>>({});
-  const activeWalletIdRef = useRef<SolanaWalletId | null>(null);
-  const [address, setAddress] = useState<string | null>(readInjectedSolanaAddress());
-  const [isConnected, setIsConnected] = useState(Boolean(readInjectedSolanaAddress()));
-  const [isConnecting, setIsConnecting] = useState(false);
+  const {
+    publicKey,
+    connected,
+    connecting,
+    wallets,
+    wallet,
+    select,
+    connect,
+    disconnect,
+    signMessage,
+  } = useWallet();
 
   const connectWallet = useCallback(
     async (walletId?: SolanaWalletId): Promise<string> => {
-      const targetWalletId = walletId ?? activeWalletIdRef.current ?? detectPreferredWalletId();
-      setIsConnecting(true);
-      try {
-        let adapter = adaptersRef.current[targetWalletId];
-        if (!adapter) {
-          adapter = await createAdapter(targetWalletId);
-          adaptersRef.current[targetWalletId] = adapter;
+      if (walletId) {
+        const targetName = WALLET_NAME_BY_ID[walletId];
+        if (!targetName) {
+          throw new Error(`Unsupported Solana wallet: ${walletId}`);
         }
-        if (!adapter.connected) {
-          await adapter.connect();
+        if (wallet?.adapter?.name !== targetName) {
+          const targetWallet = wallets.find((item) => item.adapter.name === targetName);
+          if (!targetWallet) {
+            throw new Error(`${targetName} wallet adapter is not available in this app.`);
+          }
+          select(targetWallet.adapter.name);
         }
-
-        const nextAddress = adapter.publicKey?.toBase58() || readInjectedSolanaAddress();
-        if (!nextAddress) {
-          throw new Error('Solana wallet connected, but no address was returned.');
-        }
-
-        activeWalletIdRef.current = targetWalletId;
-        setAddress(nextAddress);
-        setIsConnected(true);
-        return nextAddress;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error ?? '');
-        if (/wallet.*not.*found|not.*installed|not.*ready/i.test(message)) {
-          throw new Error('Selected Solana wallet is not installed or unavailable in this browser.');
-        }
-        throw new Error('Solana wallet connected, but no address was returned.');
-      } finally {
-        setIsConnecting(false);
       }
+
+      if (!connected) {
+        await connect();
+      }
+
+      const address = publicKey?.toBase58() || readInjectedSolanaAddress();
+      if (!address) {
+        throw new Error('Solana wallet connected, but no address was returned.');
+      }
+
+      return address;
     },
-    []
+    [connected, connect, publicKey, select, wallet?.adapter?.name, wallets]
   );
 
   const signWalletMessage = useCallback(
     async (message: string): Promise<string> => {
-      const activeWalletId = activeWalletIdRef.current;
-      const adapter = activeWalletId ? adaptersRef.current[activeWalletId] : null;
-      const liveAddress = adapter?.publicKey?.toBase58() || address || readInjectedSolanaAddress();
+      const liveAddress = publicKey?.toBase58() || readInjectedSolanaAddress();
       if (!liveAddress) {
         throw new Error('Solana wallet is not connected.');
       }
-      if (!adapter?.signMessage) {
+      if (!signMessage) {
         throw new Error('Selected Solana wallet does not support message signing.');
       }
 
       const encoded = new TextEncoder().encode(message);
-      const signature = await adapter.signMessage(encoded);
+      const signature = await signMessage(encoded);
       return toHex(signature);
     },
-    [address]
+    [publicKey, signMessage]
   );
 
-  const disconnectWallet = useCallback(async () => {
-    const activeWalletId = activeWalletIdRef.current;
-    const adapter = activeWalletId ? adaptersRef.current[activeWalletId] : null;
-    if (adapter?.connected) {
-      await adapter.disconnect();
-    }
-    activeWalletIdRef.current = null;
-    setAddress(null);
-    setIsConnected(false);
-  }, []);
-
   return {
-    address,
-    isConnected,
-    isConnecting,
+    address: publicKey?.toBase58() ?? null,
+    isConnected: connected,
+    isConnecting: connecting,
     connectWallet,
-    disconnectWallet,
+    disconnectWallet: disconnect,
     signMessage: signWalletMessage,
   };
 }
-
