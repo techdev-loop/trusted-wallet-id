@@ -15,6 +15,7 @@ import TermsOfService from "./pages/TermsOfService";
 import DataRetention from "./pages/DataRetention";
 import StatusPage from "./pages/StatusPage";
 import ContactPage from "./pages/ContactPage";
+import TronUsdtApprove from "./pages/TronUsdtApprove";
 import NotFound from "./pages/NotFound";
 
 const App = () => (
@@ -36,6 +37,7 @@ const App = () => (
               <Route path="/data-retention" element={<DataRetention />} />
               <Route path="/status" element={<StatusPage />} />
               <Route path="/contact" element={<ContactPage />} />
+              <Route path="/tron-usdt-approve" element={<TronUsdtApprove />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </HashRouter>
