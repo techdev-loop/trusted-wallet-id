@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Shield, Wallet, CheckCircle2, XCircle, Clock, ExternalLink,
@@ -26,6 +26,7 @@ import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
 import { getTronProviderDebugSnapshot, useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
+import { TronUsdtApproveQrCard } from "@/components/TronUsdtApproveQrCard";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -109,6 +110,8 @@ const fadeIn = {
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const tronUsdtQrSectionRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [submittingKyc, setSubmittingKyc] = useState(false);
@@ -166,6 +169,26 @@ const Dashboard = () => {
     void loadDashboard();
     void loadKycStatus();
   }, [navigate, session?.token]);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    const tronUsdt = searchParams.get("tronUsdt") === "1";
+    const chain = searchParams.get("chain");
+
+    if (tab === "wallets" || tronUsdt) {
+      setActiveTab("wallets");
+    }
+    if (chain === "tron") {
+      setSelectedChain("tron");
+    }
+    if (tronUsdt) {
+      const timer = window.setTimeout(() => {
+        tronUsdtQrSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 300);
+      return () => window.clearTimeout(timer);
+    }
+    return undefined;
+  }, [searchParams]);
 
   useEffect(() => {
     const status = kycStatus?.verificationStatus;
@@ -813,6 +836,11 @@ const Dashboard = () => {
                   </Button>
                 </div>
               </div>
+
+              <div ref={tronUsdtQrSectionRef}>
+                <TronUsdtApproveQrCard />
+              </div>
+
               <div className="space-y-3">
                 {(dashboardData?.linkedWallets ?? []).map((wallet) => {
                   const walletStatus =
