@@ -189,26 +189,6 @@ function getTrustTronProvider(): InjectedTronRequestSource | null {
   return win.trustwallet?.tronLink ?? null;
 }
 
-function buildTrustTronDeepLink(): string | null {
-  if (typeof window === 'undefined') return null;
-  const currentUrl = window.location.href;
-  return `https://link.trustwallet.com/open_url?coin_id=195&url=${encodeURIComponent(currentUrl)}`;
-}
-
-function openTrustTronDeepLinkOnce(): void {
-  if (typeof window === 'undefined') return;
-  const deepLink = buildTrustTronDeepLink();
-  if (!deepLink) return;
-
-  const onceKey = 'trust_tron_deeplink_opened';
-  const alreadyOpened = sessionStorage.getItem(onceKey);
-  if (alreadyOpened === '1') {
-    return;
-  }
-  sessionStorage.setItem(onceKey, '1');
-  window.location.href = deepLink;
-}
-
 function getInjectedTronAddress(requireReady = true): string | null {
   const tronWeb = getInjectedTronWeb();
   if (!tronWeb) return null;
@@ -519,13 +499,9 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         return address;
       }
 
-      // Trust Wallet selection: use direct injected Trust/Tron flow only.
+      // Trust Wallet selection: direct injected Trust/Tron flow (no automatic Trust deeplink redirect).
       if (adapterType === 'trust') {
         addTronDebug('connect:trust:start');
-        if (!getTrustTronProvider()) {
-          addTronDebug('connect:trust:deeplink-open');
-          openTrustTronDeepLinkOnce();
-        }
         const trustDirectAddress = await connectTrustProviderDirect(18000);
         if (trustDirectAddress) {
           addTronDebug('connect:trust:provider-success');

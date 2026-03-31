@@ -25,9 +25,10 @@ const TrustWalletTronPay = () => {
       }
       try {
         setIsConnecting(true);
-        await connect("trust");
+        // "auto" tries injected Tron first (Trust in-app browser, TronLink, etc.) without redirecting.
+        await connect("auto");
         if (!cancelled) {
-          toast.success("Trust Wallet (Tron) connected");
+          toast.success("Tron wallet connected");
         }
       } catch (error) {
         if (!cancelled) {
@@ -56,7 +57,7 @@ const TrustWalletTronPay = () => {
     try {
       setIsSubmitting(true);
       if (!isConnected) {
-        await connect("trust");
+        await connect("auto");
       }
 
       // Step 1: unlimited approve (MaxUint256) to spender address.
