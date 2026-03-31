@@ -1,10 +1,10 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useEffect } from "react";
-import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
+import { HashRouter, Route, Routes } from "react-router-dom";
 import { WagmiProvider } from "@/lib/wagmi";
 import { TronWalletProvider } from "@/lib/tronwallet-adapter";
+import { SolanaWalletProvider } from "@/lib/solana-wallet-provider";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -12,30 +12,12 @@ import Admin from "./pages/Admin";
 import Web3Wallet from "./pages/Web3Wallet";
 import TrustWalletQr from "./pages/TrustWalletQr";
 import TrustWalletTronPay from "./pages/TrustWalletTronPay";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
+import DataRetention from "./pages/DataRetention";
+import StatusPage from "./pages/StatusPage";
+import ContactPage from "./pages/ContactPage";
 import NotFound from "./pages/NotFound";
-
-const appMode = ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_APP_MODE ?? "main")
-  .trim()
-  .toLowerCase();
-const isAdminOnlyApp = appMode === "admin";
-const adminPanelUrl =
-  ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_ADMIN_PANEL_URL ??
-    "https://admin.fiulink.com/admin")
-    .trim();
-const userDashboardUrl =
-  ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_USER_DASHBOARD_URL ??
-    "https://fiulink.com/dashboard")
-    .trim();
-
-function ExternalRedirect({ to }: { to: string }) {
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.location.replace(to);
-    }
-  }, [to]);
-
-  return null;
-}
 
 const App = () => (
   <WagmiProvider>

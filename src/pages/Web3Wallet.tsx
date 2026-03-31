@@ -14,8 +14,11 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { apiRequest } from "@/lib/api";
 import { setSession } from "@/lib/session";
-import { connectWallet, type Chain, type WalletConnectionMethod } from "@/lib/web3";
+import { type Chain, type WalletConnectionMethod } from "@/lib/web3";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
+import { useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
+import { useWagmiWallet } from "@/lib/wagmi-hooks";
+import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
@@ -28,10 +31,13 @@ const Web3Wallet = () => {
   const [walletAddress, setWalletAddress] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const wagmiWallet = useWagmiWallet();
+  const solanaWallet = useSolanaWallet();
+  const tronWallet = useTronWallet();
 
   const chains: Chain[] = ["ethereum", "bsc", "tron", "solana"];
 
-  const handleConnectWallet = async (method: WalletConnectionMethod) => {
+  const handleConnectWallet = async (method: WalletConnectionMethod, walletId?: string) => {
     try {
       setIsProcessing(true);
       setIsWalletModalOpen(false); // Close modal when connecting starts
@@ -39,7 +45,25 @@ const Web3Wallet = () => {
       console.log("Connecting wallet with method:", method, "chain:", selectedChain);
 
       // Connect to wallet
-      const address = await connectWallet(selectedChain, method);
+      let address: string;
+      if (selectedChain === "tron") {
+        const tronAdapterByWalletId: Record<string, TronAdapterType> = {
+          tronlink: "tronlink",
+          tokenpocket: "tokenpocket",
+          trust: "trust",
+          "metamask-tron": "metamask",
+          okxwallet: "okxwallet",
+          safepal: "auto",
+          walletconnect: "walletconnect",
+        };
+        const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
+        address = await tronWallet.connect(selectedTronAdapter ?? "auto");
+      } else if (selectedChain === "ethereum" || selectedChain === "bsc") {
+        address = await wagmiWallet.connectWallet(selectedChain);
+      } else {
+        const requestedSolanaWallet = walletId === "solflare" ? "solflare" : walletId === "phantom" ? "phantom" : undefined;
+        address = await solanaWallet.connectWallet(requestedSolanaWallet);
+      }
       setWalletAddress(address);
 
       const connectResponse = await apiRequest<{
@@ -86,7 +110,7 @@ const Web3Wallet = () => {
     <div className="page-shell">
       <Navbar />
 
-      <div className="page-container py-12 md:py-16 max-w-4xl">
+      <div className="page-container pt-24 pb-12 md:pt-28 md:pb-16 max-w-4xl">
         <motion.div
           initial="hidden"
           animate="visible"

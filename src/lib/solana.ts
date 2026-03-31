@@ -38,14 +38,17 @@ export function getSolanaConnection(): Connection {
 }
 
 /**
- * Get Phantom wallet provider
+ * Get connected Solana injected provider.
+ * Keeps function name for backward compatibility with existing imports.
  */
 export function getPhantomProvider() {
   if (typeof window === 'undefined') {
     return null;
   }
   const win = window as any;
-  return win.phantom?.solana || null;
+  const providers = [win.phantom?.solana, win.solflare, win.solana].filter(Boolean);
+  const connectedProvider = providers.find((provider: any) => provider?.isConnected && provider?.publicKey);
+  return connectedProvider || providers[0] || null;
 }
 
 /**

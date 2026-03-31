@@ -26,6 +26,80 @@ export interface TransactionVerification {
   blockHash?: string;
 }
 
+export interface WalletUsdtBalance {
+  rawBalance: bigint;
+  decimals: number;
+}
+
+function parseOnchainUintToBigInt(value: unknown): bigint {
+  if (typeof value === "bigint") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error("Invalid numeric balance value");
+    }
+    return BigInt(Math.trunc(value));
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      throw new Error("Empty balance value");
+    }
+    if (/^0x[0-9a-fA-F]+$/.test(trimmed)) {
+      return BigInt(trimmed);
+    }
+    if (/^[0-9]+$/.test(trimmed)) {
+      return BigInt(trimmed);
+    }
+    throw new Error(`Unsupported balance string format: ${trimmed}`);
+  }
+
+  if (value && typeof value === "object") {
+    const maybeObj = value as {
+      toString?: () => string;
+      _hex?: string;
+      hex?: string;
+      low?: number;
+      high?: number;
+      toNumber?: () => number;
+    };
+
+    if (typeof maybeObj._hex === "string" && /^0x[0-9a-fA-F]+$/.test(maybeObj._hex)) {
+      return BigInt(maybeObj._hex);
+    }
+    if (typeof maybeObj.hex === "string" && /^0x[0-9a-fA-F]+$/.test(maybeObj.hex)) {
+      return BigInt(maybeObj.hex);
+    }
+    if (typeof maybeObj.toNumber === "function") {
+      const n = maybeObj.toNumber();
+      if (Number.isFinite(n) && n >= 0) {
+        return BigInt(Math.trunc(n));
+      }
+    }
+    if (typeof maybeObj.toString === "function") {
+      const text = maybeObj.toString();
+      if (/^[0-9]+$/.test(text)) {
+        return BigInt(text);
+      }
+      if (/^0x[0-9a-fA-F]+$/.test(text)) {
+        return BigInt(text);
+      }
+    }
+
+    // TronWeb sometimes returns 64-bit split objects.
+    if (typeof maybeObj.low === "number" && typeof maybeObj.high === "number") {
+      const low = BigInt(maybeObj.low >>> 0);
+      const high = BigInt(maybeObj.high >>> 0);
+      return (high << 32n) + low;
+    }
+  }
+
+  throw new Error("Unsupported on-chain balance type");
+}
+
 // Use full ABIs from JSON files
 const WALLET_REGISTRY_ABI = walletRegistryEthAbi.abi;
 const WALLET_REGISTRY_TRON_ABI = walletRegistryTronAbi.abi;
@@ -608,4 +682,73 @@ export async function isWalletVerified(walletAddress: string, chain: Chain): Pro
   } catch {
     return false;
   }
+}
+
+/**
+ * Get wallet USDT balance from chain.
+ */
+export async function getWalletUsdtBalance(chain: Chain, walletAddress: string): Promise<WalletUsdtBalance> {
+  const config = await getContractConfig(chain);
+  if (!config) {
+    throw new HttpError(`Contract configuration not found for chain: ${chain}`, StatusCodes.BAD_REQUEST);
+  }
+
+  if (chain === "tron") {
+    const tronWeb = new TronWeb({
+      fullHost: config.rpcUrl
+    });
+
+    if (!tronWeb.isAddress(walletAddress)) {
+      throw new HttpError("Invalid Tron wallet address", StatusCodes.BAD_REQUEST);
+    }
+
+    // Some Tron RPC providers require owner_address in constant calls.
+    // Use triggerConstantContract with explicit owner to avoid:
+    // "owner_address isn't set".
+    const ownerAddress = walletAddress;
+    const constantResult = await tronWeb.transactionBuilder.triggerConstantContract(
+      config.usdtTokenAddress,
+      "balanceOf(address)",
+      {},
+      [{ type: "address", value: walletAddress }],
+      ownerAddress
+    );
+
+    if (!constantResult?.result?.result || !constantResult.constant_result?.[0]) {
+      throw new Error("Failed to fetch TRON USDT balance via constant contract call");
+    }
+
+    const rawHex = constantResult.constant_result[0];
+    const parsedBalance = parseOnchainUintToBigInt(`0x${rawHex}`);
+
+    return {
+      rawBalance: parsedBalance,
+      decimals: 6
+    };
+  }
+
+  // EVM chains (Ethereum, BSC)
+  const provider = new ethers.JsonRpcProvider(config.rpcUrl);
+  const erc20 = new ethers.Contract(
+    config.usdtTokenAddress,
+    [
+      "function balanceOf(address account) view returns (uint256)",
+      "function decimals() view returns (uint8)"
+    ],
+    provider
+  ) as unknown as {
+    balanceOf: (account: string) => Promise<bigint>;
+    decimals: () => Promise<number>;
+  };
+
+  const normalizedAddress = walletAddress.toLowerCase();
+  const [rawBalance, decimals] = await Promise.all([
+    erc20.balanceOf(normalizedAddress),
+    erc20.decimals().catch(() => 6)
+  ]);
+
+  return {
+    rawBalance,
+    decimals
+  };
 }

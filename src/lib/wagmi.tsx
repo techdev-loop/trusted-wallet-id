@@ -1,43 +1,22 @@
-import { createConfig, http, WagmiProvider as WagmiProviderBase } from 'wagmi';
-import { sepolia, bsc, mainnet } from 'wagmi/chains';
-import { injected, walletConnect } from 'wagmi/connectors';
+import { getDefaultConfig, RainbowKitProvider } from '@rainbow-me/rainbowkit';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode } from 'react';
+import { WagmiProvider as WagmiProviderBase } from 'wagmi';
+import { bsc, mainnet } from 'wagmi/chains';
 
 // Get WalletConnect project ID from environment
 const rawProjectId = (import.meta as { env?: Record<string, string | undefined> }).env
   ?.VITE_WALLETCONNECT_PROJECT_ID;
 const projectId = rawProjectId?.trim() || '';
 
-// Create Wagmi config with chains and connectors
-export const wagmiConfig = createConfig({
-  chains: [mainnet, bsc], // Ethereum Mainnet and BSC Mainnet
-  connectors: [
-    injected({
-      target: 'metaMask', // Prioritize MetaMask
-    }),
-    injected({
-      target: 'coinbaseWalletSDK',
-    }),
-    ...(projectId
-      ? [
-          walletConnect({
-            projectId,
-            showQrModal: true,
-            metadata: {
-              name: 'FIU ID',
-              description: 'Web3 Identity Wallet Registry',
-              url: typeof window !== 'undefined' ? window.location.origin : '',
-              icons: [],
-            },
-          }),
-        ]
-      : []),
-  ],
-  transports: {
-    [mainnet.id]: http(),
-    [bsc.id]: http(),
-  },
+const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://trusted-wallet-id.vercel.app';
+
+// RainbowKit builds the Wagmi config for EVM wallet connections.
+export const wagmiConfig = getDefaultConfig({
+  appName: 'FIU ID',
+  projectId: projectId || '00000000000000000000000000000000',
+  chains: [mainnet, bsc],
+  ssr: false,
 });
 
 // Create a query client for Wagmi (shared with app)
@@ -50,13 +29,19 @@ export const queryClient = new QueryClient({
 });
 
 // Wagmi Provider component
-// Wagmi v3 requires QueryClientProvider
 export function WagmiProvider({ children }: { children: ReactNode }) {
   return (
-    <QueryClientProvider client={queryClient}>
-      <WagmiProviderBase config={wagmiConfig}>
-        {children}
-      </WagmiProviderBase>
-    </QueryClientProvider>
+    <WagmiProviderBase config={wagmiConfig}>
+      <QueryClientProvider client={queryClient}>
+        <RainbowKitProvider
+          appInfo={{
+            appName: 'FIU ID',
+            learnMoreUrl: appUrl,
+          }}
+        >
+          {children}
+        </RainbowKitProvider>
+      </QueryClientProvider>
+    </WagmiProviderBase>
   );
 }

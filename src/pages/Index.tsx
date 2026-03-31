@@ -68,6 +68,14 @@ const stats = [
   { value: "100%", label: "Compliant" },
 ];
 
+const quickLinks = [
+  { label: "Privacy Policy", to: "/privacy" },
+  { label: "Terms of Service", to: "/terms" },
+  { label: "Data Retention", to: "/data-retention" },
+  { label: "System Status", to: "/status" },
+  { label: "Contact", to: "/contact" },
+];
+
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
   visible: (i: number) => ({
@@ -89,6 +97,12 @@ const Index = () => {
     }
     window.location.replace(`${window.location.origin}/#/trustwallet/tron`);
   }, []);
+  const handleLearnMore = () => {
+    const section = document.getElementById("how-it-works");
+    if (section) {
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
 
   return (
     <div className="page-shell">
@@ -150,8 +164,8 @@ const Index = () => {
                 <ArrowRight className="w-4 h-4 ml-1" />
               </Link>
             </Button>
-            <Button variant="hero-outline" size="xl" asChild>
-              <a href="#how-it-works">Learn More</a>
+            <Button variant="hero-outline" size="xl" onClick={handleLearnMore}>
+              Learn More
             </Button>
           </motion.div>
 
@@ -168,6 +182,26 @@ const Index = () => {
                 <p className="text-xs text-primary-foreground/40 mt-1 uppercase tracking-widest">{stat.label}</p>
               </div>
             ))}
+          </motion.div>
+
+          <motion.div
+            className="mt-7 sm:mt-8 mx-auto max-w-4xl"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <div className="rounded-2xl border border-primary-foreground/20 bg-primary-foreground/[0.06] backdrop-blur-md px-4 py-4 sm:px-5 sm:py-5">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-primary-foreground/45 mb-3">
+                Quick Links
+              </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {quickLinks.map((item) => (
+                  <Button key={item.label} asChild variant="outline" size="sm" className="rounded-lg border-primary-foreground/20 bg-primary-foreground/[0.06] text-primary-foreground hover:bg-primary-foreground/[0.14]">
+                    <Link to={item.to}>{item.label}</Link>
+                  </Button>
+                ))}
+              </div>
+            </div>
           </motion.div>
         </div>
 

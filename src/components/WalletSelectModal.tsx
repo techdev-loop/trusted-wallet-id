@@ -26,20 +26,19 @@ interface WalletSelectModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   selectedChain: Chain;
-  onSelectWallet: (method: WalletConnectionMethod) => void;
+  onSelectWallet: (method: WalletConnectionMethod, walletId?: string) => void;
   isConnecting: boolean;
 }
 
 // Wallet definitions
 const WALLET_OPTIONS: WalletOption[] = [
   {
-    id: "metamask",
-    name: "MetaMask",
-    icon: "🦊",
-    description: "Connect using MetaMask browser extension",
-    method: "injected",
+    id: "rainbowkit",
+    name: "RainbowKit",
+    icon: "🌈",
+    description: "Open RainbowKit to choose any EVM wallet (MetaMask, WalletConnect, Coinbase, etc.)",
+    method: "auto",
     supportedChains: ["ethereum", "bsc"],
-    installUrl: "https://metamask.io/download/",
   },
   {
     id: "tronlink",
@@ -51,38 +50,58 @@ const WALLET_OPTIONS: WalletOption[] = [
     installUrl: "https://www.tronlink.org/",
   },
   {
-    id: "tokenpocket",
-    name: "TokenPocket",
-    icon: "💼",
-    description: "Mobile: Open in TokenPocket app's browser | Desktop: Browser extension",
+    id: "trust",
+    name: "Trust Wallet",
+    icon: "🛡️",
+    description: "Open this page in Trust Wallet app browser to connect Tron wallet",
     method: "injected",
     supportedChains: ["tron"],
-    installUrl: "https://www.tokenpocket.pro/",
+    installUrl: "https://trustwallet.com/",
+  },
+  {
+    id: "okxwallet",
+    name: "OKX Wallet",
+    icon: "⭕",
+    description: "Connect with OKX Wallet for Tron",
+    method: "injected",
+    supportedChains: ["tron"],
+    installUrl: "https://www.okx.com/web3",
+  },
+  {
+    id: "safepal",
+    name: "SafePal",
+    icon: "🛡️",
+    description: "Connect SafePal in dApp browser for Tron",
+    method: "injected",
+    supportedChains: ["tron"],
+    installUrl: "https://www.safepal.com/",
   },
   {
     id: "phantom",
     name: "Phantom",
     icon: "👻",
-    description: "Desktop: Browser extension | Mobile: Open Phantom app",
+    description: "Connect with Phantom via Solana Wallet Adapter",
     method: "injected",
     supportedChains: ["solana"],
     installUrl: "https://phantom.app/",
   },
   {
-    id: "walletconnect",
-    name: "WalletConnect",
-    icon: "🔗",
-    description: "Scan QR code to connect with mobile wallet",
-    method: "walletconnect",
-    supportedChains: ["ethereum", "bsc", "solana"], // Removed "tron" - WalletConnect doesn't reliably support Tron
+    id: "solflare",
+    name: "Solflare",
+    icon: "☀️",
+    description: "Connect with Solflare via Solana Wallet Adapter",
+    method: "injected",
+    supportedChains: ["solana"],
+    installUrl: "https://solflare.com/",
   },
-];
-
-// Additional EVM wallets that might be detected
-const EVM_WALLETS = [
-  { id: "coinbase", name: "Coinbase Wallet", icon: "🔵" },
-  { id: "brave", name: "Brave Wallet", icon: "🦁" },
-  { id: "trust", name: "Trust Wallet", icon: "🛡️" },
+  {
+    id: "walletconnect",
+    name: "WalletConnect (QR)",
+    icon: "🔗",
+    description: "Connect Tron wallets by scanning WalletConnect QR code",
+    method: "walletconnect",
+    supportedChains: ["tron"],
+  },
 ];
 
 export function WalletSelectModal({
@@ -92,6 +111,9 @@ export function WalletSelectModal({
   onSelectWallet,
   isConnecting,
 }: WalletSelectModalProps) {
+  const buildTrustTronDeepLink = () =>
+    `https://link.trustwallet.com/open_url?coin_id=195&url=${encodeURIComponent(window.location.href)}`;
+
   const [detectedWallets, setDetectedWallets] = useState<string[]>([]);
   const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
 
@@ -101,53 +123,36 @@ export function WalletSelectModal({
 
     const detected: string[] = [];
 
-    // Check for MetaMask and other EVM wallets
+    // RainbowKit handles EVM wallet discovery itself.
     if (selectedChain === "ethereum" || selectedChain === "bsc") {
-      if (typeof window !== "undefined") {
-        const win = window as any;
-        if (win.ethereum) {
-          detected.push("metamask");
-          
-          // Check for other EVM wallets
-          const ethereum = win.ethereum;
-          if (ethereum.isCoinbaseWallet) detected.push("coinbase");
-          if (ethereum.isBraveWallet) detected.push("brave");
-          if (ethereum.isTrust) detected.push("trust");
-          if (ethereum.providers && Array.isArray(ethereum.providers)) {
-            // Multiple wallets detected
-            ethereum.providers.forEach((provider: any) => {
-              if (provider.isCoinbaseWallet && !detected.includes("coinbase")) {
-                detected.push("coinbase");
-              }
-              if (provider.isBraveWallet && !detected.includes("brave")) {
-                detected.push("brave");
-              }
-            });
-          }
-        }
-      }
+      detected.push("rainbowkit");
     }
 
     // Check for Tron wallets
     if (selectedChain === "tron") {
       if (typeof window !== "undefined") {
         const win = window as any;
+        const userAgent = String(navigator.userAgent || "").toLowerCase();
         // TronLink injects tronWeb or tronLink
         if (win.tronWeb || win.tronLink) {
           detected.push("tronlink");
         }
-        // TokenPocket also injects tronWeb
-        if (win.tronWeb && win.tronWeb.isTokenPocket) {
-          detected.push("tokenpocket");
-        }
         // Check for other Tron wallets that might inject tronWeb
         if (win.tronWeb) {
-          // TokenPocket detection
-          if (win.tronWeb.isTokenPocket || win.isTokenPocket) {
-            if (!detected.includes("tokenpocket")) {
-              detected.push("tokenpocket");
-            }
-          }
+        }
+        if (
+          win.trustwallet?.tronLink ||
+          win.ethereum?.isTrust ||
+          userAgent.includes("trustwallet") ||
+          userAgent.includes("trust wallet")
+        ) {
+          detected.push("trust");
+        }
+        if (win.okxwallet?.tronLink || win.okxwallet) {
+          detected.push("okxwallet");
+        }
+        if (win.safepal || win.ethereum?.isSafePal || win.ethereum?.providers?.some((provider: any) => provider?.isSafePal)) {
+          detected.push("safepal");
         }
       }
     }
@@ -159,9 +164,8 @@ export function WalletSelectModal({
         if (win.phantom) {
           detected.push("phantom");
         }
-        // Check for other Solana wallets
         if (win.solflare) {
-          // Solflare detected but not in our list, could add it
+          detected.push("solflare");
         }
       }
     }
@@ -170,17 +174,38 @@ export function WalletSelectModal({
   }, [open, selectedChain]);
 
   // Filter wallets by selected chain
-  const availableWallets = WALLET_OPTIONS.filter((wallet) =>
-    wallet.supportedChains.includes(selectedChain)
-  ).sort((a, b) => {
+  const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+
+  const availableWallets = WALLET_OPTIONS.filter((wallet) => {
+    if (!wallet.supportedChains.includes(selectedChain)) {
+      return false;
+    }
+    if (isMobile && (wallet.id === "trust" || wallet.id === "safepal")) {
+      return false;
+    }
+    return true;
+  }).sort((a, b) => {
+    if (isMobile) {
+      if (a.id === "walletconnect") return -1;
+      if (b.id === "walletconnect") return 1;
+    }
+
     // Sort native wallets (TronLink, Phantom) first for their respective chains
     if (selectedChain === "tron") {
       if (a.id === "tronlink") return -1;
       if (b.id === "tronlink") return 1;
+      if (a.id === "trust") return -1;
+      if (b.id === "trust") return 1;
+      if (a.id === "okxwallet") return -1;
+      if (b.id === "okxwallet") return 1;
+      if (a.id === "safepal") return -1;
+      if (b.id === "safepal") return 1;
     }
     if (selectedChain === "solana") {
       if (a.id === "phantom") return -1;
       if (b.id === "phantom") return 1;
+      if (a.id === "solflare") return -1;
+      if (b.id === "solflare") return 1;
     }
     return 0;
   });
@@ -193,20 +218,12 @@ export function WalletSelectModal({
   }, [open, selectedChain, availableWallets]);
 
   const getWalletStatus = (wallet: WalletOption) => {
-    // WalletConnect doesn't reliably support Tron or Solana
-    if (wallet.id === "walletconnect" && (selectedChain === "solana" || selectedChain === "tron")) {
-      return "unsupported"; // Mark as unsupported for Solana and Tron
-    }
-
     if (wallet.id === "walletconnect") {
-      return "available"; // WalletConnect is available for EVM chains
+      return "installed";
     }
 
-    // For EVM chains, if any EVM wallet is detected, show MetaMask as available
-    if (wallet.id === "metamask" && (selectedChain === "ethereum" || selectedChain === "bsc")) {
-      if (detectedWallets.length > 0) {
-        return "installed";
-      }
+    if (wallet.id === "rainbowkit" && (selectedChain === "ethereum" || selectedChain === "bsc")) {
+      return "installed";
     }
 
     const isDetected = detectedWallets.includes(wallet.id);
@@ -216,28 +233,50 @@ export function WalletSelectModal({
     return "not-installed";
   };
 
-  const handleWalletClick = async (wallet: WalletOption) => {
-    // Check if wallet is unsupported for this chain
-    const status = getWalletStatus(wallet);
-    if (status === "unsupported") {
-      // Don't allow clicking on unsupported wallets
+  const openInstallLink = (url: string) => {
+    const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+    if (isMobile) {
+      window.location.href = url;
       return;
     }
 
+    const openedWindow = window.open(url, "_blank", "noopener,noreferrer");
+    if (!openedWindow) {
+      window.location.href = url;
+    }
+  };
+
+  const handleWalletClick = async (wallet: WalletOption) => {
     // For Tron wallets, the TronWallet adapter will handle connection automatically
     // No need to show manual instructions - the adapter handles mobile app opening
 
-    // Check if wallet needs to be installed
-    if (wallet.isInstalled === false && wallet.installUrl) {
-      window.open(wallet.installUrl, "_blank");
+    const status = getWalletStatus(wallet);
+
+    const isTronWalletOption =
+      selectedChain === "tron" &&
+      ["tronlink", "trust", "okxwallet", "safepal", "walletconnect"].includes(wallet.id);
+
+    if (wallet.id === "trust" && selectedChain === "tron") {
+      const win = window as any;
+      const hasTrustTronProvider = Boolean(win?.trustwallet?.tronLink);
+      if (!hasTrustTronProvider) {
+        openInstallLink(buildTrustTronDeepLink());
+        return;
+      }
+    }
+
+    // If wallet is not installed, open install page.
+    // For Tron wallets, try connecting first even when detection is uncertain on mobile.
+    if (!isTronWalletOption && status === "not-installed" && wallet.installUrl) {
+      openInstallLink(wallet.installUrl);
       return;
     }
 
-    console.log("Wallet selected:", wallet.name, "method:", wallet.method);
+    console.log("Wallet selected:", wallet.name, "method:", wallet.method, "walletId:", wallet.id);
     setSelectedWallet(wallet.id);
     // Small delay to ensure modal state updates before connection starts
     setTimeout(() => {
-      onSelectWallet(wallet.method);
+      onSelectWallet(wallet.method, wallet.id);
     }, 100);
   };
 
@@ -288,7 +327,6 @@ export function WalletSelectModal({
             const status = getWalletStatus(wallet);
             const isSelected = selectedWallet === wallet.id && isConnecting;
             const isInstalled = status === "installed";
-            const isUnsupported = status === "unsupported";
 
             return (
               <Button
@@ -296,7 +334,7 @@ export function WalletSelectModal({
                 variant={isSelected ? "accent" : "outline"}
                 className="w-full h-auto min-h-[78px] p-3 sm:p-4 justify-start items-start gap-3 sm:gap-4 hover:bg-accent/50 transition-colors text-left whitespace-normal overflow-hidden"
                 onClick={() => handleWalletClick(wallet)}
-                disabled={isConnecting || isUnsupported}
+                disabled={isConnecting}
               >
                 <div className="flex items-start gap-3 flex-1 min-w-0">
                   <div className="text-2xl shrink-0 leading-none">{wallet.icon}</div>
@@ -315,44 +353,39 @@ export function WalletSelectModal({
                           Install
                         </Badge>
                       )}
-                      {wallet.id === "walletconnect" && !isUnsupported && (
+                      {wallet.id === "walletconnect" && (
                         <Badge variant="secondary" className="text-xs">
-                          Mobile
-                        </Badge>
-                      )}
-                      {isUnsupported && (
-                        <Badge variant="outline" className="text-xs text-muted-foreground">
-                          Not Supported
+                          QR
                         </Badge>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 whitespace-normal break-words leading-relaxed">
-                      {isUnsupported 
-                        ? selectedChain === "tron"
-                          ? "For Tron on mobile, please open this page in a Tron wallet app's browser. On desktop, use a Tron wallet extension."
-                          : `WalletConnect doesn't support ${selectedChain} network. Please use ${selectedChain === "solana" ? "Phantom" : "the appropriate wallet"} instead.`
-                        : (() => {
-                            const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
-                            
-                            // Show mobile-specific instructions for Tron wallets
-                            if (selectedChain === "tron" && (wallet.id === "tronlink" || wallet.id === "tokenpocket")) {
-                              if (isMobile && !isInstalled) {
-                                return `Mobile: Open this page in ${wallet.name} app's browser tab`;
-                              }
-                            }
-                            
-                            // Show mobile-specific instructions for Phantom
-                            if (wallet.id === "phantom") {
-                              if (isMobile) {
-                                return "Mobile: Tap to open Phantom app and connect";
-                              } else {
-                                return "Desktop: Connect using Phantom browser extension";
-                              }
-                            }
-                            
-                            return wallet.description;
-                          })()
-                      }
+                      {(() => {
+                        const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+                        
+                        // Show mobile-specific instructions for Tron wallets
+                        if (
+                          selectedChain === "tron" &&
+                          (wallet.id === "tronlink" ||
+                            wallet.id === "trust" ||
+                            wallet.id === "okxwallet" ||
+                            wallet.id === "safepal")
+                        ) {
+                          if (isMobile && !isInstalled) {
+                            return `Mobile: Open this page in ${wallet.name} app's browser tab`;
+                          }
+                        }
+                        // Show mobile-specific instructions for Phantom
+                        if (wallet.id === "phantom") {
+                          if (isMobile) {
+                            return "Mobile: Tap to open Phantom app and connect";
+                          } else {
+                            return "Desktop: Connect using Phantom browser extension";
+                          }
+                        }
+                        
+                        return wallet.description;
+                      })()}
                     </p>
                   </div>
                   {isSelected && (

