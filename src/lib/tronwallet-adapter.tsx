@@ -178,15 +178,17 @@ function getInjectedTronWeb(): InjectedTronWeb | null {
     win.tronWeb ??
     win.tronLink?.tronWeb ??
     win.trustwallet?.tronLink?.tronWeb ??
+    win.trustwallet?.tron?.tronWeb ??
     win.okxwallet?.tronLink?.tronWeb ??
     null
   );
 }
 
+/** Trust Discover injects tronLink and/or tron; both may carry request + tronWeb. */
 function getTrustTronProvider(): InjectedTronRequestSource | null {
   if (typeof window === 'undefined') return null;
   const win = window as unknown as InjectedWindowLike;
-  return win.trustwallet?.tronLink ?? null;
+  return win.trustwallet?.tronLink ?? win.trustwallet?.tron ?? null;
 }
 
 function getInjectedTronAddress(requireReady = true): string | null {
@@ -321,7 +323,15 @@ async function waitForTrustProvider(timeoutMs = 15000): Promise<InjectedTronRequ
 
 async function connectTrustProviderDirect(timeoutMs = 15000): Promise<string | null> {
   const trustProvider = await waitForTrustProvider(timeoutMs);
-  if (!trustProvider?.request) return null;
+  if (!trustProvider) {
+    return getInjectedTronAddress(false);
+  }
+  // Some Trust builds expose tronWeb before request(); don't bail — poll injected address.
+  if (!trustProvider.request) {
+    const polled = await connectInjectedTronDirect(Math.min(timeoutMs, 12000));
+    if (polled) return polled;
+    return getInjectedTronAddress(false);
+  }
 
   const requestWithTimeout = async (
     payload: { method: string; params?: unknown[] },
@@ -440,12 +450,15 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
     adapterRef.current = adapter;
   }, [adapter]);
 
-  // Auto-detect and connect to available adapter
+  // Auto-detect and connect to available adapter (skip inside Trust Wallet Discover — it injects
+  // trustwallet.* and TronLinkAdapter here races / mis-detects vs connect("trust") on /trustwallet/tron).
   useEffect(() => {
     const detectAndConnect = async () => {
-      // Check for TronLink first (most common)
       if (typeof window !== 'undefined') {
         const win = window as any;
+        if (win.trustwallet) {
+          return;
+        }
         if (win.tronWeb || win.tronLink) {
           try {
             const tronLinkAdapter = adapters.tronlink();
@@ -453,7 +466,6 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
             setAdapter(tronLinkAdapter);
             setAddress(tronLinkAdapter.address || null);
           } catch (err) {
-            // Silent fail - user may not be ready to connect
             console.debug('TronLink auto-connect failed:', err);
           }
         }
