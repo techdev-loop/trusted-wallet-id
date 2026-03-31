@@ -408,7 +408,21 @@ async function connectInjectedTronDirect(timeoutMs = 12000): Promise<string | nu
     return immediate;
   }
 
-  const requestedAddress = await requestInjectedTronAccess();
+  // requestInjectedTronAccess can take minutes (many sources × methods × 2.5s timeouts).
+  // Cap it so connect("trust") / auto-connect cannot hang indefinitely on "Connecting…".
+  const requestCapMs = Math.min(8000, Math.max(4000, timeoutMs - 1500));
+  let requestedAddress: string | null = null;
+  try {
+    requestedAddress = await Promise.race([
+      requestInjectedTronAccess(),
+      sleep(requestCapMs).then(() => Promise.reject(new Error('requestInjectedTronAccess capped'))),
+    ]);
+  } catch (e) {
+    if (e instanceof Error && e.message === 'requestInjectedTronAccess capped') {
+      addTronDebug('direct:request-access-capped');
+    }
+    requestedAddress = null;
+  }
   if (requestedAddress) {
     addTronDebug('direct:requested-address');
     return requestedAddress;

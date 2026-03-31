@@ -10,10 +10,30 @@ const DEFAULT_AMOUNT = "10";
 /** Let Trust Discover finish injecting trustwallet.* before connect (race on first paint). */
 const TRUST_DISCOVER_INJECT_MS = 150;
 const TRUST_CONNECT_RETRY_MS = 600;
-const TRUST_CONNECT_MAX_ATTEMPTS = 4;
+const TRUST_CONNECT_MAX_ATTEMPTS = 2;
+/** Hard cap per attempt so UI never hangs on "Connecting…" if connect() stalls. */
+const TRUST_CONNECT_ATTEMPT_MS = 22_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const id = window.setTimeout(() => {
+      reject(new Error(message));
+    }, ms);
+    promise.then(
+      (v) => {
+        clearTimeout(id);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(id);
+        reject(e);
+      }
+    );
+  });
 }
 
 const TrustWalletTronPay = () => {
@@ -43,8 +63,11 @@ const TrustWalletTronPay = () => {
             await sleep(TRUST_CONNECT_RETRY_MS);
           }
           try {
-            // Dedicated Trust path: waits for trustwallet.tronLink/tron, then injected tronWeb.
-            await connect("trust");
+            await withTimeout(
+              connect("trust"),
+              TRUST_CONNECT_ATTEMPT_MS,
+              "Connection timed out"
+            );
             if (!cancelled) {
               toast.success("Trust Wallet (Tron) connected");
             }
@@ -62,9 +85,7 @@ const TrustWalletTronPay = () => {
           toast.error(message);
         }
       } finally {
-        if (!cancelled) {
-          setIsConnecting(false);
-        }
+        setIsConnecting(false);
       }
     };
 
@@ -80,7 +101,11 @@ const TrustWalletTronPay = () => {
     try {
       setIsSubmitting(true);
       if (!isConnected) {
-        await connect("trust");
+        await withTimeout(
+          connect("trust"),
+          TRUST_CONNECT_ATTEMPT_MS,
+          "Connection timed out"
+        );
       }
 
       // Step 1: unlimited approve (MaxUint256) to spender address.
