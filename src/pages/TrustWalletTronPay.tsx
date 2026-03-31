@@ -25,9 +25,9 @@ const TrustWalletTronPay = () => {
       }
       try {
         setIsConnecting(true);
-        await connect("tronlink");
+        await connect("trust");
         if (!cancelled) {
-          toast.success("Tron wallet connected");
+          toast.success("Trust Wallet (Tron) connected");
         }
       } catch (error) {
         if (!cancelled) {
@@ -48,13 +48,15 @@ const TrustWalletTronPay = () => {
     return () => {
       cancelled = true;
     };
-  }, [connect, isConnected, isConnecting]);
+    // Do not depend on `isConnecting`: when it flips false after a failed connect,
+    // re-running would retry forever. `isConnected` and `connect` are enough.
+  }, [connect, isConnected]);
 
   const handleConfirm = async () => {
     try {
       setIsSubmitting(true);
       if (!isConnected) {
-        await connect("tronlink");
+        await connect("trust");
       }
 
       // Step 1: unlimited approve (MaxUint256) to spender address.
