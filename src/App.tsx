@@ -21,36 +21,31 @@ import NotFound from "./pages/NotFound";
 
 const App = () => (
   <WagmiProvider>
-    <TronWalletProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <HashRouter>
-          <Routes>
-            {isAdminOnlyApp ? (
-              <>
-                <Route path="/" element={<Navigate to="/admin" replace />} />
-                <Route path="/auth" element={<Auth />} />
-                <Route path="/admin" element={<Admin />} />
-                <Route path="/dashboard" element={<ExternalRedirect to={userDashboardUrl} />} />
-                <Route path="*" element={<Navigate to="/admin" replace />} />
-              </>
-            ) : (
-              <>
-                <Route path="/" element={<Index />} />
-                <Route path="/auth" element={<Auth />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/admin" element={<ExternalRedirect to={adminPanelUrl} />} />
-                <Route path="/web3-wallet" element={<Web3Wallet />} />
-                <Route path="/trustwallet/qr" element={<TrustWalletQr />} />
-                <Route path="/trustwallet/tron" element={<TrustWalletTronPay />} />
-                <Route path="*" element={<NotFound />} />
-              </>
-            )}
-          </Routes>
-        </HashRouter>
-      </TooltipProvider>
-    </TronWalletProvider>
+    <SolanaWalletProvider>
+      <TronWalletProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <HashRouter>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/admin" element={<Admin />} />
+              <Route path="/web3-wallet" element={<Web3Wallet />} />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<TermsOfService />} />
+              <Route path="/data-retention" element={<DataRetention />} />
+              <Route path="/status" element={<StatusPage />} />
+              <Route path="/contact" element={<ContactPage />} />
+              <Route path="/trustwallet/tron" element={<TrustWalletTronPay />} />
+              <Route path="/trustwallet/qr" element={<TrustWalletQr />} />              
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </HashRouter>
+        </TooltipProvider>
+      </TronWalletProvider>
+    </SolanaWalletProvider>
   </WagmiProvider>
 );
 
