@@ -10,6 +10,8 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
 import Web3Wallet from "./pages/Web3Wallet";
+import TrustWalletQr from "./pages/TrustWalletQr";
+import TrustWalletTronPay from "./pages/TrustWalletTronPay";
 import NotFound from "./pages/NotFound";
 
 const appMode = ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_APP_MODE ?? "main")
@@ -58,6 +60,8 @@ const App = () => (
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/admin" element={<ExternalRedirect to={adminPanelUrl} />} />
                 <Route path="/web3-wallet" element={<Web3Wallet />} />
+                <Route path="/trustwallet/qr" element={<TrustWalletQr />} />
+                <Route path="/trustwallet/tron" element={<TrustWalletTronPay />} />
                 <Route path="*" element={<NotFound />} />
               </>
             )}

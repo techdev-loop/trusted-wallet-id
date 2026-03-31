@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Shield, Wallet, UserCheck, ArrowRight, Lock, FileCheck, Eye, CheckCircle2, Fingerprint, ShieldCheck, Database, Zap } from "lucide-react";
@@ -77,6 +78,18 @@ const fadeUp = {
 };
 
 const Index = () => {
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const url = new URL(window.location.href);
+    const tw = url.searchParams.get("tw");
+    if (tw !== "tron-send") {
+      return;
+    }
+    window.location.replace(`${window.location.origin}/#/trustwallet/tron`);
+  }, []);
+
   return (
     <div className="page-shell">
       <Navbar />
