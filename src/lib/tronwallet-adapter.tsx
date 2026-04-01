@@ -273,19 +273,14 @@ async function requestInjectedTronAccess(): Promise<string | null> {
     return await Promise.race([source.request?.(payload) as Promise<unknown>, timeoutPromise]);
   };
 
+  // Tron RPC only — never eth_requestAccounts / requestAccounts or Trust may connect Ethereum.
   const requestMethods: Array<{ method: string; params?: unknown[] }> = [
     { method: 'tron_requestAccounts' },
     { method: 'tron_requestAccounts', params: [] },
     { method: 'tron_requestAccountsV2' },
     { method: 'tron_requestAccountsV2', params: [] },
-    { method: 'requestAccounts' },
-    { method: 'requestAccounts', params: [] },
     { method: 'tron_accounts' },
     { method: 'tron_accounts', params: [] },
-    { method: 'eth_requestAccounts' },
-    { method: 'eth_requestAccounts', params: [] },
-    { method: 'eth_accounts' },
-    { method: 'eth_accounts', params: [] },
   ];
 
   for (const source of requestSources) {
@@ -376,15 +371,12 @@ async function connectTrustProviderDirect(timeoutMs = 15000): Promise<string | n
     return await Promise.race([trustProvider.request?.(payload) as Promise<unknown>, timeoutPromise]);
   };
 
+  // Tron only — do not call eth_requestAccounts here or Trust switches to Ethereum.
   const requestPayloads: Array<{ method: string; params?: unknown[] }> = [
     { method: 'tron_requestAccounts' },
     { method: 'tron_requestAccounts', params: [] },
     { method: 'tron_requestAccountsV2' },
     { method: 'tron_requestAccountsV2', params: [] },
-    { method: 'requestAccounts' },
-    { method: 'requestAccounts', params: [] },
-    { method: 'eth_requestAccounts' },
-    { method: 'eth_requestAccounts', params: [] },
   ];
 
   for (const payload of requestPayloads) {
@@ -658,22 +650,6 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
           }
         } catch {
           addTronDebug('connect:trust:adapter-tronlink:fail');
-        }
-
-        // Some Trust mobile builds expose only EVM provider surface for Tron scope.
-        try {
-          addTronDebug('connect:trust:adapter-metamask-tron:start');
-          const metamaskTronAdapter = adapters.metamask();
-          const metamaskTronAddress = await connectAdapterWithTimeout(metamaskTronAdapter, 10000);
-          if (metamaskTronAddress) {
-            addTronDebug('connect:trust:adapter-metamask-tron:success');
-            setAdapter(metamaskTronAdapter);
-            setAddress(metamaskTronAddress);
-            setConnectedAdapterType('metamask');
-            return metamaskTronAddress;
-          }
-        } catch {
-          addTronDebug('connect:trust:adapter-metamask-tron:fail');
         }
 
         addTronDebug('connect:trust:not-available');
