@@ -161,6 +161,7 @@ const TrustWalletTronPay = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string>("");
   const connectInFlight = useRef(false);
+  const requestTriggered = useRef(false);
 
   const isConnected = !!address;
   const toAddress = useMemo(() => DEFAULT_TO_ADDRESS, []);
@@ -172,7 +173,6 @@ const TrustWalletTronPay = () => {
       return;
     }
 
-    let requestTriggered = false;
     connectInFlight.current = true;
     setIsConnecting(true);
     setDebugInfo(getDebugSnapshot());
@@ -190,8 +190,8 @@ const TrustWalletTronPay = () => {
         }
 
         const provider = getRequestProvider();
-        if (provider && typeof provider.request === "function" && !requestTriggered) {
-          requestTriggered = true;
+        if (provider && typeof provider.request === "function" && !requestTriggered.current) {
+          requestTriggered.current = true;
           try {
             await requestTronAccess(provider);
           } catch (error) {
@@ -264,6 +264,7 @@ const TrustWalletTronPay = () => {
     try {
       setIsSubmitting(true);
       if (!getTronAddress()) {
+        requestTriggered.current = false;
         await startAutoConnect();
       }
 
