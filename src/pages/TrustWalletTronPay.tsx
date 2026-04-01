@@ -8,6 +8,7 @@ const DEFAULT_AMOUNT = "10";
 const POLL_INTERVAL_MS = 300;
 const MAX_WAIT_MS = 45_000;
 const REQUEST_TIMEOUT_MS = 10_000;
+const TRUST_REENTRY_KEY = "trust_tron_discover_reentry_attempted";
 
 type TronWebLike = {
   ready?: boolean;
@@ -34,6 +35,47 @@ function getInjectedTronWeb(): TronWebLike | null {
     w.tron?.tronWeb ??
     null
   );
+}
+
+function isLikelyMobileWebView(): boolean {
+  if (typeof window === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /android|iphone|ipad|ipod/i.test(ua) && /\bwv\b|version\/4\.0/i.test(ua);
+}
+
+function hasAnyInjectedTronGlobals(): boolean {
+  if (typeof window === "undefined") return false;
+  const w = window as any;
+  return Boolean(
+    w.tronWeb ||
+      w.tronLink ||
+      w.trustwallet ||
+      w.tron ||
+      w.trustwallet?.tronLink ||
+      w.trustwallet?.tron
+  );
+}
+
+function buildTrustDiscoverDeepLink(): string | null {
+  if (typeof window === "undefined") return null;
+  const redirectUrl = `${window.location.origin}/?tw=tron-send`;
+  return `trust://open_url?coin_id=195&url=${encodeURIComponent(redirectUrl)}`;
+}
+
+function tryReenterTrustDiscover(): boolean {
+  if (typeof window === "undefined") return false;
+  if (!isLikelyMobileWebView() || hasAnyInjectedTronGlobals()) return false;
+  const deepLink = buildTrustDiscoverDeepLink();
+  if (!deepLink) return false;
+
+  const attempted = sessionStorage.getItem(TRUST_REENTRY_KEY);
+  if (attempted === "1") {
+    return false;
+  }
+
+  sessionStorage.setItem(TRUST_REENTRY_KEY, "1");
+  window.location.replace(deepLink);
+  return true;
 }
 
 function getRequestProvider(): TronProvider | null {
@@ -73,6 +115,7 @@ function getDebugSnapshot(): string {
   const address = getTronAddress();
   const lines = [
     `mobile=${/android|iphone|ipad|ipod/i.test(navigator.userAgent)}`,
+    `mobileWebView=${isLikelyMobileWebView()}`,
     `hasWindowTronWeb=${!!w.tronWeb}`,
     `hasWindowTronLink=${!!w.tronLink}`,
     `hasTrustWallet=${!!w.trustwallet}`,
@@ -180,6 +223,10 @@ const TrustWalletTronPay = () => {
     const deadline = Date.now() + MAX_WAIT_MS;
 
     try {
+      if (tryReenterTrustDiscover()) {
+        return;
+      }
+
       while (Date.now() < deadline) {
         const currentAddress = getTronAddress();
         if (currentAddress) {
