@@ -210,8 +210,8 @@ function getInjectedTronWeb(): any | null {
   return (
     win.tronWeb ||
     win.tronLink?.tronWeb ||
-    win.trustwallet?.tronLink ||
-    win.okxwallet?.tronLink ||
+    win.trustwallet?.tronLink?.tronWeb ||
+    win.okxwallet?.tronLink?.tronWeb ||
     win.bitkeep?.tronWeb ||
     null
   );

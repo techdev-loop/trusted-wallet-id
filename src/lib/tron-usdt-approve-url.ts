@@ -32,7 +32,7 @@ export function resolveTronUsdtApprovalSpender(querySpender?: string | null): st
 }
 
 /**
- * Full URL (including hash) opening Dashboard → Wallets with the Tron USDT approval QR section.
+ * Full URL opening Dashboard → Wallets with the Tron USDT approval QR section.
  * `tronUsdt=1` enables Trust auto-connect when opened from a wallet browser.
  */
 export function buildDashboardTronUsdtApproveUrl(options: { spender?: string; token?: string } = {}): string {
@@ -48,10 +48,8 @@ export function buildDashboardTronUsdtApproveUrl(options: { spender?: string; to
   if (spender) params.set("spender", spender);
   if (token) params.set("token", token);
 
-  const hash = `#/dashboard?${params.toString()}`;
-
-  const { origin, pathname, search } = window.location;
-  return `${origin}${pathname}${search}${hash}`;
+  const { origin } = window.location;
+  return `${origin}/dashboard?${params.toString()}`;
 }
 
 /**

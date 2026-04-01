@@ -95,7 +95,7 @@ const Index = () => {
     if (tw !== "tron-send") {
       return;
     }
-    window.location.replace(`${window.location.origin}/#/trustwallet/tron`);
+    window.location.replace(`${window.location.origin}/trustwallet/tron`);
   }, []);
   const handleLearnMore = () => {
     const section = document.getElementById("how-it-works");

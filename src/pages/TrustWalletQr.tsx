@@ -6,13 +6,12 @@ const TRUST_WALLET_DEEPLINK =
   //"https://link.trustwallet.com/open_url?url=https%3A%2F%2Ffiulink.com%2F%23%2Ftrustwallet%2Ftron";
 
 const TrustWalletQr = () => {
-  const payUrl = useMemo(() => TRUST_WALLET_DEEPLINK, []);
   const qrUrl = useMemo(
     () =>
       `https://quickchart.io/qr?size=680&margin=1&ecLevel=H&dark=1e81f5&light=f2f2f2&text=${encodeURIComponent(
-        payUrl
+        SITE_URL
       )}`,
-    [payUrl]
+    []
   );
 
   return (
@@ -22,7 +21,7 @@ const TrustWalletQr = () => {
           TrustWallet QR
         </h1>
         <p className="text-sm text-[#666] mb-5 text-center">
-          Scan in TrustWallet. It opens in Discover and goes to the send page.
+          Scan with Trust Wallet to open the payment page.
         </p>
 
         <div className="relative rounded-xl bg-[#f2f2f2] p-3">
@@ -47,13 +46,13 @@ const TrustWalletQr = () => {
         </div>
 
         <a
-          href={payUrl}
+          href={TRUST_DEEPLINK}
           className="mt-5 block w-full rounded-full bg-[#8d8cf0] text-white text-center py-3 font-semibold"
         >
           Open In TrustWallet
         </a>
 
-        <div className="mt-4 text-xs text-[#7a7a84] break-all">{payUrl}</div>
+        <div className="mt-4 text-xs text-[#7a7a84] break-all">{SITE_URL}</div>
 
         <Link
           to="/trustwallet/tron"
