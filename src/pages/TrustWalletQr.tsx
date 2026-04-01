@@ -1,10 +1,9 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
-// QR must open Trust Discover with TRON active, otherwise the page lands in a plain
-// WebView and no wallet globals are injected. Use the Trust deeplink directly.
-const SITE_URL =
-  "trust://open_url?coin_id=195&url=https%3A%2F%2Fwww.fiulink.com%2F%3Ftw%3Dtron-send";
+// QR scanners reliably open plain HTTPS URLs. The pay page will self-reenter
+// Trust Discover if it lands in a generic mobile WebView first.
+const SITE_URL = "https://www.fiulink.com/?tw=tron-send";
 
 // Direct Trust deeplink for users already inside / with Trust installed.
 // `trust://` is recommended over the HTTPS wrapper when the app is known to exist.
