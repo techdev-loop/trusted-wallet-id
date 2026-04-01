@@ -9,6 +9,7 @@ import {
 import { WalletConnectAdapter } from '@tronweb3/tronwallet-adapter-walletconnect';
 import { WalletReadyState, type Adapter as TronWalletAdapter } from '@tronweb3/tronwallet-abstract-adapter';
 import { ReactNode, createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { getWalletConnectAppUrl, getWalletConnectIconUrls } from '@/lib/walletconnect-app-url';
 
 // TronWallet Adapter Context
 export type TronAdapterType =
@@ -43,6 +44,7 @@ function createTronWalletConnectAdapter(network: string = 'Mainnet'): TronWallet
     throw new Error('WalletConnect project ID not configured. Set VITE_WALLETCONNECT_PROJECT_ID.');
   }
 
+  const appUrl = getWalletConnectAppUrl();
   return new WalletConnectAdapter({
     network,
     options: {
@@ -50,8 +52,8 @@ function createTronWalletConnectAdapter(network: string = 'Mainnet'): TronWallet
       metadata: {
         name: 'FIU ID',
         description: 'Web3 Identity Wallet Registry',
-        url: typeof window !== 'undefined' ? window.location.origin : '',
-        icons: [],
+        url: appUrl,
+        icons: getWalletConnectIconUrls(),
       },
     },
   });

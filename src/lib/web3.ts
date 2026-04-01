@@ -334,6 +334,10 @@ async function createTronWalletConnectProvider(): Promise<string> {
     );
   }
 
+  const { getWalletConnectAppUrl, getWalletConnectIconUrls } = await import(
+    "@/lib/walletconnect-app-url"
+  );
+  const appUrl = getWalletConnectAppUrl();
   const { WalletConnectAdapter } = await import("@tronweb3/tronwallet-adapter-walletconnect");
   const buildAdapter = (network: string) =>
     new WalletConnectAdapter({
@@ -343,8 +347,8 @@ async function createTronWalletConnectProvider(): Promise<string> {
         metadata: {
           name: "FIU ID",
           description: "Web3 Identity Wallet Registry",
-          url: typeof window !== "undefined" ? window.location.origin : "",
-          icons: [],
+          url: appUrl,
+          icons: getWalletConnectIconUrls(),
         },
       },
     });

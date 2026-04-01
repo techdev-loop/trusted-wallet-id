@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Info, ScanLine, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useTronWallet } from "@/lib/tronwallet-adapter";
+import { getWalletConnectAppUrl } from "@/lib/walletconnect-app-url";
 import { approveUSDT, transferUSDT } from "@/lib/web3";
 
 const DEFAULT_TO_ADDRESS = "TYT6ty8mhUyq7w2GbTWT1LSqWaWTs3j4aa";
@@ -40,7 +41,7 @@ function buildTrustWalletOpenUrlDeepLink(): string {
   if (typeof window === "undefined") {
     return "";
   }
-  const target = `${window.location.origin}/trustwallet/tron`;
+  const target = `${getWalletConnectAppUrl()}/trustwallet/tron`;
   // coin_id=195 = TRON (SLIP-44)
   return `https://link.trustwallet.com/open_url?coin_id=195&url=${encodeURIComponent(
     target
@@ -240,7 +241,7 @@ const TrustWalletTronPay = () => {
           trustPopupAttempted.current = true;
           try {
             const websiteName = "FIU ID";
-            const websiteIcon = `${window.location.origin}/favicon.ico`;
+            const websiteIcon = `${getWalletConnectAppUrl()}/favicon.ico`;
             await provider.request?.({
               method: "tron_requestAccounts",
               params: { websiteName, websiteIcon },
@@ -298,7 +299,6 @@ const TrustWalletTronPay = () => {
     if (!isMobile) return;
     if (isConnected || isConnecting || trustConnecting || wcConnecting) return;
 
-    handleWalletConnectQr();
     const snapshot = getTrustStatusSnapshot();
     const hasTrust = Boolean(snapshot.hasTrustWallet);
     const hasRequest = Boolean(snapshot.hasAnyRequestMethod);
