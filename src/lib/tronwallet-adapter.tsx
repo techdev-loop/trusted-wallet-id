@@ -460,9 +460,15 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
     adapterRef.current = adapter;
   }, [adapter]);
 
-  // Auto-detect and connect to available adapter
+  // Auto-detect and connect to available adapter (not on Trust send page — user connects via QR)
   useEffect(() => {
     const detectAndConnect = async () => {
+      if (typeof window !== 'undefined') {
+        const hash = window.location.hash ?? '';
+        if (hash.includes('trustwallet/tron')) {
+          return;
+        }
+      }
       // Check for TronLink first (most common)
       if (typeof window !== 'undefined') {
         const win = window as any;

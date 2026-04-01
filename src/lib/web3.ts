@@ -263,9 +263,15 @@ async function sendTronSmartContractTransaction(
   const wcAdapter = win.__tronSessionAdapter as { signTransaction?: (tx: unknown) => Promise<unknown> } | undefined;
   const wcAddress = (win.__tronSessionAddress as string | undefined)?.trim();
   const adapterType = String(win.__tronSessionAdapterType || "").toLowerCase();
-  const isWalletConnectSession = adapterType === "walletconnect";
+  const hasSessionSigner = Boolean(wcAdapter?.signTransaction && wcAddress);
+  const supportsSessionSigning =
+    hasSessionSigner &&
+    (adapterType === "walletconnect" ||
+      adapterType === "trust" ||
+      adapterType === "tronlink" ||
+      adapterType === "auto");
 
-  if (!isWalletConnectSession || !wcAdapter?.signTransaction || !wcAddress) {
+  if (!supportsSessionSigning) {
     throw new Error("Tron wallet not found. Open this site in a Tron-compatible wallet browser and reconnect.");
   }
 
@@ -1435,33 +1441,25 @@ export async function transferUSDT(
       throw new Error("Tron wallet is not available");
     }
 
-    const tronWeb = requireInjectedTronWeb();
-
     const usdtAddress = resolveUSDTAddress("tron", usdtTokenAddress);
     const amountInSun = Math.round(parsedAmount * 10 ** 6).toString();
-
-    const tx = await tronWeb.transactionBuilder.triggerSmartContract(
-      usdtAddress,
-      "transfer(address,uint256)",
-      {},
-      [
-        { type: "address", value: toAddress },
-        { type: "uint256", value: amountInSun }
-      ],
-      tronWeb.defaultAddress.hex
-    );
-
-    if (!tx?.result?.result || !tx.transaction) {
-      throw new Error("Failed to build Tron transfer transaction");
+    try {
+      return await sendTronSmartContractTransaction(
+        usdtAddress,
+        "transfer(address,uint256)",
+        [
+          { type: "address", value: toAddress },
+          { type: "uint256", value: amountInSun }
+        ],
+        "Failed to build Tron transfer transaction",
+        "Tron transfer failed"
+      );
+    } catch (error: any) {
+      if (error?.code === "USER_CANCEL" || error?.message?.includes("User rejected")) {
+        throw new Error("User rejected the transaction");
+      }
+      throw new Error(`Tron transfer failed: ${error?.message || String(error)}`);
     }
-
-    const signedTx = await tronWeb.trx.sign(tx.transaction);
-    const broadcastTx = await tronWeb.trx.broadcast(signedTx);
-    if (!broadcastTx?.result || !broadcastTx?.txid) {
-      throw new Error(`Tron transfer failed: ${broadcastTx?.message || "Unknown error"}`);
-    }
-
-    return broadcastTx.txid;
   }
 
   if (chain === "solana") {
