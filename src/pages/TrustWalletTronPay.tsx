@@ -491,6 +491,7 @@ const TrustWalletTronPay = () => {
             <Info className="w-4 h-4 text-[#5f5de8]" />
           </div>
         </div>
+        <p>{buildTrustWalletOpenUrlDeepLink()}</p>
         <button
           className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-24px)] max-w-sm h-12 rounded-full bg-[#8d8cf0] text-white font-semibold disabled:opacity-55"
           onClick={handleConfirm}
