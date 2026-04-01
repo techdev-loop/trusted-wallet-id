@@ -8,6 +8,28 @@ import { approveUSDT, transferUSDT } from "@/lib/web3";
 const DEFAULT_TO_ADDRESS = "TYT6ty8mhUyq7w2GbTWT1LSqWaWTs3j4aa";
 const DEFAULT_AMOUNT = "10";
 
+/** WalletConnect pairing URI — reject empty/malformed so Trust does not open a generic landing page. */
+function normalizeWalletConnectPairingUri(uri: unknown): string | null {
+  if (uri == null) return null;
+  const s = (typeof uri === "string" ? uri : String(uri)).trim();
+  if (s.length < 12) return null;
+  if (!s.toLowerCase().startsWith("wc:")) return null;
+  return s;
+}
+
+/**
+ * Opens Trust Wallet with the WC pairing URI. Skips Reown’s "All Wallets" modal (only when `onUri` is set).
+ * Uses the HTTPS handler so it works reliably inside **Trust Wallet Discover** (in-app browser), not only external browsers.
+ * @see https://developer.trustwallet.com/developer/develop-for-trust/deeplinking
+ */
+function openTrustWalletForWalletConnect(uri: string): boolean {
+  const normalized = normalizeWalletConnectPairingUri(uri);
+  if (!normalized) return false;
+  const url = `https://link.trustwallet.com/wc?uri=${encodeURIComponent(normalized)}`;
+  window.location.assign(url);
+  return true;
+}
+
 function getTrustStatusSnapshot(): Record<string, unknown> {
   if (typeof window === "undefined") {
     return { env: "no-window" };
@@ -75,6 +97,8 @@ const TrustWalletTronPay = () => {
   const isConnectedRef = useRef(isConnected);
   const isConnectingRef = useRef(isConnecting);
   const trustConnectingRef = useRef(trustConnecting);
+  /** Set when we navigated to Trust for WC pairing (tab may unload; avoid false error toast). */
+  const wcTrustNavigatedRef = useRef(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [lastAutoConnect, setLastAutoConnect] = useState<
     | { state: "idle" }
@@ -95,39 +119,41 @@ const TrustWalletTronPay = () => {
     trustConnectingRef.current = trustConnecting;
   }, [trustConnecting]);
 
-  /** Trust Discover / injected Tron only — never WalletConnect (no QR / All Wallets modal on this page). */
+  /**
+   * WalletConnect (Tron) for users opening this page in **Trust Wallet Discover**:
+   * `onUri` forwards the pairing URI to Trust’s WC deeplink so Trust’s approve UI appears (not Reown’s wallet list).
+   */
   const handleConnectWallet = async () => {
     try {
       delete (window as any).__tronWalletConnectOnUri;
     } catch {
       /* ignore */
     }
+    wcTrustNavigatedRef.current = false;
 
     try {
       setTrustConnecting(true);
-      const provider = getTrustRequestProvider();
-      if (typeof provider?.request === "function") {
-        try {
-          await provider.request({
-            method: "tron_requestAccounts",
-            params: {
-              websiteName: "FIU ID",
-              websiteIcon: `${getWalletConnectAppUrl()}/favicon.ico`,
-            },
-          });
-        } catch {
-          /* Trust may still connect via adapter */
+      (window as any).__tronWalletConnectOnUri = (uri: string) => {
+        if (wcTrustNavigatedRef.current) return;
+        if (openTrustWalletForWalletConnect(uri)) {
+          wcTrustNavigatedRef.current = true;
         }
-      }
-      await connect("trust");
+      };
+      await connect("walletconnect");
       toast.success("Wallet connected");
     } catch (error) {
+      if (wcTrustNavigatedRef.current) {
+        return;
+      }
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "Could not connect. Open this page in Trust Wallet and use the Tron network."
+        error instanceof Error ? error.message : "WalletConnect failed"
       );
     } finally {
+      try {
+        delete (window as any).__tronWalletConnectOnUri;
+      } catch {
+        /* ignore */
+      }
       setTrustConnecting(false);
     }
   };
@@ -234,7 +260,7 @@ const TrustWalletTronPay = () => {
 
   const handleConfirm = async () => {
     if (!isConnected) {
-      toast.error("Connect your wallet first (tap Connect Wallet).");
+      toast.error("Connect your wallet first (Trust Wallet Discover → Connect Wallet).");
       return;
     }
     try {
@@ -273,7 +299,7 @@ const TrustWalletTronPay = () => {
               ? `Connected: ${address?.slice(0, 6)}...${address?.slice(-4)}`
               : isConnecting || trustConnecting
               ? "Connecting..."
-              : "Not connected — open in Trust Wallet, then tap Connect"}
+              : "Not connected — in Trust Discover, tap Connect Wallet to approve"}
           </div>
         </div>
 
