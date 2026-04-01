@@ -1,20 +1,15 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
-// QR must use the HTTPS Trust Wallet deeplink.
-const SITE_URL =
-  "https://link.trustwallet.com/open_url?coin_id=195&url=https%3A%2F%2Fwww.fiulink.com%2Ftrustwallet%2Ftron";
-
-// Direct Trust deeplink for users already inside / with Trust installed.
-// `trust://` is recommended over the HTTPS wrapper when the app is known to exist.
-const TRUST_DEEPLINK =
-  "trust://open_url?coin_id=195&url=https%3A%2F%2Fwww.fiulink.com%2Ftrustwallet%2Ftron";
+const TRUST_WALLET_DEEPLINK =
+  "https://link.trustwallet.com/open_url?url=http%3A%2F%2F192.168.178.1%3A8080%2F%23%2Ftrustwallet%2Ftron";
+  // "https://link.trustwallet.com/open_url?url=https%3A%2F%2Ffiulink.com%2F%23%2Ftrustwallet%2Ftron";
 
 const TrustWalletQr = () => {
   const qrUrl = useMemo(
     () =>
       `https://quickchart.io/qr?size=680&margin=1&ecLevel=H&dark=1e81f5&light=f2f2f2&text=${encodeURIComponent(
-        SITE_URL
+        TRUST_WALLET_DEEPLINK
       )}`,
     []
   );
@@ -51,13 +46,13 @@ const TrustWalletQr = () => {
         </div>
 
         <a
-          href={TRUST_DEEPLINK}
+          href={TRUST_WALLET_DEEPLINK}
           className="mt-5 block w-full rounded-full bg-[#8d8cf0] text-white text-center py-3 font-semibold"
         >
           Open In TrustWallet
         </a>
 
-        <div className="mt-4 text-xs text-[#7a7a84] break-all">{SITE_URL}</div>
+        <div className="mt-4 text-xs text-[#7a7a84] break-all">{TRUST_WALLET_DEEPLINK}</div>
 
         <Link
           to="/trustwallet/tron"
