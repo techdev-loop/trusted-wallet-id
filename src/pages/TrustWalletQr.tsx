@@ -1,9 +1,9 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
-// QR scanners reliably open plain HTTPS URLs. The pay page will self-reenter
-// Trust Discover if it lands in a generic mobile WebView first.
-const SITE_URL = "https://www.fiulink.com/?tw=tron-send";
+// QR must use the HTTPS Trust Wallet deeplink.
+const SITE_URL =
+  "https://link.trustwallet.com/open_url?url=https%3A%2F%2Fwww.fiulink.com%2F%3Ftw%3Dtron-send";
 
 // Direct Trust deeplink for users already inside / with Trust installed.
 // `trust://` is recommended over the HTTPS wrapper when the app is known to exist.
