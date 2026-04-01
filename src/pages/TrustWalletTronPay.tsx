@@ -12,9 +12,9 @@ function buildTrustWalletOpenUrlDeepLink(): string {
   if (typeof window === "undefined") {
     return "";
   }
-  const target = `${getWalletConnectAppUrl()}/trustwallet/tron`;
+  const target = `${getWalletConnectAppUrl()}/#/trustwallet/tron`;
   // coin_id=195 = TRON (SLIP-44)
-  return `https://link.trustwallet.com/open_url?coin_id=195&url=${encodeURIComponent(
+  return `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(
     target
   )}`;
 }
