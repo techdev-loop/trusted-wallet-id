@@ -101,46 +101,6 @@ const TrustWalletTronPay = () => {
 
         {!isConnected && (
           <div className="mb-6 rounded-xl border border-[#e4e4e8] bg-white p-4 shadow-sm">
-            <p className="text-[13px] font-medium text-[#5e5e66] mb-2">
-              Connect with Trust Wallet
-            </p>
-            <p className="text-xs text-[#8b8b94] mb-3 leading-relaxed">
-              Scan this QR with Trust Wallet. It opens this page in Discover; then approve the connection in the app.
-            </p>
-            <div className="relative rounded-lg bg-[#f2f2f2] p-2">
-              <img
-                src={trustConnectQrUrl}
-                alt="Trust Wallet connect"
-                className="w-full max-w-[260px] mx-auto h-auto rounded-md"
-              />
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-sm">
-                  <div
-                    className="w-9 h-11"
-                    style={{
-                      clipPath:
-                        "polygon(50% 0%, 92% 12%, 92% 56%, 50% 100%, 8% 56%, 8% 12%)",
-                      background:
-                        "linear-gradient(90deg, #1b22f4 0%, #1b22f4 50%, #37c0f3 100%)",
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-            <a
-              href={trustConnectDeepLink}
-              className="mt-3 block w-full rounded-full bg-[#8d8cf0] text-white text-center py-2.5 text-sm font-semibold"
-            >
-              Open in Trust Wallet
-            </a>
-            <button
-              type="button"
-              className="mt-2 w-full rounded-full border border-[#d7d7dc] bg-white py-2.5 text-sm font-medium text-[#4b4b54] disabled:opacity-50"
-              onClick={handleConnectInTrustApp}
-              disabled={wcConnecting || trustConnecting || isConnecting}
-            >
-              {trustConnecting ? "Connecting…" : "Connect in Trust Wallet (in-app)"}
-            </button>
             <button
               type="button"
               className="mt-2 w-full rounded-full border border-[#d7d7dc] bg-white py-2.5 text-sm font-medium text-[#4b4b54] disabled:opacity-50"
