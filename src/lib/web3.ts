@@ -342,6 +342,7 @@ async function createTronWalletConnectProvider(): Promise<string> {
   const buildAdapter = (network: string) =>
     new WalletConnectAdapter({
       network,
+      enableMobileDeepLink: false,
       options: {
         projectId,
         metadata: {
