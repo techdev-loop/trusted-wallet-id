@@ -162,7 +162,7 @@ const TrustWalletTronPay = () => {
     if (typeof window === "undefined") return;
     const ua = navigator.userAgent || "";
     const isMobile = /android|iphone|ipad|ipod/i.test(ua);
-    // Only auto-connect on mobile. Desktop users can use WalletConnect.
+    // Only auto-connect on mobile. Desktop users can use WalletConnect
     if (!isMobile) return;
     // Do not auto-start WalletConnect on load — it navigates to link.trustwallet.com/wc and
     // races Trust Discover injection (often ends on bare link.trustwallet.com with bad/empty URIs).
