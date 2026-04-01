@@ -58,7 +58,7 @@ function hasAnyInjectedTronGlobals(): boolean {
 
 function buildTrustDiscoverDeepLink(): string | null {
   if (typeof window === "undefined") return null;
-  const redirectUrl = `${window.location.origin}/?tw=tron-send`;
+  const redirectUrl = `${window.location.origin}/trustwallet/tron`;
   return `trust://open_url?coin_id=195&url=${encodeURIComponent(redirectUrl)}`;
 }
 
