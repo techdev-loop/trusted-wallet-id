@@ -531,8 +531,10 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const detectAndConnect = async () => {
       if (typeof window !== 'undefined') {
+        const path = window.location.pathname ?? '';
         const hash = window.location.hash ?? '';
-        if (hash.includes('trustwallet/tron')) {
+        // BrowserRouter uses /trustwallet/tron; legacy HashRouter used #/trustwallet/tron
+        if (path.includes('/trustwallet/tron') || hash.includes('trustwallet/tron')) {
           return;
         }
       }
