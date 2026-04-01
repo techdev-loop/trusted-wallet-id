@@ -9,25 +9,28 @@ const POLL_INTERVAL_MS = 300;
 const MAX_WAIT_MS = 45_000;
 const REQUEST_TIMEOUT_MS = 10_000;
 
-type TronProvider = {
+type TronWebLike = {
   ready?: boolean;
+  defaultAddress?: { base58?: string; hex?: string };
   address?: { fromHex?: (hex: string) => string };
-  tronWeb?: {
-    ready?: boolean;
-    defaultAddress?: { base58?: string; hex?: string };
-    address?: { fromHex?: (hex: string) => string };
-  };
   request?: (payload: { method: string; params?: unknown }) => Promise<unknown>;
 };
 
-function getInjectedTronWeb(): TronProvider["tronWeb"] | null {
+type TronProvider = {
+  ready?: boolean;
+  address?: { fromHex?: (hex: string) => string };
+  tronWeb?: TronWebLike;
+  request?: (payload: { method: string; params?: unknown }) => Promise<unknown>;
+};
+
+function getInjectedTronWeb(): TronWebLike | null {
   if (typeof window === "undefined") return null;
   const w = window as any;
   return (
     w.tronWeb ??
-    w.trustwallet?.tronLink ??
-    w.trustwallet?.tron ??
-    w.tronLink ??
+    w.trustwallet?.tronLink?.tronWeb ??
+    w.trustwallet?.tron?.tronWeb ??
+    w.tronLink?.tronWeb ??
     w.tron?.tronWeb ??
     null
   );
@@ -67,19 +70,22 @@ function getDebugSnapshot(): string {
   const w = window as any;
   const provider = getRequestProvider();
   const tronWeb = getInjectedTronWeb();
-  return JSON.stringify({
-    hasTronWeb: !!w.tronWeb,
-    hasTronLink: !!w.tronLink,
-    hasTrustWallet: !!w.trustwallet,
-    hasTrustTronLink: !!w.trustwallet?.tronLink,
-    hasTrustTron: !!w.trustwallet?.tron,
-    hasTron: !!w.tron,
-    providerReady: provider?.ready,
-    providerHasRequest: typeof provider?.request === "function",
-    tronWebReady: tronWeb?.ready,
-    hasBase58: !!tronWeb?.defaultAddress?.base58,
-    ua: navigator.userAgent.slice(0, 80),
-  });
+  const address = getTronAddress();
+  const lines = [
+    `mobile=${/android|iphone|ipad|ipod/i.test(navigator.userAgent)}`,
+    `hasWindowTronWeb=${!!w.tronWeb}`,
+    `hasWindowTronLink=${!!w.tronLink}`,
+    `hasTrustWallet=${!!w.trustwallet}`,
+    `hasTrustTronLink=${!!w.trustwallet?.tronLink}`,
+    `hasTrustTron=${!!w.trustwallet?.tron}`,
+    `hasWindowTron=${!!w.tron}`,
+    `providerReady=${String(provider?.ready)}`,
+    `providerHasRequest=${typeof provider?.request === "function"}`,
+    `tronWebReady=${String(tronWeb?.ready)}`,
+    `address=${address ?? "-"}`,
+    `ua=${navigator.userAgent.slice(0, 120)}`,
+  ];
+  return lines.join("\n");
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -155,7 +161,6 @@ const TrustWalletTronPay = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string>("");
   const connectInFlight = useRef(false);
-  const requestTriggered = useRef(false);
 
   const isConnected = !!address;
   const toAddress = useMemo(() => DEFAULT_TO_ADDRESS, []);
@@ -167,6 +172,7 @@ const TrustWalletTronPay = () => {
       return;
     }
 
+    let requestTriggered = false;
     connectInFlight.current = true;
     setIsConnecting(true);
     setDebugInfo(getDebugSnapshot());
@@ -184,8 +190,8 @@ const TrustWalletTronPay = () => {
         }
 
         const provider = getRequestProvider();
-        if (provider && typeof provider.request === "function" && !requestTriggered.current) {
-          requestTriggered.current = true;
+        if (provider && typeof provider.request === "function" && !requestTriggered) {
+          requestTriggered = true;
           try {
             await requestTronAccess(provider);
           } catch (error) {
@@ -258,7 +264,6 @@ const TrustWalletTronPay = () => {
     try {
       setIsSubmitting(true);
       if (!getTronAddress()) {
-        requestTriggered.current = false;
         await startAutoConnect();
       }
 
@@ -348,7 +353,7 @@ const TrustWalletTronPay = () => {
         {/* Debug panel — shows what Trust injected. Remove once connection works. */}
         {debugInfo && (
           <div className="mt-6 p-3 bg-white/60 rounded-xl">
-            <p className="text-[10px] font-mono text-[#999] break-all select-all">
+            <p className="text-[10px] leading-4 font-mono text-[#666] whitespace-pre-wrap break-words select-all">
               {debugInfo}
             </p>
           </div>

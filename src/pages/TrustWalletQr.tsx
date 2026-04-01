@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 
 // Use a normal URL first, then let the app redirect to the hash route.
 // QR scanners and deeplinks can mishandle URL fragments.
-const SITE_URL = "https://link.trustwallet.com/open_url?coin_id=195&url=https%3A%2F%2Fwww.fiulink.com%2F%23%2Ftrustwallet%2Ftron";
+const SITE_URL = "https://link.trustwallet.com/open_url?url=https%3A%2F%2Fwww.fiulink.com%2F%23%2Ftrustwallet%2Ftron";
 
 // Direct Trust deeplink for users already inside / with Trust installed.
 // `trust://` is recommended over the HTTPS wrapper when the app is known to exist.
