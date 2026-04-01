@@ -1,8 +1,10 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
+// coin_id=195 = TRON (SLIP-44) — tells Trust to open Discover with Tron network active,
+// which is required for Trust to inject window.tronLink / window.trustwallet.tronLink.
 const TRUST_WALLET_DEEPLINK =
-  "https://link.trustwallet.com/open_url?url=https%3A%2F%2Ffiulink.com%2F%23%2Ftrustwallet%2Ftron";
+  "https://link.trustwallet.com/open_url?coin_id=195&url=https%3A%2F%2Fwww.fiulink.com%2F%23%2Ftrustwallet%2Ftron";
 
 const TrustWalletQr = () => {
   const payUrl = useMemo(() => TRUST_WALLET_DEEPLINK, []);
