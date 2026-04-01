@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
 /** Tron SLIP-44 = 195. Target path must match BrowserRouter (no #/). */
-const TRUST_WALLET_DEEPLINK = `https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Ftrusted-wallet-id.vercel.app%2Ftrustwallet%2Ftron`;
+const TRUST_WALLET_DEEPLINK = `https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Ffiulink.com%2Ftrustwallet%2Ftron`;
 
 const TrustWalletQr = () => {
   const qrUrl = useMemo(
