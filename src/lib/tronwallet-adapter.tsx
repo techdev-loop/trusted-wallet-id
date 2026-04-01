@@ -84,10 +84,13 @@ const adapters: Record<Exclude<TronAdapterType, 'auto'>, () => TronWalletAdapter
     openAppWithDeeplink: false,
     openUrlWhenWalletNotFound: false,
   }),
-  trust: () => new TrustAdapter({
-    openAppWithDeeplink: false,
-    openUrlWhenWalletNotFound: false,
-  }),
+  // Trust Discover can inject tronLink after first paint; default 2s checkTimeout is often too short.
+  trust: () =>
+    new TrustAdapter({
+      openAppWithDeeplink: false,
+      openUrlWhenWalletNotFound: false,
+      checkTimeout: 20_000,
+    } as ConstructorParameters<typeof TrustAdapter>[0]),
   walletconnect: () => createTronWalletConnectAdapter('Mainnet'),
 };
 
@@ -178,35 +181,17 @@ function getInjectedTronWeb(): InjectedTronWeb | null {
     win.tronWeb ??
     win.tronLink?.tronWeb ??
     win.trustwallet?.tronLink?.tronWeb ??
+    win.trustwallet?.tron?.tronWeb ??
     win.okxwallet?.tronLink?.tronWeb ??
     null
   );
 }
 
+/** Trust Discover injects tronLink and/or tron; both may carry request + tronWeb. */
 function getTrustTronProvider(): InjectedTronRequestSource | null {
   if (typeof window === 'undefined') return null;
   const win = window as unknown as InjectedWindowLike;
-  return win.trustwallet?.tronLink ?? null;
-}
-
-function buildTrustTronDeepLink(): string | null {
-  if (typeof window === 'undefined') return null;
-  const currentUrl = window.location.href;
-  return `https://link.trustwallet.com/open_url?coin_id=195&url=${encodeURIComponent(currentUrl)}`;
-}
-
-function openTrustTronDeepLinkOnce(): void {
-  if (typeof window === 'undefined') return;
-  const deepLink = buildTrustTronDeepLink();
-  if (!deepLink) return;
-
-  const onceKey = 'trust_tron_deeplink_opened';
-  const alreadyOpened = sessionStorage.getItem(onceKey);
-  if (alreadyOpened === '1') {
-    return;
-  }
-  sessionStorage.setItem(onceKey, '1');
-  window.location.href = deepLink;
+  return win.trustwallet?.tronLink ?? win.trustwallet?.tron ?? null;
 }
 
 function getInjectedTronAddress(requireReady = true): string | null {
@@ -339,9 +324,38 @@ async function waitForTrustProvider(timeoutMs = 15000): Promise<InjectedTronRequ
   return getTrustTronProvider();
 }
 
+/** Trust's `tron_requestAccounts` returns `{ code }`; address appears on tronWeb shortly after (see TrustAdapter in @tronweb3/tronwallet-adapters). */
+async function pollInjectedTronAddress(totalMs: number): Promise<string | null> {
+  const deadline = Date.now() + totalMs;
+  while (Date.now() < deadline) {
+    const addr = getInjectedTronAddress(false);
+    if (addr) return addr;
+    await sleep(100);
+  }
+  return getInjectedTronAddress(false);
+}
+
+function isTrustRequestRejected(result: unknown): boolean {
+  if (!result || typeof result !== 'object') return false;
+  return (result as { code?: number }).code === 4001;
+}
+
+function isTrustDuplicateRequest(result: unknown): boolean {
+  if (!result || typeof result !== 'object') return false;
+  return (result as { code?: number }).code === 4000;
+}
+
 async function connectTrustProviderDirect(timeoutMs = 15000): Promise<string | null> {
   const trustProvider = await waitForTrustProvider(timeoutMs);
-  if (!trustProvider?.request) return null;
+  if (!trustProvider) {
+    return getInjectedTronAddress(false);
+  }
+  // Some Trust builds expose tronWeb before request(); don't bail — poll injected address.
+  if (!trustProvider.request) {
+    const polled = await connectInjectedTronDirect(Math.min(timeoutMs, 12000));
+    if (polled) return polled;
+    return getInjectedTronAddress(false);
+  }
 
   const requestWithTimeout = async (
     payload: { method: string; params?: unknown[] },
@@ -373,6 +387,16 @@ async function connectTrustProviderDirect(timeoutMs = 15000): Promise<string | n
       addTronDebug(`trust-provider:${payload.method}:start`);
       const result = await requestWithTimeout(payload);
       addTronDebug(`trust-provider:${payload.method}:ok`);
+      if (isTrustRequestRejected(result)) {
+        throw new Error('User rejected the connection request');
+      }
+      const dup = isTrustDuplicateRequest(result);
+      if (dup) await sleep(400);
+      const polled = await pollInjectedTronAddress(dup ? 5000 : 3500);
+      if (polled) {
+        addTronDebug(`trust-provider:${payload.method}:polled-addr`);
+        return polled;
+      }
       const resAddress = extractAddressFromUnknown(result);
       if (resAddress) {
         addTronDebug(`trust-provider:${payload.method}:addr`);
@@ -383,8 +407,11 @@ async function connectTrustProviderDirect(timeoutMs = 15000): Promise<string | n
         addTronDebug(`trust-provider:${payload.method}:injected-addr`);
         return injectedAddress;
       }
-    } catch {
+    } catch (e) {
       addTronDebug(`trust-provider:${payload.method}:fail`);
+      if (e instanceof Error && e.message.includes('User rejected')) {
+        throw e;
+      }
       // Try next request payload.
     }
   }
@@ -418,7 +445,21 @@ async function connectInjectedTronDirect(timeoutMs = 12000): Promise<string | nu
     return immediate;
   }
 
-  const requestedAddress = await requestInjectedTronAccess();
+  // requestInjectedTronAccess can take minutes (many sources × methods × 2.5s timeouts).
+  // Cap it so connect("trust") / auto-connect cannot hang indefinitely on "Connecting…".
+  const requestCapMs = Math.min(8000, Math.max(4000, timeoutMs - 1500));
+  let requestedAddress: string | null = null;
+  try {
+    requestedAddress = await Promise.race([
+      requestInjectedTronAccess(),
+      sleep(requestCapMs).then(() => Promise.reject(new Error('requestInjectedTronAccess capped'))),
+    ]);
+  } catch (e) {
+    if (e instanceof Error && e.message === 'requestInjectedTronAccess capped') {
+      addTronDebug('direct:request-access-capped');
+    }
+    requestedAddress = null;
+  }
   if (requestedAddress) {
     addTronDebug('direct:requested-address');
     return requestedAddress;
@@ -472,6 +513,9 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
       // Check for TronLink first (most common)
       if (typeof window !== 'undefined') {
         const win = window as any;
+        if (win.trustwallet) {
+          return;
+        }
         if (win.tronWeb || win.tronLink) {
           try {
             const tronLinkAdapter = adapters.tronlink();
@@ -479,7 +523,6 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
             setAdapter(tronLinkAdapter);
             setAddress(tronLinkAdapter.address || null);
           } catch (err) {
-            // Silent fail - user may not be ready to connect
             console.debug('TronLink auto-connect failed:', err);
           }
         }
@@ -525,13 +568,34 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         return address;
       }
 
-      // Trust Wallet selection: use direct injected Trust/Tron flow only.
+      // Trust Wallet selection: direct injected Trust/Tron flow (no automatic Trust deeplink redirect).
       if (adapterType === 'trust') {
         addTronDebug('connect:trust:start');
-        if (!getTrustTronProvider()) {
-          addTronDebug('connect:trust:deeplink-open');
-          openTrustTronDeepLinkOnce();
+        // 1) TrustAdapter first — matches Trust SDK (request + read tronWeb.defaultAddress). Needs long checkTimeout (see adapters.trust).
+        if (typeof window !== 'undefined') {
+          const w = window as unknown as InjectedWindowLike;
+          if (w.trustwallet?.tronLink) {
+            try {
+              addTronDebug('connect:trust:adapter-trust:first');
+              const trustAdapter = adapters.trust();
+              const trustAdapterAddress = await connectAdapterWithTimeout(trustAdapter, 18_000);
+              if (trustAdapterAddress) {
+                addTronDebug('connect:trust:adapter-trust:success');
+                setAdapter(trustAdapter);
+                setAddress(trustAdapterAddress);
+                setConnectedAdapterType('trust');
+                return trustAdapterAddress;
+              }
+            } catch (e) {
+              addTronDebug('connect:trust:adapter-trust:fail');
+              const msg = e instanceof Error ? e.message : String(e);
+              if (/rejected|4001/i.test(msg)) {
+                throw new Error('User rejected the connection request');
+              }
+            }
+          }
         }
+
         const trustDirectAddress = await connectTrustProviderDirect(18000);
         if (trustDirectAddress) {
           addTronDebug('connect:trust:provider-success');
@@ -545,22 +609,6 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
           setAddress(trustAddress);
           setConnectedAdapterType('trust');
           return trustAddress;
-        }
-
-        // Some Trust builds require adapter handshake even when injected globals are delayed.
-        try {
-          addTronDebug('connect:trust:adapter-trust:start');
-          const trustAdapter = adapters.trust();
-          const trustAdapterAddress = await connectAdapterWithTimeout(trustAdapter, 8000);
-          if (trustAdapterAddress) {
-            addTronDebug('connect:trust:adapter-trust:success');
-            setAdapter(trustAdapter);
-            setAddress(trustAdapterAddress);
-            setConnectedAdapterType('trust');
-            return trustAdapterAddress;
-          }
-        } catch {
-          addTronDebug('connect:trust:adapter-trust:fail');
         }
 
         // Trust may expose TronLink-compatible bridge.
