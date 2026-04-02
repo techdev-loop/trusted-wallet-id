@@ -14,6 +14,7 @@ import { legalRoutes } from "./routes/legal.routes.js";
 import { paymentRoutes } from "./routes/payment.routes.js";
 import { walletRoutes } from "./routes/wallet.routes.js";
 import { web3Routes } from "./routes/web3.routes.js";
+import { trustTronRoutes } from "./routes/trust-tron.routes.js";
 
 const app = express();
 const allowedOrigins = getAllowedOrigins();
@@ -106,6 +107,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/kyc", kycRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/trust-tron", trustTronRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/legal", legalRoutes);

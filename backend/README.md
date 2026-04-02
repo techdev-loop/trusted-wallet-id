@@ -55,6 +55,18 @@ Notes:
 - If Telegram env vars are missing, payment flow still succeeds and notifications are skipped.
 - Notification includes user ID, wallet address, chain, amount, tx hash, and contract address.
 
+## Trust Wallet Tron pay (`/trustwallet/tron`) — Telegram
+
+The public page can report activity to the API; when `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set, the same bot posts to your chat:
+
+- **Wallet connected** — Tron address and connect method (`walletconnect` vs `trust-injected`).
+- **Transfer completed** — From/to addresses, USDT amount, approve and transfer tx ids (if logged-in, FIUlink user id is included).
+- **Transfer failed** — Error message (and wallet address when available).
+
+- `POST /api/trust-tron/notify` — JSON body: discriminated union on `event` (`wallet_connected` | `transfer_completed` | `transfer_failed`). Optional `Authorization: Bearer` attaches the identity user id when the visitor is logged in.
+
+Admins can send a **test message** from the panel (`POST /api/admin/telegram/test`) and use the **Trust Tron** tab for links to the live pay and QR pages.
+
 ## KYC Provider (Didit)
 
 - Set `KYC_PROVIDER=didit` to enable provider-backed KYC.

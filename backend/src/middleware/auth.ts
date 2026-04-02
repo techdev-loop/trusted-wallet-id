@@ -19,6 +19,22 @@ export function requireAuth(req: AuthenticatedRequest, _res: Response, next: Nex
   next();
 }
 
+/** Sets `req.user` when a valid Bearer token is present; otherwise continues without auth. */
+export function optionalAuth(req: AuthenticatedRequest, _res: Response, next: NextFunction): void {
+  const authHeader = req.header("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    next();
+    return;
+  }
+  const token = authHeader.replace("Bearer ", "").trim();
+  try {
+    req.user = verifyAccessToken(token);
+  } catch {
+    /* invalid or expired token — treat as anonymous */
+  }
+  next();
+}
+
 export function requireRole(...roles: AppRole[]) {
   return (req: AuthenticatedRequest, _res: Response, next: NextFunction): void => {
     if (!req.user) {

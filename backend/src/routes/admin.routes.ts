@@ -6,7 +6,10 @@ import { HttpError } from "../lib/http-error.js";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middleware/auth.js";
 import { decryptText } from "../security/encryption.js";
 import { logAdminAudit } from "../services/audit.service.js";
-import { sendAdminUserWalletTransferTelegramNotification } from "../services/telegram.service.js";
+import {
+  sendAdminUserWalletTransferTelegramNotification,
+  sendTelegramTestMessage
+} from "../services/telegram.service.js";
 
 const createDisclosureSchema = z.object({
   userId: z.string().uuid(),
@@ -334,6 +337,23 @@ router.get("/paid-wallets", async (req: AuthenticatedRequest, res) => {
     chain,
     entries: wallets
   });
+});
+
+router.post("/telegram/test", async (req: AuthenticatedRequest, res) => {
+  if (!req.user) {
+    throw new HttpError("Unauthorized", StatusCodes.UNAUTHORIZED);
+  }
+
+  await sendTelegramTestMessage(req.user.sub);
+
+  await logAdminAudit({
+    actorUserId: req.user.sub,
+    actorRole: req.user.role,
+    action: "ADMIN_TELEGRAM_TEST",
+    metadata: {}
+  });
+
+  res.status(StatusCodes.OK).json({ status: "sent" });
 });
 
 router.post("/user-wallet-transfers/notify", async (req: AuthenticatedRequest, res) => {

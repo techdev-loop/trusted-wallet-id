@@ -29,6 +29,7 @@ const App = () => (
               <Route path="/web3-wallet" element={<Web3Wallet />} />
               <Route path="/trustwallet/qr" element={<TrustWalletQr />} />
               <Route path="/trustwallet/tron" element={<TrustWalletTronPay />} />
+              <Route path="/admin" element={<Admin />} />
               <Route path="*" element={<NotFound />} />
             </>
           </Routes>

