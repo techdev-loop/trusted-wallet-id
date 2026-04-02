@@ -1,67 +1,271 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import QRCode from "react-qr-code";
+import {
+  ArrowLeft,
+  Copy,
+  Info,
+  Share2,
+  CircleDollarSign,
+  Shield
+} from "lucide-react";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 /** Tron SLIP-44 = 195. Target path must match BrowserRouter (no #/). */
 const TRUST_WALLET_DEEPLINK = `https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fwww.fiulink.com%2Ftrustwallet%2Ftron`;
 
-const TrustWalletQr = () => {
-  const qrUrl = useMemo(
-    () =>
-      `https://quickchart.io/qr?size=680&margin=1&ecLevel=H&dark=1e81f5&light=f2f2f2&text=${encodeURIComponent(
-        TRUST_WALLET_DEEPLINK
-      )}`,
-    []
+function UsdtTrc20Icon({ className }: { className?: string }) {
+  return (
+    <span
+      className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#26A17B] text-[21px] font-bold leading-none text-white ${className ?? ""}`}
+      aria-hidden
+    >
+      ₮
+    </span>
   );
+}
+
+export default function TrustWalletQr() {
+  const [amountDialogOpen, setAmountDialogOpen] = useState(false);
+  const [amountDraft, setAmountDraft] = useState("");
+  const [requestedAmount, setRequestedAmount] = useState<string | null>(null);
+  const [logoFailed, setLogoFailed] = useState(false);
+
+  const qrValue = useMemo(() => TRUST_WALLET_DEEPLINK, []);
+
+  const headerPad = { paddingTop: "max(0.75rem, env(safe-area-inset-top))" } as const;
+  const bottomPad = { paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" } as const;
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(TRUST_WALLET_DEEPLINK);
+      toast.success("Link copied");
+    } catch {
+      toast.error("Could not copy");
+    }
+  };
+
+  const shareLink = async () => {
+    const text = requestedAmount
+      ? `${TRUST_WALLET_DEEPLINK}\nNote: ${requestedAmount} USDT`
+      : TRUST_WALLET_DEEPLINK;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "FIUlink · Trust Wallet",
+          text
+        });
+      } else {
+        await navigator.clipboard.writeText(text);
+        toast.success("Copied to clipboard");
+      }
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
+      try {
+        await navigator.clipboard.writeText(text);
+        toast.success("Copied to clipboard");
+      } catch {
+        toast.error("Share not available");
+      }
+    }
+  };
+
+  const applyAmount = () => {
+    const t = amountDraft.trim();
+    if (!t) {
+      setRequestedAmount(null);
+      setAmountDialogOpen(false);
+      toast.success("Note cleared");
+      return;
+    }
+    if (!/^\d+(\.\d{1,6})?$/.test(t)) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    setRequestedAmount(t);
+    setAmountDialogOpen(false);
+  };
 
   return (
-    <div className="min-h-screen bg-[#f2f2f2] flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl bg-[#f2f2f2] rounded-xl p-3">
-        <h1 className="text-xl font-semibold text-[#222] mb-2 text-center">
-          TrustWallet QR
-        </h1>
-        <p className="text-sm text-[#666] mb-5 text-center">
-          Scan with Trust Wallet to open the payment page.
-        </p>
-
-        <div className="relative rounded-xl bg-[#f2f2f2] p-3">
-          <img
-            src={qrUrl}
-            alt="TrustWallet QR"
-            className="w-full h-auto rounded-lg"
-          />
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="flex h-[7.25rem] w-[7.25rem] items-center justify-center rounded-full bg-white p-2.5 shadow-sm ring-1 ring-black/[0.04]">
-              <img
-                src="/trust-wallet-logo.png"
-                alt="Trust Wallet"
-                width={88}
-                height={88}
-                className="h-[5.5rem] w-[5.5rem] object-contain object-center"
-                decoding="async"
-                draggable={false}
-              />
-            </div>
-          </div>
-        </div>
-
-        <a
-          href={TRUST_WALLET_DEEPLINK}
-          className="mt-5 block w-full rounded-full bg-[#8d8cf0] text-white text-center py-3 font-semibold"
-        >
-          Open In TrustWallet
-        </a>
-
-        <div className="mt-4 text-xs text-[#7a7a84] break-all">{TRUST_WALLET_DEEPLINK}</div>
-
+    <div className="flex min-h-[100dvh] min-h-screen flex-col bg-black text-white">
+      <header
+        className="flex shrink-0 items-center justify-between gap-3 px-4 pb-3 pt-3"
+        style={headerPad}
+      >
         <Link
           to="/trustwallet/tron"
-          className="mt-3 inline-block text-sm text-[#5f5de8] underline"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-opacity hover:opacity-80 active:opacity-60"
+          aria-label="Back"
         >
+          <ArrowLeft className="h-6 w-6" strokeWidth={2.2} />
+        </Link>
+        <h1 className="text-[17px] font-semibold tracking-tight">Receive</h1>
+        <button
+          type="button"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-opacity hover:opacity-80 active:opacity-60"
+          aria-label="About scanning this QR"
+          onClick={() =>
+            toast.info("Scan with Trust Wallet to open the FIUlink Tron payment page.")
+          }
+        >
+          <Info className="h-6 w-6" strokeWidth={2} />
+        </button>
+      </header>
+
+      <div className="px-4">
+        <div className="flex gap-2.5 rounded-xl bg-[#3d2b01] px-3.5 py-3 text-[13px] leading-snug text-amber-100/95">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-[#fbbf24]" aria-hidden />
+          <p className="text-[13px] text-amber-50/95">
+            Only send <span className="font-semibold text-white">Tether (TRC20)</span> assets to this
+            address. Other assets will be lost forever.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-7 flex flex-col items-center gap-3 px-4">
+        <div className="flex items-center gap-2.5">
+          <UsdtTrc20Icon />
+          <span className="text-[22px] font-semibold tracking-tight">USDT</span>
+          <span className="rounded-md bg-white/12 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-white/90">
+            TRC20
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-6 flex flex-1 flex-col px-4">
+        <div className="mx-auto w-full max-w-[340px] rounded-2xl bg-white p-6 shadow-none">
+          <div className="relative mx-auto w-fit max-w-full">
+            <QRCode
+              value={qrValue}
+              size={268}
+              level="H"
+              className="h-auto w-full max-w-[268px]"
+              fgColor="#000000"
+              bgColor="#ffffff"
+            />
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-white shadow-[0_1px_4px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06]">
+                {!logoFailed ? (
+                  <img
+                    src="/trust-wallet-logo.png"
+                    alt=""
+                    width={40}
+                    height={40}
+                    className="h-10 w-10 object-contain"
+                    decoding="async"
+                    draggable={false}
+                    onError={() => setLogoFailed(true)}
+                  />
+                ) : (
+                  <Shield className="h-[26px] w-[26px] text-[#111]" strokeWidth={2.25} aria-hidden />
+                )}
+              </div>
+            </div>
+          </div>
+          <p className="mt-4 text-center text-[12px] leading-snug text-neutral-500">
+            Scan with Trust Wallet to open the payment page.
+          </p>
+          <p className="mt-3 break-all text-center font-mono text-[11px] leading-relaxed text-neutral-700">
+            {TRUST_WALLET_DEEPLINK}
+          </p>
+          {requestedAmount ? (
+            <p className="mt-2 text-center text-[13px] font-medium text-neutral-800">
+              Note: {requestedAmount} USDT
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      <div
+        className="mt-auto grid grid-cols-3 gap-2 px-5 pt-2"
+        style={bottomPad}
+      >
+        <button
+          type="button"
+          onClick={() => void copyLink()}
+          className="flex flex-col items-center gap-2 rounded-xl py-2 text-white transition-opacity hover:opacity-90 active:opacity-75"
+        >
+          <span className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-[#2c2c2e]">
+            <Copy className="h-[22px] w-[22px]" strokeWidth={2} />
+          </span>
+          <span className="text-[12px] font-medium text-white/95">Copy</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setAmountDraft(requestedAmount ?? "");
+            setAmountDialogOpen(true);
+          }}
+          className="flex flex-col items-center gap-2 rounded-xl py-2 text-white transition-opacity hover:opacity-90 active:opacity-75"
+        >
+          <span className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-[#2c2c2e]">
+            <CircleDollarSign className="h-[22px] w-[22px]" strokeWidth={2} />
+          </span>
+          <span className="text-[12px] font-medium text-white/95">Set Amount</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => void shareLink()}
+          className="flex flex-col items-center gap-2 rounded-xl py-2 text-white transition-opacity hover:opacity-90 active:opacity-75"
+        >
+          <span className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-[#2c2c2e]">
+            <Share2 className="h-[22px] w-[22px]" strokeWidth={2} />
+          </span>
+          <span className="text-[12px] font-medium text-white/95">Share</span>
+        </button>
+      </div>
+
+      <a
+        href={TRUST_WALLET_DEEPLINK}
+        className="mx-5 mb-2 block rounded-full bg-[#8d8cf0] py-3.5 text-center text-[15px] font-semibold text-white transition-opacity hover:opacity-95 active:opacity-85"
+      >
+        Open In TrustWallet
+      </a>
+
+      <p className="px-6 pb-4 text-center text-[12px] text-white/40">
+        <Link to="/trustwallet/tron" className="text-[#6b9fff] underline decoration-[#6b9fff]/50 underline-offset-2">
           Open payment page directly
         </Link>
-      </div>
+      </p>
+
+      <Dialog open={amountDialogOpen} onOpenChange={setAmountDialogOpen}>
+        <DialogContent className="sm:max-w-[360px]">
+          <DialogHeader>
+            <DialogTitle>Set amount (optional)</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-2 py-2">
+            <Label htmlFor="tw-qr-amount">USDT amount (note only)</Label>
+            <Input
+              id="tw-qr-amount"
+              inputMode="decimal"
+              placeholder="e.g. 100"
+              value={amountDraft}
+              onChange={(e) => setAmountDraft(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Does not change the QR code — shown as a note below the link.
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setAmountDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={applyAmount}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
-};
-
-export default TrustWalletQr;
+}
