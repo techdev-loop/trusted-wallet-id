@@ -30,15 +30,15 @@ const TrustWalletQr = () => {
             className="w-full h-auto rounded-lg"
           />
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-28 h-28 rounded-full bg-white flex items-center justify-center shadow-sm">
-              <div
-                className="w-16 h-20"
-                style={{
-                  clipPath:
-                    "polygon(50% 0%, 92% 12%, 92% 56%, 50% 100%, 8% 56%, 8% 12%)",
-                  background:
-                    "linear-gradient(90deg, #1b22f4 0%, #1b22f4 50%, #37c0f3 100%)"
-                }}
+            <div className="flex h-[7.25rem] w-[7.25rem] items-center justify-center rounded-full bg-white p-2.5 shadow-sm ring-1 ring-black/[0.04]">
+              <img
+                src="/trust-wallet-logo.png"
+                alt="Trust Wallet"
+                width={88}
+                height={88}
+                className="h-[5.5rem] w-[5.5rem] object-contain object-center"
+                decoding="async"
+                draggable={false}
               />
             </div>
           </div>
