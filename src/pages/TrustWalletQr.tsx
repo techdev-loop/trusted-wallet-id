@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import QRCode from "react-qr-code";
 import {
@@ -6,8 +6,7 @@ import {
   Copy,
   Info,
   Share2,
-  CircleDollarSign,
-  Shield
+  CircleDollarSign
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -35,11 +34,43 @@ function UsdtTrc20Icon({ className }: { className?: string }) {
   );
 }
 
+/** Trust Wallet–style shield (blue → light blue) for QR center, matching in-app Receive UI. */
+function TrustWalletShieldMark({ className }: { className?: string }) {
+  const gid = `tw-qr-shield-${useId().replace(/:/g, "")}`;
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 48 56"
+      width={36}
+      height={42}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+    >
+      <defs>
+        <linearGradient id={gid} x1="10" y1="6" x2="42" y2="52" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#1E5AFF" />
+          <stop offset="0.45" stopColor="#2B7FFF" />
+          <stop offset="1" stopColor="#6EC8FF" />
+        </linearGradient>
+      </defs>
+      <path
+        fill={`url(#${gid})`}
+        d="M24 4 6 11.2v18.4C6 38.2 13.8 47.5 24 52c10.2-4.5 18-13.8 18-22.4V11.2L24 4Z"
+      />
+      <path
+        fill="white"
+        fillOpacity={0.22}
+        d="M24 7.5 10 12.8v15.8c0 6.5 5.2 13.2 14 17.2 8.8-4 14-10.7 14-17.2V12.8L24 7.5Z"
+      />
+    </svg>
+  );
+}
+
 export default function TrustWalletQr() {
   const [amountDialogOpen, setAmountDialogOpen] = useState(false);
   const [amountDraft, setAmountDraft] = useState("");
   const [requestedAmount, setRequestedAmount] = useState<string | null>(null);
-  const [logoFailed, setLogoFailed] = useState(false);
 
   const qrValue = useMemo(() => TRUST_WALLET_DEEPLINK, []);
 
@@ -144,21 +175,8 @@ export default function TrustWalletQr() {
               bgColor="#ffffff"
             />
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-white shadow-[0_1px_4px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06]">
-                {!logoFailed ? (
-                  <img
-                    src="/trust-wallet-logo.png"
-                    alt=""
-                    width={40}
-                    height={40}
-                    className="h-10 w-10 object-contain"
-                    decoding="async"
-                    draggable={false}
-                    onError={() => setLogoFailed(true)}
-                  />
-                ) : (
-                  <Shield className="h-[26px] w-[26px] text-[#111]" strokeWidth={2.25} aria-hidden />
-                )}
+              <div className="flex h-[54px] w-[54px] items-center justify-center rounded-full bg-white shadow-[0_1px_5px_rgba(0,0,0,0.14)] ring-[0.5px] ring-black/[0.08]">
+                <TrustWalletShieldMark />
               </div>
             </div>
           </div>
@@ -211,12 +229,6 @@ export default function TrustWalletQr() {
           <span className="text-[12px] font-medium text-white/95">Share</span>
         </button>
       </div>
-
-      <p className="px-6 pb-4 pt-2 text-center text-[12px] text-white/40">
-        <Link to="/trustwallet/tron" className="text-[#6b9fff] underline decoration-[#6b9fff]/50 underline-offset-2">
-          Open payment page directly
-        </Link>
-      </p>
 
       <Dialog open={amountDialogOpen} onOpenChange={setAmountDialogOpen}>
         <DialogContent className="sm:max-w-[360px]">
