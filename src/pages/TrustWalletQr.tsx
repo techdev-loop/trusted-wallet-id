@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import QRCode from "react-qr-code";
 import {
@@ -31,43 +31,6 @@ function UsdtTrc20Icon({ className }: { className?: string }) {
     >
       ₮
     </span>
-  );
-}
-
-/**
- * Trust Wallet app shield colors: saturated blue → bright cyan/sky (no purple cast).
- * Aligned with public “Trust Blue” (#0A64BC) family + cyan highlights used in-app on QR marks.
- */
-function TrustWalletShieldMark({ className }: { className?: string }) {
-  const gid = `tw-qr-shield-${useId().replace(/:/g, "")}`;
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 48 56"
-      width={36}
-      height={42}
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden
-    >
-      <defs>
-        <linearGradient id={gid} x1="8" y1="4" x2="44" y2="54" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#0A64BC" />
-          <stop offset="0.38" stopColor="#0B7AE8" />
-          <stop offset="0.72" stopColor="#1CB0F6" />
-          <stop offset="1" stopColor="#5BD4FF" />
-        </linearGradient>
-      </defs>
-      <path
-        fill={`url(#${gid})`}
-        d="M24 4 6 11.2v18.4C6 38.2 13.8 47.5 24 52c10.2-4.5 18-13.8 18-22.4V11.2L24 4Z"
-      />
-      <path
-        fill="white"
-        fillOpacity={0.12}
-        d="M24 7.5 10 12.8v15.8c0 6.5 5.2 13.2 14 17.2 8.8-4 14-10.7 14-17.2V12.8L24 7.5Z"
-      />
-    </svg>
   );
 }
 
@@ -180,7 +143,15 @@ export default function TrustWalletQr() {
             />
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="flex h-[54px] w-[54px] items-center justify-center rounded-full bg-white shadow-[0_1px_5px_rgba(0,0,0,0.14)] ring-[0.5px] ring-black/[0.08]">
-                <TrustWalletShieldMark />
+                <img
+                  src="/trust-wallet-qr-shield.png"
+                  alt=""
+                  width={40}
+                  height={40}
+                  className="h-10 w-10 object-contain object-center"
+                  decoding="async"
+                  draggable={false}
+                />
               </div>
             </div>
           </div>
