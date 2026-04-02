@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, BookUser, ChevronDown, Info, ScanLine, Wallet, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Info, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { useTronWallet } from "@/lib/tronwallet-adapter";
 import { getWalletConnectAppUrl } from "@/lib/walletconnect-app-url";
@@ -14,18 +14,61 @@ function looksLikeTronAddress(s: string): boolean {
   return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(t);
 }
 
-/** Simplified Tron mark: red disc + white diamond (Trust-style chip). */
+/** Trust-style clipboard (paired with Paste action). Stroke tuned to match in-app wallet. */
+function PasteIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width={20}
+      height={20}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+    >
+      <path
+        d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-2"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <rect x="8" y="2" width="8" height="4" rx="1" fill="none" stroke="currentColor" strokeWidth={2} />
+      <path d="M8 12h8M8 16h6" stroke="currentColor" strokeWidth={2} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Corner bracket scan frame (Trust send screen). */
+function ScanIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width={20}
+      height={20}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+    >
+      <path
+        d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Tron chip: red circle + white triangle (reference UI). */
 function TronNetworkIcon({ className }: { className?: string }) {
   return (
     <span
       className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#eb0029] ${className ?? ""}`}
       aria-hidden
     >
-      <svg viewBox="0 0 24 24" className="h-[15px] w-[15px]" fill="none">
-        <path
-          fill="white"
-          d="M12 4.5l6.2 7.5L12 19.5 5.8 12 12 4.5z"
-        />
+      <svg viewBox="0 0 24 24" className="h-[14px] w-[14px]" fill="none">
+        <path fill="white" d="M12 6.5 17 17H7l5-10.5z" />
       </svg>
     </span>
   );
@@ -213,22 +256,22 @@ const TrustWalletTronPay = () => {
         return;
       }
       if (Date.now() - startedAt > timeoutMs) return;
-      
+
       const w = window as any;
       const hasInjectedTrust =
-      Boolean(w.trustwallet?.tronLink) || Boolean(w.trustwallet?.tron);
+        Boolean(w.trustwallet?.tronLink) || Boolean(w.trustwallet?.tron);
       const uaLooksTrust = /trust/i.test(ua);
-      
+
       // Only auto-connect if we're already in Trust (Discover / in-app browser).
       if (!hasInjectedTrust && !uaLooksTrust) return;
-      
+
       // If Trust is injected but request() isn't ready yet, keep waiting.
       const provider = getTrustRequestProvider();
       const hasRequest = typeof provider?.request === "function";
       if (!hasRequest) {
         return;
       }
-      
+
       // Mark as attempted only once we're actually able to trigger a request/connect.
       if (autoConnectAttempted.current) return;
       autoConnectAttempted.current = true;
@@ -248,7 +291,7 @@ const TrustWalletTronPay = () => {
             // Ignore here; connect("trust") will surface meaningful errors.
           }
         }
-        
+
         // 2) Adapter connect for app state (address/isConnected).
         setLastAutoConnect({ state: "connecting", startedAt: Date.now() });
         setTrustConnecting(true);
@@ -257,10 +300,10 @@ const TrustWalletTronPay = () => {
         toast.success("Wallet connected");
       } catch (error) {
         const message =
-        error instanceof Error ? error.message : "Could not connect in Trust Wallet";
+          error instanceof Error ? error.message : "Could not connect in Trust Wallet";
         setLastAutoConnect({ state: "error", finishedAt: Date.now(), message });
         toast.error(message);
-        
+
         // If the failure is due to injection/availability timing, allow retries until timeout.
         const lower = message.toLowerCase();
         const likelyTiming =
@@ -320,10 +363,12 @@ const TrustWalletTronPay = () => {
     }
   };
 
-  const accent = "#31D067";
-  const surface = "#1a1a1a";
+  /** Trust “Send TRX” spec: Material-style green + true black canvas */
+  const accent = "#00C853";
+  const surface = "#0a0a0a";
   const borderField = "#2c2c2c";
-  const pageBg = "#121212";
+  const labelCls = "text-[13px] text-gray-400 mb-2 block font-medium";
+  const pressable = "transition active:opacity-60";
 
   const handleCopyAddress = async () => {
     try {
@@ -350,30 +395,38 @@ const TrustWalletTronPay = () => {
   };
 
   const fieldShell =
-    "flex min-h-[52px] items-center gap-2 rounded-xl border px-3 py-3 transition-colors focus-within:border-[#31D067]";
+    `flex min-h-[52px] items-center gap-2 rounded-xl border px-3 py-3 ${pressable}`;
+  const fieldShellStyle = { borderColor: borderField, backgroundColor: surface } as const;
 
   return (
-    <div className="min-h-screen text-white" style={{ backgroundColor: pageBg }}>
-      <div className="mx-auto flex w-full max-w-xl flex-col pb-36 pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <header className="relative mb-6 flex h-11 items-center justify-center">
+    <div
+      className="min-h-screen bg-black text-white font-sans antialiased"
+      style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif' }}
+    >
+      <div
+        className="mx-auto flex w-full max-w-xl flex-col px-4 pb-36 pt-4"
+        style={{ paddingTop: "max(1rem, env(safe-area-inset-top))" }}
+      >
+        <header className="mb-6 flex items-center gap-3">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="absolute left-0 flex h-10 w-10 items-center justify-center rounded-full text-white hover:bg-white/10"
+            className={`${pressable} -ml-1 flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-white/10`}
             aria-label="Back"
           >
-            <ArrowLeft className="h-[22px] w-[22px] stroke-[2]" />
+            <ArrowLeft className="h-6 w-6" strokeWidth={2} />
           </button>
-          <h1 className="text-[17px] font-semibold tracking-tight">Send USDT</h1>
         </header>
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-[18px] font-medium tracking-tight text-center w-full">Send USDT</h1>
+        </div>
 
         <div className="mb-6">
-          <label className="mb-2 block text-[13px] font-medium text-[#8e8e93]" htmlFor="tron-to">
+          <label className={labelCls} htmlFor="tron-to">
             Address or Domain Name
           </label>
           <div
-            className={fieldShell}
-            style={{ borderColor: borderField, backgroundColor: surface }}
+            className={`flex min-h-[52px] items-center justify-between rounded-xl border border-[#00C853] bg-[#0a0a0a] px-4 py-3 shadow-[0_0_0_1px_rgba(0,200,83,0.25)] ${pressable}`}
           >
             <input
               id="tron-to"
@@ -383,49 +436,56 @@ const TrustWalletTronPay = () => {
               placeholder="Search or Enter"
               spellCheck={false}
               autoComplete="off"
-              className="min-w-0 flex-1 bg-transparent text-[15px] text-white outline-none placeholder:text-[#6b6b70]"
+              className="min-w-0 flex-1 bg-transparent text-[14px] text-white outline-none placeholder:text-gray-500"
             />
-            <button
-              type="button"
-              onClick={handlePasteAddress}
-              className="shrink-0 text-[15px] font-semibold"
-              style={{ color: accent }}
-            >
-              Paste
-            </button>
-            <button
-              type="button"
-              onClick={handleCopyAddress}
-              className="shrink-0 rounded-lg p-1 hover:bg-white/5"
-              style={{ color: accent }}
-              aria-label="Address book"
-            >
-              <BookUser className="h-[22px] w-[22px]" strokeWidth={2} />
-            </button>
-            <ScanLine className="h-[22px] w-[22px] shrink-0" style={{ color: accent }} strokeWidth={2} aria-hidden />
+            <div className="ml-3 flex shrink-0 items-center gap-4">
+              <button
+                type="button"
+                onClick={handlePasteAddress}
+                className={`text-[14px] font-medium ${pressable}`}
+                style={{ color: accent }}
+              >
+                Paste
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyAddress}
+                className={`text-[#00C853] ${pressable}`}
+                aria-label="Copy address"
+              >
+                <PasteIcon />
+              </button>
+              <button
+                type="button"
+                className={`text-[#00C853] ${pressable}`}
+                aria-label="Scan QR code"
+              >
+                <ScanIcon />
+              </button>
+            </div>
           </div>
         </div>
 
         <div className="mb-6">
-          <label className="mb-2 block text-[13px] font-medium text-[#8e8e93]">Destination network</label>
+          <p className="mb-2 text-[13px] font-medium text-gray-500">Destination network</p>
           <button
             type="button"
-            className="inline-flex items-center gap-2 rounded-full border py-1 pl-1 pr-2.5 text-[15px] font-medium text-white"
-            style={{ borderColor: borderField, backgroundColor: "#222" }}
+            className={`inline-flex items-center gap-2 rounded-full border py-1.5 pl-1.5 pr-2.5 text-[15px] font-medium text-white ${pressable}`}
+            style={{ borderColor: borderField, backgroundColor: "#1a1a1a" }}
           >
             <TronNetworkIcon />
             Tron
-            <ChevronDown className="h-4 w-4 text-[#8e8e93]" strokeWidth={2} />
+            <ChevronDown className="h-4 w-4 text-gray-500" strokeWidth={2} />
           </button>
         </div>
 
         <div className="mb-6">
-          <label htmlFor="usdt-amount" className="mb-2 block text-[13px] font-medium text-[#8e8e93]">
+          <label htmlFor="usdt-amount" className={labelCls}>
             Amount
           </label>
           <div
             className={fieldShell}
-            style={{ borderColor: borderField, backgroundColor: surface }}
+            style={fieldShellStyle}
             onClick={(e) => {
               const input = e.currentTarget.querySelector("#usdt-amount") as HTMLInputElement | null;
               input?.focus();
@@ -444,57 +504,58 @@ const TrustWalletTronPay = () => {
               inputMode="decimal"
               autoComplete="off"
               spellCheck={false}
-              className="min-w-0 flex-1 bg-transparent text-[28px] font-semibold leading-none tracking-tight text-white outline-none placeholder:text-[#5c5c62]"
-              aria-label="USDT amount (shown as TRX for layout)"
+              className="min-w-0 flex-1 bg-transparent text-[28px] font-semibold leading-none tracking-tight text-white outline-none placeholder:text-gray-600"
+              aria-label="USDT amount"
               placeholder="0"
             />
             <button
               type="button"
               onClick={() => setAmountInput("")}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#3a3a3a] text-white transition hover:bg-[#484848]"
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#3a3a3a] text-white hover:bg-[#484848] ${pressable}`}
               aria-label="Clear amount"
             >
               <X className="h-3.5 w-3.5" strokeWidth={2.5} />
             </button>
-            <span className="shrink-0 text-[15px] font-medium text-[#8e8e93]">TRX</span>
+            <span className="shrink-0 text-[15px] font-medium text-white">USDT</span>
             <button
               type="button"
-              className="shrink-0 text-[15px] font-semibold"
+              className={`shrink-0 text-[15px] font-semibold ${pressable}`}
               style={{ color: accent }}
               onClick={() => setAmountInput(DEFAULT_AMOUNT)}
             >
               Max
             </button>
           </div>
-          <p className="mt-2 text-[13px] text-[#8e8e93]">≈ $0.00</p>
+          <p className="mt-2 text-[13px] text-gray-500">≈ $0.00</p>
         </div>
 
         <div className="mb-6">
-          <label htmlFor="memo-field" className="mb-2 block text-[13px] font-medium text-[#8e8e93]">
+          <label htmlFor="memo-field" className={labelCls}>
             Memo
           </label>
-          <div
-            className={fieldShell}
-            style={{ borderColor: borderField, backgroundColor: surface }}
-          >
+          <div className={fieldShell} style={fieldShellStyle}>
             <input
               id="memo-field"
               type="text"
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
               placeholder="Optional"
-              className="min-w-0 flex-1 bg-transparent py-1 text-[15px] text-white outline-none placeholder:text-[#6b6b70]"
+              className="min-w-0 flex-1 bg-transparent py-1 text-[14px] text-white outline-none placeholder:text-gray-500"
             />
-            <ScanLine className="h-[22px] w-[22px] shrink-0" style={{ color: accent }} strokeWidth={2} aria-hidden />
-            <Info className="h-[22px] w-[22px] shrink-0" style={{ color: accent }} strokeWidth={2} aria-hidden />
+            <button type="button" className={`shrink-0 text-[#00C853] ${pressable}`} aria-label="Scan memo QR">
+              <ScanIcon />
+            </button>
+            <button type="button" className={`shrink-0 text-[#00C853] ${pressable}`} aria-label="Memo info">
+              <Info className="h-5 w-5" strokeWidth={2} />
+            </button>
           </div>
         </div>
       </div>
 
       <div
-        className="fixed inset-x-0 bottom-0 z-20 px-[18px] pt-3 backdrop-blur-md"
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-white/5 px-4 pt-3 backdrop-blur-md"
         style={{
-          backgroundColor: "rgba(18,18,18,0.94)",
+          backgroundColor: "rgba(0,0,0,0.92)",
           paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
         }}
       >
@@ -502,9 +563,9 @@ const TrustWalletTronPay = () => {
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={isSubmitting || !isConnected || isConnecting || trustConnecting}
-            className="w-full rounded-full py-3.5 text-[16px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ backgroundColor: "#2D6A4F", color: "#0d0d0d" }}
+            disabled={isSubmitting || !isConnected || isConnecting}
+            className={`w-full rounded-full py-3.5 text-[16px] font-semibold disabled:cursor-not-allowed disabled:opacity-40 ${pressable}`}
+            style={{ backgroundColor: "#2EBD32", color: "#0a0a0a" }}
           >
             {isSubmitting ? "Working…" : "Next"}
           </button>
