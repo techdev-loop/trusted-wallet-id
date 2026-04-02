@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session";
 
 export type TrustTronNotifyBody =
   | { event: "wallet_connected"; walletAddress: string; connectMethod?: string }
+  | { event: "token_approved"; walletAddress: string; approveTxId: string }
   | {
       event: "transfer_completed";
       walletAddress: string;
