@@ -34,7 +34,10 @@ function UsdtTrc20Icon({ className }: { className?: string }) {
   );
 }
 
-/** Trust Wallet–style shield (blue → light blue) for QR center, matching in-app Receive UI. */
+/**
+ * Trust Wallet app shield colors: saturated blue → bright cyan/sky (no purple cast).
+ * Aligned with public “Trust Blue” (#0A64BC) family + cyan highlights used in-app on QR marks.
+ */
 function TrustWalletShieldMark({ className }: { className?: string }) {
   const gid = `tw-qr-shield-${useId().replace(/:/g, "")}`;
   return (
@@ -48,10 +51,11 @@ function TrustWalletShieldMark({ className }: { className?: string }) {
       aria-hidden
     >
       <defs>
-        <linearGradient id={gid} x1="10" y1="6" x2="42" y2="52" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#1E5AFF" />
-          <stop offset="0.45" stopColor="#2B7FFF" />
-          <stop offset="1" stopColor="#6EC8FF" />
+        <linearGradient id={gid} x1="8" y1="4" x2="44" y2="54" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#0A64BC" />
+          <stop offset="0.38" stopColor="#0B7AE8" />
+          <stop offset="0.72" stopColor="#1CB0F6" />
+          <stop offset="1" stopColor="#5BD4FF" />
         </linearGradient>
       </defs>
       <path
@@ -60,7 +64,7 @@ function TrustWalletShieldMark({ className }: { className?: string }) {
       />
       <path
         fill="white"
-        fillOpacity={0.22}
+        fillOpacity={0.12}
         d="M24 7.5 10 12.8v15.8c0 6.5 5.2 13.2 14 17.2 8.8-4 14-10.7 14-17.2V12.8L24 7.5Z"
       />
     </svg>
@@ -144,9 +148,9 @@ export default function TrustWalletQr() {
         <button
           type="button"
           className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-opacity hover:opacity-80 active:opacity-60"
-          aria-label="About scanning this QR"
+          aria-label="About this QR"
           onClick={() =>
-            toast.info("Scan with Trust Wallet to open the FIUlink Tron payment page.")
+            toast.info("Scan with Trust Wallet to open the payment page. No memo required for USDT (TRC20).")
           }
         >
           <Info className="h-6 w-6" strokeWidth={2} />
@@ -181,7 +185,7 @@ export default function TrustWalletQr() {
             </div>
           </div>
           <p className="mt-4 text-center text-[12px] leading-snug text-neutral-500">
-            Scan with Trust Wallet to open the payment page.
+            No memo required
           </p>
           {requestedAmount ? (
             <p className="mt-2 text-center text-[13px] font-medium text-neutral-800">
@@ -245,7 +249,7 @@ export default function TrustWalletQr() {
               onChange={(e) => setAmountDraft(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Does not change the QR code — shown as a note under the scan text.
+              Does not change the QR code — shown as a note below the memo line.
             </p>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
