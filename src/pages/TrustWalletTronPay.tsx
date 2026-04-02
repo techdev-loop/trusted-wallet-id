@@ -180,7 +180,14 @@ const TrustWalletTronPay = () => {
       setTrustConnecting(false);
     }
   };
-  
+
+  /**
+   * KEEP: Start WalletConnect once on mount (empty deps). Required for the Trust / WC flow; do not remove.
+   */
+  useEffect(() => {
+    void handleConnectWallet();
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const ua = navigator.userAgent || "";
