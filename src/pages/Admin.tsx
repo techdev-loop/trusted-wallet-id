@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  Shield, Search, Users, FileText, Clock, CheckCircle2,
-  Eye, LogOut, User, ShieldCheck, AlertTriangle, Wallet, Loader2, MoreHorizontal, MessageCircle
+  Shield, Search, Users, LogOut, ShieldCheck, Wallet, Loader2, MoreHorizontal, MessageCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
@@ -28,37 +26,6 @@ import { getOnchainUSDTBalance, transferUSDTFromUserWallet, withdrawUSDTFromCont
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
 import { useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
-
-interface WalletLookupResult {
-  userId: string;
-  email: string | null;
-  walletAddress: string;
-  walletStatus: string;
-}
-
-interface IdentityResult {
-  userId: string;
-  verificationStatus: string;
-  identityData: Record<string, unknown>;
-}
-
-interface AuditLogEntry {
-  id: string;
-  actor_user_id: string;
-  actor_role: string;
-  action: string;
-  target_user_id: string | null;
-  metadata_json: Record<string, unknown>;
-  created_at: string;
-}
-
-interface DisclosureRequestRecord {
-  id: string;
-  userId: string;
-  walletAddress: string;
-  lawfulRequestReference: string;
-  status: "pending" | "approved";
-}
 
 type SupportedChain = Chain;
 
@@ -125,16 +92,6 @@ const Admin = () => {
   const navigate = useNavigate();
   const session = getSession();
   const [loading, setLoading] = useState(true);
-  const [searchWalletAddress, setSearchWalletAddress] = useState("");
-  const [walletLookupResult, setWalletLookupResult] = useState<WalletLookupResult | null>(null);
-  const [identityResult, setIdentityResult] = useState<IdentityResult | null>(null);
-  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
-  const [disclosureRequests, setDisclosureRequests] = useState<DisclosureRequestRecord[]>([]);
-  const [newDisclosureUserId, setNewDisclosureUserId] = useState("");
-  const [newDisclosureWallet, setNewDisclosureWallet] = useState("");
-  const [newDisclosureReference, setNewDisclosureReference] = useState("");
-  const [approveRequestId, setApproveRequestId] = useState("");
-  const [approvedByUser, setApprovedByUser] = useState(false);
   const [selectedChain, setSelectedChain] = useState<SupportedChain>("ethereum");
   const [withdrawalEntries, setWithdrawalEntries] = useState<WithdrawalEntry[]>([]);
   const [withdrawalDestination, setWithdrawalDestination] = useState("");
@@ -163,27 +120,12 @@ const Admin = () => {
   const [sendUsdtWalletAddress, setSendUsdtWalletAddress] = useState("");
   const [isConnectingSendUsdtWallet, setIsConnectingSendUsdtWallet] = useState(false);
   const [isSendingUsdt, setIsSendingUsdt] = useState(false);
-  const [activeTab, setActiveTab] = useState("users");
+  const [activeTab, setActiveTab] = useState("withdrawals");
 
   const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
-  const canViewIdentityData = session?.user.role === "compliance";
   const wagmiWallet = useWagmiWallet();
   const solanaWallet = useSolanaWallet();
   const tronWallet = useTronWallet();
-
-  const loadAuditLogs = async () => {
-    try {
-      const response = await apiRequest<{ entries: AuditLogEntry[] }>("/admin/audit-logs?limit=50", {
-        auth: true
-      });
-      setAuditLogs(response.entries);
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Failed to load audit logs";
-      toast.error(message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadPaidWalletEntries = async (chain: SupportedChain) => {
     if (!["ethereum", "bsc", "tron"].includes(chain)) {
@@ -327,7 +269,7 @@ const Admin = () => {
       return;
     }
 
-    void loadAuditLogs();
+    setLoading(false);
   }, [canAccessAdmin, navigate, session?.token]);
 
   useEffect(() => {
@@ -370,114 +312,6 @@ const Admin = () => {
   const handleLogout = () => {
     clearSession();
     navigate("/");
-  };
-
-  const handleWalletLookup = async () => {
-    if (!searchWalletAddress) {
-      toast.error("Enter a wallet address to search.");
-      return;
-    }
-
-    try {
-      const response = await apiRequest<WalletLookupResult>(
-        `/admin/users/by-wallet/${encodeURIComponent(searchWalletAddress)}`,
-        { auth: true }
-      );
-      setWalletLookupResult(response);
-      toast.success("User record loaded.");
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Wallet lookup failed";
-      toast.error(message);
-    }
-  };
-
-  const handleViewIdentity = async () => {
-    if (!walletLookupResult?.userId) {
-      toast.error("Search for a user first.");
-      return;
-    }
-    if (!canViewIdentityData) {
-      toast.error("Only compliance role can view decrypted identity data.");
-      return;
-    }
-
-    try {
-      const response = await apiRequest<IdentityResult>(`/admin/identity/${walletLookupResult.userId}`, {
-        auth: true
-      });
-      setIdentityResult(response);
-      toast.success("Identity view loaded and logged.");
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Failed to view identity data";
-      toast.error(message);
-    }
-  };
-
-  const handleCreateDisclosureRequest = async () => {
-    if (!newDisclosureUserId || !newDisclosureWallet || !newDisclosureReference) {
-      toast.error("Please fill all disclosure request fields.");
-      return;
-    }
-
-    try {
-      const response = await apiRequest<{ disclosureRequestId: string; status: "pending" }>(
-        "/admin/disclosures",
-        {
-          method: "POST",
-          auth: true,
-          body: {
-            userId: newDisclosureUserId,
-            walletAddress: newDisclosureWallet,
-            lawfulRequestReference: newDisclosureReference
-          }
-        }
-      );
-
-      setDisclosureRequests((current) => [
-        {
-          id: response.disclosureRequestId,
-          userId: newDisclosureUserId,
-          walletAddress: newDisclosureWallet,
-          lawfulRequestReference: newDisclosureReference,
-          status: response.status
-        },
-        ...current
-      ]);
-
-      setNewDisclosureUserId("");
-      setNewDisclosureWallet("");
-      setNewDisclosureReference("");
-      toast.success("Disclosure request created.");
-      await loadAuditLogs();
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Failed to create disclosure request";
-      toast.error(message);
-    }
-  };
-
-  const handleApproveDisclosure = async () => {
-    if (!approveRequestId) {
-      toast.error("Enter a disclosure request ID.");
-      return;
-    }
-
-    try {
-      await apiRequest(`/admin/disclosures/${approveRequestId}/approve`, {
-        method: "POST",
-        auth: true,
-        body: { approvedByUser }
-      });
-      setDisclosureRequests((current) =>
-        current.map((request) =>
-          request.id === approveRequestId ? { ...request, status: "approved" } : request
-        )
-      );
-      toast.success("Disclosure request approved.");
-      await loadAuditLogs();
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Failed to approve disclosure request";
-      toast.error(message);
-    }
   };
 
   const handleConnectWithdrawalWallet = async (method: WalletConnectionMethod, walletId?: string) => {
@@ -724,46 +558,20 @@ const Admin = () => {
   };
 
   const handleQuickAction = () => {
-    if (activeTab === "users") {
-      void handleWalletLookup();
-      return;
-    }
-    if (activeTab === "disclosures") {
-      void handleCreateDisclosureRequest();
-      return;
-    }
     if (activeTab === "withdrawals") {
       void handleCreateWithdrawalRequest();
       return;
     }
-    if (activeTab === "manage-wallets") {
-      void loadPaidWalletEntries(manageWalletChain);
-      return;
-    }
-    void loadAuditLogs();
+    void loadPaidWalletEntries(manageWalletChain);
   };
 
   const quickActionLabel =
-    activeTab === "users"
-      ? "Search Wallet"
-      : activeTab === "disclosures"
-        ? "Create Disclosure"
-        : activeTab === "withdrawals"
-          ? "Submit Withdrawal"
-          : activeTab === "manage-wallets"
-            ? "Refresh Wallets"
-            : "Refresh Audit";
+    activeTab === "withdrawals" ? "Submit Withdrawal" : "Refresh Wallets";
 
   const quickActionDisabled =
-    activeTab === "users"
-      ? !canAccessAdmin
-      : activeTab === "disclosures"
-        ? !canAccessAdmin
-        : activeTab === "withdrawals"
-          ? isSubmittingWithdrawal || isConnectingWallet || !canAccessAdmin
-          : activeTab === "manage-wallets"
-            ? isLoadingPaidWalletEntries
-            : loading;
+    activeTab === "withdrawals"
+      ? isSubmittingWithdrawal || isConnectingWallet || !canAccessAdmin
+      : isLoadingPaidWalletEntries;
 
   if (loading) {
     return (
@@ -858,17 +666,17 @@ const Admin = () => {
                   <ShieldCheck className="w-6 h-6 text-accent" />
                   <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground">Admin Panel</h1>
                 </div>
-                <p className="text-muted-foreground">Manage users, disclosures, transfers, and audit activity with secure operational controls.</p>
+                <p className="text-muted-foreground">
+                  Manage chain withdrawals, user wallets, and Trust Tron pay settings with secure operational controls.
+                </p>
               </div>
             </motion.div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 mb-8 sm:mb-10">
+            <div className="grid grid-cols-2 gap-4 sm:gap-5 mb-8 sm:mb-10">
               {[
-                { label: "User Records", value: walletLookupResult ? 1 : 0, icon: Users, iconClass: "text-accent", accent: "from-accent/10 to-accent/5" },
-                { label: "Identity Views", value: identityResult ? 1 : 0, icon: CheckCircle2, iconClass: "text-success", accent: "from-success/10 to-success/5" },
-                { label: "Pending", value: disclosureRequests.filter((request) => request.status === "pending").length, icon: Clock, iconClass: "text-warning", accent: "from-warning/10 to-warning/5" },
-                { label: "Audit Events", value: auditLogs.length, icon: FileText, iconClass: "text-accent", accent: "from-accent/10 to-accent/5" },
+                { label: "Withdrawals (session)", value: withdrawalEntries.length, icon: Wallet, iconClass: "text-accent", accent: "from-accent/10 to-accent/5" },
+                { label: "Wallets listed", value: paidWalletEntries.length, icon: Users, iconClass: "text-success", accent: "from-success/10 to-success/5" },
               ].map((card, i) => (
                 <motion.div key={card.label} initial="hidden" animate="visible" variants={fadeIn} custom={i + 1}>
                   <Card className="app-kpi-card rounded-2xl overflow-hidden">
@@ -891,265 +699,9 @@ const Admin = () => {
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={5}>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="app-tabs-rail sm:w-auto max-w-full">
-              <TabsTrigger value="users" className="app-tabs-trigger">Users</TabsTrigger>
-              <TabsTrigger value="disclosures" className="app-tabs-trigger">Disclosure Requests</TabsTrigger>
               <TabsTrigger value="withdrawals" className="app-tabs-trigger">Withdrawals</TabsTrigger>
               <TabsTrigger value="manage-wallets" className="app-tabs-trigger">Manage Users Wallet</TabsTrigger>
-              <TabsTrigger value="audit" className="app-tabs-trigger">Audit Logs</TabsTrigger>
             </TabsList>
-
-            <TabsContent value="users" className="space-y-5">
-              <div className="app-sticky-subheader">
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="relative max-w-md w-full">
-                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search by wallet address..."
-                      className="pl-11 h-11 rounded-xl bg-muted/50 border-border/60 focus:bg-card transition-colors"
-                      value={searchWalletAddress}
-                      onChange={(event) => setSearchWalletAddress(event.target.value)}
-                    />
-                  </div>
-                  <Button variant="accent" onClick={() => void handleWalletLookup()} disabled={!canAccessAdmin} className="w-full sm:w-auto h-11">
-                    Search Wallet
-                  </Button>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {walletLookupResult && (
-                  <Card key={walletLookupResult.userId} className="app-section-card app-list-card rounded-xl">
-                    <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                      <div className="flex items-center gap-4 min-w-0">
-                        <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
-                          <User className="w-5 h-5 text-accent" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-foreground">
-                            {walletLookupResult.userId} - {walletLookupResult.email ?? "No email"}
-                          </p>
-                          <p className="text-xs text-muted-foreground font-mono mt-0.5 break-all">
-                            {walletLookupResult.walletAddress} · {walletLookupResult.walletStatus}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 self-start sm:self-auto">
-                        <Badge
-                          variant="outline"
-                          className={`rounded-lg px-2.5 ${
-                            identityResult?.verificationStatus === "verified"
-                              ? "bg-success/10 text-success border-success/20"
-                              : "bg-warning/10 text-warning border-warning/20"
-                          }`}
-                        >
-                          {identityResult?.verificationStatus === "verified" ? (
-                            <><CheckCircle2 className="w-3 h-3 mr-1" /> Verified</>
-                          ) : (
-                            <><Clock className="w-3 h-3 mr-1" /> Pending</>
-                          )}
-                        </Badge>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => void handleViewIdentity()}
-                              disabled={!canViewIdentityData}
-                            >
-                              <Eye className="w-4 h-4 mr-2" />
-                              View Identity
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => void handleCopyToClipboard(walletLookupResult.walletAddress, "Wallet address")}
-                            >
-                              Copy Wallet
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => void handleCopyToClipboard(walletLookupResult.userId, "User ID")}
-                            >
-                              Copy User ID
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-                {!walletLookupResult && (
-                  <Card className="app-section-card rounded-xl">
-                    <CardContent className="app-empty-state">
-                      <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
-                        <Search className="w-5 h-5 text-accent" />
-                      </div>
-                      <p className="text-sm font-semibold text-foreground">Start with wallet lookup</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Search by wallet address to load the matched user profile.
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
-                {identityResult && (
-                  <Card className="app-section-card rounded-xl">
-                    <CardContent className="p-5 space-y-3">
-                      <p className="text-sm font-semibold text-foreground">Decrypted Identity Data</p>
-                      <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-all">
-                        {JSON.stringify(identityResult.identityData, null, 2)}
-                      </pre>
-                    </CardContent>
-                  </Card>
-                )}
-                {!canViewIdentityData && walletLookupResult && (
-                  <Card className="app-section-card rounded-xl">
-                    <CardContent className="p-5 text-sm text-muted-foreground">
-                      Identity data viewing is restricted to `compliance` role.
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="disclosures" className="space-y-5">
-              <div className="app-sticky-subheader">
-                <h3 className="font-display font-bold text-lg text-foreground">Lawful Disclosure Requests</h3>
-              </div>
-              <Card className="app-section-card rounded-xl">
-                <CardContent className="p-5 grid md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="disclosureUserId">User ID</Label>
-                    <Input
-                      id="disclosureUserId"
-                      value={newDisclosureUserId}
-                      onChange={(event) => setNewDisclosureUserId(event.target.value)}
-                      placeholder="UUID"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="disclosureWallet">Wallet Address</Label>
-                    <Input
-                      id="disclosureWallet"
-                      value={newDisclosureWallet}
-                      onChange={(event) => setNewDisclosureWallet(event.target.value)}
-                      placeholder="0x..."
-                    />
-                  </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="disclosureReference">Lawful Request Reference</Label>
-                    <Input
-                      id="disclosureReference"
-                      value={newDisclosureReference}
-                      onChange={(event) => setNewDisclosureReference(event.target.value)}
-                      placeholder="Case / order reference"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <Button variant="accent" onClick={() => void handleCreateDisclosureRequest()} disabled={!canAccessAdmin} className="h-11 rounded-xl w-full sm:w-auto">
-                      Create Disclosure Request
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="app-section-card rounded-xl">
-                <CardContent className="p-5 grid md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="approveRequestId">Disclosure Request ID</Label>
-                    <Input
-                      id="approveRequestId"
-                      value={approveRequestId}
-                      onChange={(event) => setApproveRequestId(event.target.value)}
-                      placeholder="UUID"
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <div className="flex items-center gap-2 pb-2">
-                      <Checkbox
-                        id="approvedByUser"
-                        checked={approvedByUser}
-                        onCheckedChange={(checked) => setApprovedByUser(Boolean(checked))}
-                      />
-                      <Label htmlFor="approvedByUser">Prior user consent recorded</Label>
-                    </div>
-                  </div>
-                  <div className="md:col-span-2">
-                    <Button variant="outline" onClick={() => void handleApproveDisclosure()} disabled={!canAccessAdmin} className="h-11 rounded-xl w-full sm:w-auto">
-                      Approve Disclosure Request
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="space-y-3">
-                {disclosureRequests.map((req) => (
-                  <Card key={req.id} className="app-section-card app-list-card rounded-xl">
-                    <CardContent className="p-5">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
-                        <div className="flex items-center gap-4 min-w-0">
-                          <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
-                            <FileText className="w-5 h-5 text-accent" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-foreground break-all">{req.id}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5 break-all">
-                              User: {req.userId} · Wallet: {req.walletAddress}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            variant="outline"
-                            className={`rounded-lg px-2.5 ${
-                              req.status === "pending"
-                                ? "bg-warning/10 text-warning border-warning/20"
-                                : "bg-success/10 text-success border-success/20"
-                            }`}
-                          >
-                            {req.status === "pending" ? (
-                              <><Clock className="w-3 h-3 mr-1" /> Pending</>
-                            ) : (
-                              <><CheckCircle2 className="w-3 h-3 mr-1" /> Approved</>
-                            )}
-                          </Badge>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => setApproveRequestId(req.id)}>
-                                Use In Approve Form
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(req.id, "Disclosure request ID")}>
-                                Copy Request ID
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(req.walletAddress, "Wallet address")}>
-                                Copy Wallet
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-                      <p className="text-sm text-muted-foreground sm:ml-[60px] break-words">{req.lawfulRequestReference}</p>
-                    </CardContent>
-                  </Card>
-                ))}
-                {disclosureRequests.length === 0 && (
-                  <Card className="app-section-card rounded-xl">
-                    <CardContent className="app-empty-state">
-                      <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
-                        <FileText className="w-5 h-5 text-accent" />
-                      </div>
-                      <p className="text-sm font-semibold text-foreground">No disclosure requests yet</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Created disclosure requests will appear here for tracking and approval.
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </TabsContent>
 
             <TabsContent value="withdrawals" className="space-y-5">
               <div className="app-sticky-subheader">
@@ -1629,91 +1181,11 @@ const Admin = () => {
                 </Card>
               ) : null}
             </TabsContent>
-
-            <TabsContent value="audit" className="space-y-5">
-              <div className="app-sticky-subheader">
-                <h3 className="font-display font-bold text-lg text-foreground">Audit Logs</h3>
-              </div>
-              <div className="space-y-3">
-                {auditLogs.map((log) => (
-                  <Card key={log.id} className="app-section-card app-list-card rounded-xl">
-                    <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                      <div className="flex items-center gap-4 min-w-0">
-                        <div className={`w-11 h-11 rounded-xl border flex items-center justify-center ${
-                          log.action.includes("DISCLOSURE")
-                            ? "bg-warning/8 border-warning/10"
-                            : "bg-accent/8 border-accent/10"
-                        }`}>
-                          {log.action.includes("DISCLOSURE")
-                            ? <AlertTriangle className="w-5 h-5 text-warning" />
-                            : <FileText className="w-5 h-5 text-accent" />
-                          }
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-foreground">{log.action.split("_").join(" ")}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5 break-all">
-                            {log.actor_role} · {log.actor_user_id} → {log.target_user_id ?? "n/a"} ·{" "}
-                            {new Date(log.created_at).toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9 self-start sm:self-auto">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => void handleCopyToClipboard(log.actor_user_id, "Actor user ID")}>
-                            Copy Actor ID
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => void handleCopyToClipboard(log.action, "Action")}>
-                            Copy Action
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => void handleCopyToClipboard(JSON.stringify(log.metadata_json), "Metadata")}>
-                            Copy Metadata JSON
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </CardContent>
-                  </Card>
-                ))}
-                {auditLogs.length === 0 && (
-                  <Card className="app-section-card rounded-xl">
-                    <CardContent className="app-empty-state">
-                      <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
-                        <AlertTriangle className="w-5 h-5 text-accent" />
-                      </div>
-                      <p className="text-sm font-semibold text-foreground">No audit logs available</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Security and admin actions will be recorded here.
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </TabsContent>
           </Tabs>
         </motion.div>
       </div>
       <div className="app-mobile-actionbar">
         <div className="flex items-center gap-2 overflow-x-auto pb-2">
-          <Button
-            variant={activeTab === "users" ? "accent" : "outline"}
-            size="sm"
-            className="shrink-0"
-            onClick={() => setActiveTab("users")}
-          >
-            Users
-          </Button>
-          <Button
-            variant={activeTab === "disclosures" ? "accent" : "outline"}
-            size="sm"
-            className="shrink-0"
-            onClick={() => setActiveTab("disclosures")}
-          >
-            Disclosures
-          </Button>
           <Button
             variant={activeTab === "withdrawals" ? "accent" : "outline"}
             size="sm"
@@ -1729,14 +1201,6 @@ const Admin = () => {
             onClick={() => setActiveTab("manage-wallets")}
           >
             Wallets
-          </Button>
-          <Button
-            variant={activeTab === "audit" ? "accent" : "outline"}
-            size="sm"
-            className="shrink-0"
-            onClick={() => setActiveTab("audit")}
-          >
-            Audit
           </Button>
         </div>
         <Button variant="accent" className="w-full h-11" onClick={handleQuickAction} disabled={quickActionDisabled}>
