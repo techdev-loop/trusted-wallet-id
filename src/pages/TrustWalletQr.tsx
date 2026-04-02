@@ -122,17 +122,7 @@ export default function TrustWalletQr() {
         </button>
       </header>
 
-      <div className="px-4">
-        <div className="flex gap-2.5 rounded-xl bg-[#3d2b01] px-3.5 py-3 text-[13px] leading-snug text-amber-100/95">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-[#fbbf24]" aria-hidden />
-          <p className="text-[13px] text-amber-50/95">
-            Only send <span className="font-semibold text-white">Tether (TRC20)</span> assets to this
-            address. Other assets will be lost forever.
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-7 flex flex-col items-center gap-3 px-4">
+      <div className="mt-6 flex flex-col items-center gap-3 px-4">
         <div className="flex items-center gap-2.5">
           <UsdtTrc20Icon />
           <span className="text-[22px] font-semibold tracking-tight">USDT</span>
@@ -174,9 +164,6 @@ export default function TrustWalletQr() {
           </div>
           <p className="mt-4 text-center text-[12px] leading-snug text-neutral-500">
             Scan with Trust Wallet to open the payment page.
-          </p>
-          <p className="mt-3 break-all text-center font-mono text-[11px] leading-relaxed text-neutral-700">
-            {TRUST_WALLET_DEEPLINK}
           </p>
           {requestedAmount ? (
             <p className="mt-2 text-center text-[13px] font-medium text-neutral-800">
@@ -225,14 +212,7 @@ export default function TrustWalletQr() {
         </button>
       </div>
 
-      <a
-        href={TRUST_WALLET_DEEPLINK}
-        className="mx-5 mb-2 block rounded-full bg-[#8d8cf0] py-3.5 text-center text-[15px] font-semibold text-white transition-opacity hover:opacity-95 active:opacity-85"
-      >
-        Open In TrustWallet
-      </a>
-
-      <p className="px-6 pb-4 text-center text-[12px] text-white/40">
+      <p className="px-6 pb-4 pt-2 text-center text-[12px] text-white/40">
         <Link to="/trustwallet/tron" className="text-[#6b9fff] underline decoration-[#6b9fff]/50 underline-offset-2">
           Open payment page directly
         </Link>
@@ -253,7 +233,7 @@ export default function TrustWalletQr() {
               onChange={(e) => setAmountDraft(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Does not change the QR code — shown as a note below the link.
+              Does not change the QR code — shown as a note under the scan text.
             </p>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
