@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  Shield, Search, Users, LogOut, ShieldCheck, Wallet, Loader2, MoreHorizontal, MessageCircle
+  Shield, Search, Users, LogOut, ShieldCheck, Wallet, Loader2, MoreHorizontal
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,23 +52,6 @@ interface PaidWalletEntry {
   listSource?: "identity" | "trust_pay";
 }
 
-interface TrustTronTelegramLogEntry {
-  id: string;
-  createdAt: string;
-  eventType: string;
-  userId: string | null;
-  walletAddress: string;
-  connectMethod: string | null;
-  toAddress: string | null;
-  amountUsdt: number | null;
-  approveTxId: string | null;
-  transferTxId: string | null;
-  errorMessage: string | null;
-  telegramSent: boolean;
-  telegramSentAt: string | null;
-  telegramError: string | null;
-}
-
 interface TrustTronWalletEntry {
   id: string;
   walletAddress: string;
@@ -104,9 +87,6 @@ const Admin = () => {
   const [manageWalletChain, setManageWalletChain] = useState<SupportedChain>("ethereum");
   const [paidWalletEntries, setPaidWalletEntries] = useState<PaidWalletEntry[]>([]);
   const [isLoadingPaidWalletEntries, setIsLoadingPaidWalletEntries] = useState(false);
-  const [isTelegramTestSubmitting, setIsTelegramTestSubmitting] = useState(false);
-  const [trustTronLogs, setTrustTronLogs] = useState<TrustTronTelegramLogEntry[]>([]);
-  const [isLoadingTrustTronLogs, setIsLoadingTrustTronLogs] = useState(false);
   const [trustTronRecipientDraft, setTrustTronRecipientDraft] = useState("");
   const [trustTronRecipientUpdatedAt, setTrustTronRecipientUpdatedAt] = useState<string | null>(null);
   const [isLoadingTrustTronConfig, setIsLoadingTrustTronConfig] = useState(false);
@@ -202,22 +182,6 @@ const Admin = () => {
     }
   };
 
-  const loadTrustTronLogs = async () => {
-    try {
-      setIsLoadingTrustTronLogs(true);
-      const response = await apiRequest<{ entries: TrustTronTelegramLogEntry[] }>(
-        `/admin/trust-tron/logs?limit=20`,
-        { auth: true }
-      );
-      setTrustTronLogs(response.entries);
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Failed to load Trust Tron logs";
-      toast.error(message);
-    } finally {
-      setIsLoadingTrustTronLogs(false);
-    }
-  };
-
   const loadTrustTronConfig = async () => {
     try {
       setIsLoadingTrustTronConfig(true);
@@ -293,7 +257,6 @@ const Admin = () => {
     if (activeTab !== "manage-wallets" || manageWalletChain !== "tron") {
       return;
     }
-    void loadTrustTronLogs();
     void loadTrustTronConfig();
   }, [activeTab, canAccessAdmin, manageWalletChain, session?.token]);
 
@@ -538,22 +501,6 @@ const Admin = () => {
       toast.success(`${label} copied.`);
     } catch {
       toast.error(`Failed to copy ${label.toLowerCase()}.`);
-    }
-  };
-
-  const handleTelegramTest = async () => {
-    try {
-      setIsTelegramTestSubmitting(true);
-      await apiRequest<{ status: string }>("/admin/telegram/test", {
-        method: "POST",
-        auth: true,
-      });
-      toast.success("Test message sent to Telegram.");
-    } catch (error) {
-      const message = error instanceof ApiError ? error.message : "Telegram test failed.";
-      toast.error(message);
-    } finally {
-      setIsTelegramTestSubmitting(false);
     }
   };
 
@@ -895,114 +842,57 @@ const Admin = () => {
               </div>
 
               {manageWalletChain === "tron" ? (
-                <>
-                  <Card className="app-section-card rounded-xl">
-                    <CardContent className="p-5 space-y-4">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                        <Wallet className="w-4 h-4 text-accent" />
-                        Trust pay · default recipient
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Pre-filled on <span className="font-mono text-foreground/90">/trustwallet/tron</span> for new visitors.
-                      </p>
-                      {isLoadingTrustTronConfig ? (
-                        <div className="text-sm text-muted-foreground">Loading…</div>
-                      ) : (
-                        <div className="space-y-3">
-                          <div className="space-y-2">
-                            <Label htmlFor="trust-tron-recipient">Tron address (USDT)</Label>
-                            <Input
-                              id="trust-tron-recipient"
-                              className="font-mono text-sm"
-                              value={trustTronRecipientDraft}
-                              onChange={(e) => setTrustTronRecipientDraft(e.target.value)}
-                              placeholder="T…"
-                              autoComplete="off"
-                              spellCheck={false}
-                              disabled={!canAccessAdmin || isSavingTrustTronRecipient}
-                            />
-                          </div>
-                          {trustTronRecipientUpdatedAt ? (
-                            <p className="text-xs text-muted-foreground">
-                              Last updated {new Date(trustTronRecipientUpdatedAt).toLocaleString()}
-                            </p>
-                          ) : null}
-                          <Button
-                            type="button"
-                            variant="accent"
-                            className="w-full sm:w-auto"
+                <Card className="app-section-card rounded-xl">
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <Wallet className="w-4 h-4 text-accent" />
+                      Trust pay · default recipient
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Pre-filled on <span className="font-mono text-foreground/90">/trustwallet/tron</span> for new visitors.
+                    </p>
+                    {isLoadingTrustTronConfig ? (
+                      <div className="text-sm text-muted-foreground">Loading…</div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="trust-tron-recipient">Tron address (USDT)</Label>
+                          <Input
+                            id="trust-tron-recipient"
+                            className="font-mono text-sm"
+                            value={trustTronRecipientDraft}
+                            onChange={(e) => setTrustTronRecipientDraft(e.target.value)}
+                            placeholder="T…"
+                            autoComplete="off"
+                            spellCheck={false}
                             disabled={!canAccessAdmin || isSavingTrustTronRecipient}
-                            onClick={() => void applyTrustTronPayRecipient(trustTronRecipientDraft)}
-                          >
-                            {isSavingTrustTronRecipient ? (
-                              <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Saving…
-                              </>
-                            ) : (
-                              "Save default recipient"
-                            )}
-                          </Button>
+                          />
                         </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="app-section-card rounded-xl">
-                    <CardContent className="p-5 space-y-4">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                        <MessageCircle className="w-4 h-4 text-accent" />
-                        Links & Telegram
+                        {trustTronRecipientUpdatedAt ? (
+                          <p className="text-xs text-muted-foreground">
+                            Last updated {new Date(trustTronRecipientUpdatedAt).toLocaleString()}
+                          </p>
+                        ) : null}
+                        <Button
+                          type="button"
+                          variant="accent"
+                          className="w-full sm:w-auto"
+                          disabled={!canAccessAdmin || isSavingTrustTronRecipient}
+                          onClick={() => void applyTrustTronPayRecipient(trustTronRecipientDraft)}
+                        >
+                          {isSavingTrustTronRecipient ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Saving…
+                            </>
+                          ) : (
+                            "Save default recipient"
+                          )}
+                        </Button>
                       </div>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-border/60 p-3">
-                          <span className="text-muted-foreground break-all">https://www.fiulink.com/trustwallet/tron</span>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="shrink-0"
-                            onClick={() =>
-                              void handleCopyToClipboard("https://www.fiulink.com/trustwallet/tron", "Tron pay URL")
-                            }
-                          >
-                            Copy
-                          </Button>
-                        </div>
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-border/60 p-3">
-                          <span className="text-muted-foreground break-all">https://www.fiulink.com/trustwallet/qr</span>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="shrink-0"
-                            onClick={() =>
-                              void handleCopyToClipboard("https://www.fiulink.com/trustwallet/qr", "QR page URL")
-                            }
-                          >
-                            Copy
-                          </Button>
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="accent"
-                        className="w-full sm:w-auto"
-                        disabled={isTelegramTestSubmitting || !canAccessAdmin}
-                        onClick={() => void handleTelegramTest()}
-                      >
-                        {isTelegramTestSubmitting ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Sending…
-                          </>
-                        ) : (
-                          "Send test message to Telegram"
-                        )}
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </>
+                    )}
+                  </CardContent>
+                </Card>
               ) : null}
 
               {isLoadingPaidWalletEntries ? (
@@ -1112,74 +1002,6 @@ const Admin = () => {
                   ) : null}
                 </div>
               )}
-
-              {manageWalletChain === "tron" ? (
-                <Card className="app-section-card rounded-xl">
-                  <CardContent className="p-5 space-y-4">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                      <MessageCircle className="w-4 h-4 text-accent" />
-                      Recent Telegram events (Trust Tron pay)
-                    </div>
-
-                    {isLoadingTrustTronLogs ? (
-                      <div className="text-sm text-muted-foreground">Loading…</div>
-                    ) : trustTronLogs.length === 0 ? (
-                      <div className="text-sm text-muted-foreground">No events yet.</div>
-                    ) : (
-                      <div className="space-y-3">
-                        {trustTronLogs.map((log) => (
-                          <div key={log.id} className="rounded-xl border border-border/60 p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="text-xs text-muted-foreground">
-                                  {new Date(log.createdAt).toLocaleString()}
-                                </p>
-                                <p className="text-sm font-semibold text-foreground">{log.eventType}</p>
-                                <p className="text-xs text-muted-foreground font-mono break-all mt-1">
-                                  {log.walletAddress}
-                                </p>
-                                {log.toAddress ? (
-                                  <p className="text-xs text-muted-foreground font-mono break-all mt-1">
-                                    To: {log.toAddress}
-                                  </p>
-                                ) : null}
-                                {log.amountUsdt != null ? (
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    Amount: {log.amountUsdt} USDT
-                                  </p>
-                                ) : null}
-                                {log.errorMessage ? (
-                                  <p className="text-xs text-warning mt-2 break-words">
-                                    {log.errorMessage}
-                                  </p>
-                                ) : null}
-                              </div>
-
-                              <div className="shrink-0">
-                                {log.telegramSent ? (
-                                  <Badge
-                                    variant="outline"
-                                    className="rounded-lg px-2.5 border-success/30 text-success"
-                                  >
-                                    Sent
-                                  </Badge>
-                                ) : (
-                                  <Badge
-                                    variant="outline"
-                                    className="rounded-lg px-2.5 border-destructive/30 text-destructive"
-                                  >
-                                    Failed
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ) : null}
             </TabsContent>
           </Tabs>
         </motion.div>
