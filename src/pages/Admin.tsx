@@ -1305,8 +1305,7 @@ const Admin = () => {
                 <h3 className="font-display font-bold text-lg text-foreground">Trust Wallet · Tron pay</h3>
                 <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
                   Telegram alerts mirror public activity on the Tron payment page: wallet connect, completed USDT
-                  approve/transfer, and failed attempts. Configure <code className="text-xs">TELEGRAM_BOT_TOKEN</code>{" "}
-                  and <code className="text-xs">TELEGRAM_CHAT_ID</code> on the API (see backend README).
+                  approve/transfer, and failed attempts.
                 </p>
               </div>
               <Card className="app-section-card rounded-xl">
