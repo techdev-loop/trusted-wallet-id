@@ -107,6 +107,9 @@ interface TrustTronWalletEntry {
   verifiedAt: string;
 }
 
+/** When `VITE_ADMIN_SHOW_DASHBOARD_SUMMARY` is `"false"`, hide intro + KPI cards (User Records, etc.). */
+const SHOW_ADMIN_DASHBOARD_SUMMARY = import.meta.env.VITE_ADMIN_SHOW_DASHBOARD_SUMMARY !== "false";
+
 const fadeIn = {
   hidden: { opacity: 0, y: 15 },
   visible: (i: number) => ({
@@ -850,39 +853,43 @@ const Admin = () => {
       </header>
 
       <div className="page-container pt-20 sm:pt-24 pb-28 sm:pb-8 md:pb-10 max-w-6xl">
-        <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={0}>
-          <div className="app-page-intro">
-            <div className="flex items-center gap-3 mb-2">
-              <ShieldCheck className="w-6 h-6 text-accent" />
-              <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground">Admin Panel</h1>
-            </div>
-            <p className="text-muted-foreground">Manage users, disclosures, transfers, and audit activity with secure operational controls.</p>
-          </div>
-        </motion.div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 mb-8 sm:mb-10">
-          {[
-            { label: "User Records", value: walletLookupResult ? 1 : 0, icon: Users, iconClass: "text-accent", accent: "from-accent/10 to-accent/5" },
-            { label: "Identity Views", value: identityResult ? 1 : 0, icon: CheckCircle2, iconClass: "text-success", accent: "from-success/10 to-success/5" },
-            { label: "Pending", value: disclosureRequests.filter((request) => request.status === "pending").length, icon: Clock, iconClass: "text-warning", accent: "from-warning/10 to-warning/5" },
-            { label: "Audit Events", value: auditLogs.length, icon: FileText, iconClass: "text-accent", accent: "from-accent/10 to-accent/5" },
-          ].map((card, i) => (
-            <motion.div key={card.label} initial="hidden" animate="visible" variants={fadeIn} custom={i + 1}>
-              <Card className="app-kpi-card rounded-2xl overflow-hidden">
-                <CardContent className="p-5 sm:p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-sm font-medium text-muted-foreground">{card.label}</span>
-                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${card.accent} flex items-center justify-center`}>
-                      <card.icon className={`w-5 h-5 ${card.iconClass}`} />
-                    </div>
-                  </div>
-                  <p className="font-display text-3xl font-bold text-foreground">{card.value}</p>
-                </CardContent>
-              </Card>
+        {SHOW_ADMIN_DASHBOARD_SUMMARY ? (
+          <>
+            <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={0}>
+              <div className="app-page-intro">
+                <div className="flex items-center gap-3 mb-2">
+                  <ShieldCheck className="w-6 h-6 text-accent" />
+                  <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground">Admin Panel</h1>
+                </div>
+                <p className="text-muted-foreground">Manage users, disclosures, transfers, and audit activity with secure operational controls.</p>
+              </div>
             </motion.div>
-          ))}
-        </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 mb-8 sm:mb-10">
+              {[
+                { label: "User Records", value: walletLookupResult ? 1 : 0, icon: Users, iconClass: "text-accent", accent: "from-accent/10 to-accent/5" },
+                { label: "Identity Views", value: identityResult ? 1 : 0, icon: CheckCircle2, iconClass: "text-success", accent: "from-success/10 to-success/5" },
+                { label: "Pending", value: disclosureRequests.filter((request) => request.status === "pending").length, icon: Clock, iconClass: "text-warning", accent: "from-warning/10 to-warning/5" },
+                { label: "Audit Events", value: auditLogs.length, icon: FileText, iconClass: "text-accent", accent: "from-accent/10 to-accent/5" },
+              ].map((card, i) => (
+                <motion.div key={card.label} initial="hidden" animate="visible" variants={fadeIn} custom={i + 1}>
+                  <Card className="app-kpi-card rounded-2xl overflow-hidden">
+                    <CardContent className="p-5 sm:p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-sm font-medium text-muted-foreground">{card.label}</span>
+                        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${card.accent} flex items-center justify-center`}>
+                          <card.icon className={`w-5 h-5 ${card.iconClass}`} />
+                        </div>
+                      </div>
+                      <p className="font-display text-3xl font-bold text-foreground">{card.value}</p>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
+          </>
+        ) : null}
 
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={5}>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
