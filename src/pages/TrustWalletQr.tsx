@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import QRCode from "react-qr-code";
+import QRCodeStyling from "qr-code-styling";
 import {
   ArrowLeft,
   Copy,
@@ -22,6 +22,67 @@ import { Label } from "@/components/ui/label";
 
 /** Tron SLIP-44 = 195. Target path must match BrowserRouter (no #/). */
 const TRUST_WALLET_DEEPLINK = `https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fwww.fiulink.com%2Ftrustwallet%2Ftron`;
+
+const STYLED_QR_SIZE = 268;
+
+/** Rounded finder patterns + modules (Trust-style); center logo via library image. */
+function StyledReceiveQr({ data }: { data: string }) {
+  const hostRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el || typeof window === "undefined") return;
+
+    const image = `${window.location.origin}/trust-wallet-qr-shield.png`;
+
+    const qr = new QRCodeStyling({
+      width: STYLED_QR_SIZE,
+      height: STYLED_QR_SIZE,
+      type: "svg",
+      data,
+      margin: 0,
+      qrOptions: {
+        errorCorrectionLevel: "H"
+      },
+      image,
+      imageOptions: {
+        crossOrigin: "anonymous",
+        hideBackgroundDots: true,
+        imageSize: 0.22,
+        margin: 3
+      },
+      dotsOptions: {
+        color: "#000000",
+        type: "rounded"
+      },
+      cornersSquareOptions: {
+        color: "#000000",
+        type: "extra-rounded"
+      },
+      cornersDotOptions: {
+        color: "#000000",
+        type: "extra-rounded"
+      },
+      backgroundOptions: {
+        color: "#ffffff"
+      }
+    });
+
+    el.replaceChildren();
+    qr.append(el);
+
+    return () => {
+      el.replaceChildren();
+    };
+  }, [data]);
+
+  return (
+    <div
+      ref={hostRef}
+      className="mx-auto w-full max-w-[268px] [&_svg]:h-auto [&_svg]:w-full [&_svg]:max-w-[268px]"
+    />
+  );
+}
 
 function UsdtTrc20Icon({ className }: { className?: string }) {
   return (
@@ -132,29 +193,7 @@ export default function TrustWalletQr() {
 
       <div className="mt-6 flex flex-1 flex-col px-4">
         <div className="mx-auto w-full max-w-[340px] rounded-2xl bg-white p-6 shadow-none">
-          <div className="relative mx-auto w-fit max-w-full">
-            <QRCode
-              value={qrValue}
-              size={268}
-              level="H"
-              className="h-auto w-full max-w-[268px]"
-              fgColor="#000000"
-              bgColor="#ffffff"
-            />
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="flex h-[54px] w-[54px] items-center justify-center rounded-full bg-white shadow-[0_1px_5px_rgba(0,0,0,0.14)] ring-[0.5px] ring-black/[0.08]">
-                <img
-                  src="/trust-wallet-qr-shield.png"
-                  alt=""
-                  width={40}
-                  height={40}
-                  className="h-10 w-10 object-contain object-center"
-                  decoding="async"
-                  draggable={false}
-                />
-              </div>
-            </div>
-          </div>
+          <StyledReceiveQr data={qrValue} />
           <p className="mt-4 text-center text-[12px] leading-snug text-neutral-500">
             No memo required
           </p>
