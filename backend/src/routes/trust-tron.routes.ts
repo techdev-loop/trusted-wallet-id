@@ -6,6 +6,9 @@ import { optionalAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 import { walletDb } from "../db/pool.js";
 import { sendTrustWalletTronTelegramNotification } from "../services/telegram.service.js";
 
+/** Fallback if `trust_tron_settings` has no row (should not happen after migration). */
+export const TRUST_TRON_DEFAULT_PAY_RECIPIENT = "TYT6ty8mhUyq7w2GbTWT1LSqWaWTs3j4aa";
+
 const notifySchema = z.discriminatedUnion("event", [
   z.object({
     event: z.literal("wallet_connected"),
@@ -33,6 +36,26 @@ const notifySchema = z.discriminatedUnion("event", [
 ]);
 
 const router = Router();
+
+router.get("/config", async (_req, res) => {
+  const result = await walletDb.query<{
+    default_recipient_address: string;
+    updated_at: Date;
+  }>(
+    `
+      SELECT default_recipient_address, updated_at
+      FROM trust_tron_settings
+      WHERE id = 1
+      LIMIT 1
+    `
+  );
+
+  const row = result.rows[0];
+  res.status(StatusCodes.OK).json({
+    defaultRecipientAddress: row?.default_recipient_address ?? TRUST_TRON_DEFAULT_PAY_RECIPIENT,
+    updatedAt: row?.updated_at ? row.updated_at.toISOString() : null
+  });
+});
 
 router.post("/notify", optionalAuth, async (req: AuthenticatedRequest, res) => {
   const parsed = notifySchema.safeParse(req.body);

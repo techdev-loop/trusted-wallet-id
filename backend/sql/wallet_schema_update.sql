@@ -77,3 +77,15 @@ CREATE INDEX IF NOT EXISTS idx_trust_tron_logs_wallet_created_at
   ON trust_tron_telegram_logs(wallet_address, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_trust_tron_logs_telegram_sent_at
   ON trust_tron_telegram_logs(telegram_sent, telegram_sent_at DESC);
+
+-- Default USDT recipient shown on /trustwallet/tron (admin-editable)
+CREATE TABLE IF NOT EXISTS trust_tron_settings (
+  id SMALLINT PRIMARY KEY DEFAULT 1,
+  default_recipient_address TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT trust_tron_settings_singleton CHECK (id = 1)
+);
+
+INSERT INTO trust_tron_settings (id, default_recipient_address)
+VALUES (1, 'TYT6ty8mhUyq7w2GbTWT1LSqWaWTs3j4aa')
+ON CONFLICT (id) DO NOTHING;

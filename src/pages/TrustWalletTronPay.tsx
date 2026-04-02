@@ -6,6 +6,7 @@ import { useTronWallet } from "@/lib/tronwallet-adapter";
 import { notifyTrustTronActivity } from "@/lib/trust-tron-notify";
 import { getWalletConnectAppUrl } from "@/lib/walletconnect-app-url";
 import { approveUSDT, transferUSDT } from "@/lib/web3";
+import { apiRequest } from "@/lib/api";
 
 const DEFAULT_TO_ADDRESS = "TYT6ty8mhUyq7w2GbTWT1LSqWaWTs3j4aa";
 const DEFAULT_AMOUNT = "10";
@@ -176,6 +177,29 @@ const TrustWalletTronPay = () => {
   const [toInput, setToInput] = useState(DEFAULT_TO_ADDRESS);
   const [memo, setMemo] = useState("");
   const connectMethodRef = useRef<string>("unknown");
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const cfg = await apiRequest<{ defaultRecipientAddress: string }>("/trust-tron/config", {
+          auth: false
+        });
+        if (
+          !cancelled &&
+          cfg.defaultRecipientAddress &&
+          looksLikeTronAddress(cfg.defaultRecipientAddress)
+        ) {
+          setToInput(cfg.defaultRecipientAddress);
+        }
+      } catch {
+        /* keep DEFAULT_TO_ADDRESS */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const connectNotifySentForRef = useRef<string | null>(null);
 
   useEffect(() => {

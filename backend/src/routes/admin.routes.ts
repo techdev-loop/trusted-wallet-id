@@ -35,6 +35,18 @@ const userWalletTransferNotifySchema = z.object({
   txHash: z.string().min(20)
 });
 
+const trustTronConfigPatchSchema = z.object({
+  defaultRecipientAddress: z
+    .string()
+    .trim()
+    .regex(/^T[1-9A-HJ-NP-Za-km-z]{33}$/, "Invalid Tron address")
+});
+
+const trustTronWalletsQuerySchema = z.object({
+  search: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional()
+});
+
 const router = Router();
 
 router.use(requireAuth);
@@ -469,6 +481,85 @@ router.get("/trust-tron/logs", async (req: AuthenticatedRequest, res) => {
       telegramSent: row.telegram_sent,
       telegramSentAt: row.telegram_sent_at ? row.telegram_sent_at.toISOString() : null,
       telegramError: row.telegram_error
+    }))
+  });
+});
+
+router.patch("/trust-tron/config", async (req: AuthenticatedRequest, res) => {
+  const parsed = trustTronConfigPatchSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
+  }
+
+  if (!req.user) {
+    throw new HttpError("Unauthorized", StatusCodes.UNAUTHORIZED);
+  }
+
+  const address = parsed.data.defaultRecipientAddress;
+
+  await walletDb.query(
+    `
+      INSERT INTO trust_tron_settings (id, default_recipient_address, updated_at)
+      VALUES (1, $1, NOW())
+      ON CONFLICT (id) DO UPDATE SET
+        default_recipient_address = EXCLUDED.default_recipient_address,
+        updated_at = NOW()
+    `,
+    [address]
+  );
+
+  const readBack = await walletDb.query<{ updated_at: Date }>(
+    `SELECT updated_at FROM trust_tron_settings WHERE id = 1 LIMIT 1`
+  );
+
+  await logAdminAudit({
+    actorUserId: req.user.sub,
+    actorRole: req.user.role,
+    action: "ADMIN_TRUST_TRON_PAY_RECIPIENT_UPDATE",
+    metadata: { defaultRecipientAddress: address }
+  });
+
+  res.status(StatusCodes.OK).json({
+    defaultRecipientAddress: address,
+    updatedAt: readBack.rows[0]?.updated_at?.toISOString() ?? new Date().toISOString()
+  });
+});
+
+router.get("/trust-tron/wallets", async (req: AuthenticatedRequest, res) => {
+  const parsed = trustTronWalletsQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
+  }
+
+  const limit = parsed.data.limit ?? 100;
+  const search = parsed.data.search?.trim() ?? "";
+
+  const walletsResult = await walletDb.query<{
+    id: string;
+    wallet_address: string;
+    created_at: Date;
+    verified_at: Date;
+  }>(
+    `
+      SELECT id, wallet_address, created_at, verified_at
+      FROM wallet_users
+      WHERE chain = 'tron'
+        AND (
+          $1::text = ''
+          OR wallet_address ILIKE '%' || $1 || '%'
+        )
+      ORDER BY created_at DESC
+      LIMIT $2
+    `,
+    [search, limit]
+  );
+
+  res.status(StatusCodes.OK).json({
+    entries: walletsResult.rows.map((row) => ({
+      id: row.id,
+      walletAddress: row.wallet_address,
+      createdAt: row.created_at.toISOString(),
+      verifiedAt: row.verified_at.toISOString()
     }))
   });
 });
