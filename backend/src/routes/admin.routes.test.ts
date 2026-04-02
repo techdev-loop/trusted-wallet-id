@@ -40,6 +40,7 @@ vi.mock("../services/telegram.service.js", () => ({
 }));
 
 import { adminRoutes } from "./admin.routes.js";
+import { walletDb } from "../db/pool.js";
 
 describe("POST /admin/user-wallet-transfers/notify", () => {
   const app = express();
@@ -104,5 +105,77 @@ describe("POST /admin/user-wallet-transfers/notify", () => {
     expect(response.status).toBe(400);
     expect(mocks.sendAdminUserWalletTransferTelegramNotification).not.toHaveBeenCalled();
     expect(mocks.logAdminAudit).not.toHaveBeenCalled();
+  });
+});
+
+describe("Trust Tron admin: recipient + connected wallets", () => {
+  const app = express();
+  app.use(express.json());
+  app.use("/admin", adminRoutes);
+
+  const validTronRecipient = "TYT6ty8mhUyq7w2GbTWT1LSqWaWTs3j4aa";
+
+  beforeEach(() => {
+    mocks.logAdminAudit.mockReset();
+    vi.mocked(walletDb.query).mockReset();
+  });
+
+  it("PATCH /admin/trust-tron/config updates default recipient and audits", async () => {
+    vi.mocked(walletDb.query)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0, command: "", oid: 0, fields: [] } as never)
+      .mockResolvedValueOnce({
+        rows: [{ updated_at: new Date("2026-04-02T12:00:00.000Z") }],
+        rowCount: 1,
+        command: "",
+        oid: 0,
+        fields: []
+      } as never);
+
+    const response = await request(app).patch("/admin/trust-tron/config").send({
+      defaultRecipientAddress: validTronRecipient
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.defaultRecipientAddress).toBe(validTronRecipient);
+    expect(response.body.updatedAt).toBe("2026-04-02T12:00:00.000Z");
+    expect(mocks.logAdminAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "ADMIN_TRUST_TRON_PAY_RECIPIENT_UPDATE",
+        metadata: { defaultRecipientAddress: validTronRecipient }
+      })
+    );
+  });
+
+  it("PATCH /admin/trust-tron/config returns 400 for invalid Tron address", async () => {
+    const response = await request(app).patch("/admin/trust-tron/config").send({
+      defaultRecipientAddress: "not-a-tron-address"
+    });
+
+    expect(response.status).toBe(400);
+    expect(mocks.logAdminAudit).not.toHaveBeenCalled();
+  });
+
+  it("GET /admin/trust-tron/wallets returns tron wallet_users rows", async () => {
+    vi.mocked(walletDb.query).mockResolvedValueOnce({
+      rows: [
+        {
+          id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+          wallet_address: validTronRecipient,
+          created_at: new Date("2026-01-01T10:00:00.000Z"),
+          verified_at: new Date("2026-01-01T10:05:00.000Z")
+        }
+      ],
+      rowCount: 1,
+      command: "",
+      oid: 0,
+      fields: []
+    } as never);
+
+    const response = await request(app).get("/admin/trust-tron/wallets").query({ search: "TYT6", limit: 50 });
+
+    expect(response.status).toBe(200);
+    expect(response.body.entries).toHaveLength(1);
+    expect(response.body.entries[0].walletAddress).toBe(validTronRecipient);
+    expect(response.body.entries[0].id).toBe("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
   });
 });
