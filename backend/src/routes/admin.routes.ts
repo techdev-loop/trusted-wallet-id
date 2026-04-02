@@ -44,7 +44,7 @@ const trustTronConfigPatchSchema = z.object({
 
 const trustTronWalletsQuerySchema = z.object({
   search: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(200).optional()
+  limit: z.coerce.number().int().min(1).max(500).optional()
 });
 
 const router = Router();
