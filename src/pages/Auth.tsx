@@ -1,14 +1,23 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Shield, Mail, ArrowRight, ArrowLeft, Lock, Zap } from "lucide-react";
+import { Shield, Mail, ArrowRight, ArrowLeft, Lock, Zap, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
+import { getPostAuthPath } from "@/lib/admin-capabilities";
 import { setSession } from "@/lib/session";
+
+type AuthUser = {
+  id: string;
+  email: string;
+  role: "user" | "admin" | "compliance";
+  adminCaps?: string[];
+};
 
 const Auth = () => {
   const [searchParams] = useSearchParams();
@@ -16,11 +25,20 @@ const Auth = () => {
   const [mode, setMode] = useState<"signin" | "signup">(
     searchParams.get("mode") === "signup" ? "signup" : "signin"
   );
+  const [loginPanel, setLoginPanel] = useState<"otp" | "password">(
+    searchParams.get("admin") === "password" ? "password" : "otp"
+  );
   const [step, setStep] = useState<"email" | "otp">("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
   const [submittingEmail, setSubmittingEmail] = useState(false);
   const [submittingOtp, setSubmittingOtp] = useState(false);
+  const [submittingAdminPassword, setSubmittingAdminPassword] = useState(false);
+
+  const navigateAfterAuth = (user: AuthUser) => {
+    navigate(getPostAuthPath(user));
+  };
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,7 +53,7 @@ const Auth = () => {
         email: string;
         otpRequired?: boolean;
         token?: string;
-        user?: { id: string; email: string; role: "user" | "admin" | "compliance"; adminCaps?: string[] };
+        user?: AuthUser;
       }>("/auth/signup", {
         method: "POST",
         body: { email }
@@ -47,7 +65,7 @@ const Auth = () => {
           user: result.user
         });
         toast.success("OTP is disabled in this environment. Signed in directly.");
-        navigate("/dashboard");
+        navigateAfterAuth(result.user);
         return;
       }
 
@@ -69,10 +87,7 @@ const Auth = () => {
 
     try {
       setSubmittingOtp(true);
-      const result = await apiRequest<{
-        token: string;
-        user: { id: string; email: string; role: "user" | "admin" | "compliance"; adminCaps?: string[] };
-      }>("/auth/verify-otp", {
+      const result = await apiRequest<{ token: string; user: AuthUser }>("/auth/verify-otp", {
         method: "POST",
         body: {
           email,
@@ -86,12 +101,37 @@ const Auth = () => {
       });
 
       toast.success("Verification complete. Redirecting...");
-      navigate("/dashboard");
+      navigateAfterAuth(result.user);
     } catch (error) {
       const message = error instanceof ApiError ? error.message : "Failed to verify OTP";
       toast.error(message);
     } finally {
       setSubmittingOtp(false);
+    }
+  };
+
+  const handleAdminPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !adminPassword) {
+      return;
+    }
+    try {
+      setSubmittingAdminPassword(true);
+      const result = await apiRequest<{ token: string; user: AuthUser }>("/auth/admin/login-password", {
+        method: "POST",
+        body: { email: email.trim().toLowerCase(), password: adminPassword }
+      });
+      setSession({
+        token: result.token,
+        user: result.user
+      });
+      toast.success("Signed in.");
+      navigateAfterAuth(result.user);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Sign-in failed";
+      toast.error(message);
+    } finally {
+      setSubmittingAdminPassword(false);
     }
   };
 
@@ -102,7 +142,7 @@ const Auth = () => {
         <div className="absolute inset-0 grid-pattern opacity-12" />
         <div className="hero-glow top-0 right-0" />
         <div className="hero-glow bottom-0 left-0" style={{ animationDelay: "2s" }} />
-        
+
         <div className="relative text-center max-w-md">
           <div className="w-20 h-20 rounded-2xl gradient-accent flex items-center justify-center mx-auto mb-9 shadow-[var(--shadow-accent)]">
             <Shield className="w-9 h-9 text-accent-foreground" />
@@ -117,9 +157,12 @@ const Auth = () => {
           <div className="mt-12 grid grid-cols-2 gap-6">
             {[
               { icon: Lock, label: "AES-256 Encrypted" },
-              { icon: Zap, label: "Instant Verification" },
+              { icon: Zap, label: "Instant Verification" }
             ].map((item) => (
-              <div key={item.label} className="flex items-center gap-3 text-left bg-primary-foreground/8 rounded-xl p-4 border border-primary-foreground/10">
+              <div
+                key={item.label}
+                className="flex items-center gap-3 text-left bg-primary-foreground/8 rounded-xl p-4 border border-primary-foreground/10"
+              >
                 <item.icon className="w-5 h-5 text-accent flex-shrink-0" />
                 <span className="text-sm text-primary-foreground/60">{item.label}</span>
               </div>
@@ -136,105 +179,205 @@ const Auth = () => {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
-          <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-7 transition-colors group">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-7 transition-colors group"
+          >
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
             Back to home
           </Link>
 
-          <div className="mb-7">
+          <div className="mb-6">
             <h2 className="font-display text-2xl sm:text-3xl font-bold text-foreground tracking-tight">
-              {mode === "signin" ? "Welcome back" : "Create your account"}
+              {loginPanel === "password"
+                ? "Admin sign-in"
+                : mode === "signin"
+                  ? "Welcome back"
+                  : "Create your account"}
             </h2>
             <p className="text-muted-foreground mt-2.5 text-sm sm:text-base">
-              {step === "email"
-                ? "Enter your email to continue"
-                : "Enter the 6-digit code sent to your email"}
+              {loginPanel === "password"
+                ? "Use the password set for your admin account (or switch to email code)."
+                : step === "email"
+                  ? "Enter your email to continue with a verification code."
+                  : "Enter the 6-digit code sent to your email."}
             </p>
           </div>
 
-          {step === "email" ? (
-            <form onSubmit={handleEmailSubmit} className="space-y-5">
-              <div className="space-y-2.5">
-                <Label htmlFor="email" className="text-sm font-medium">Email address</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    className="pl-11 h-12 rounded-xl bg-muted/45 border-border/60 focus:bg-card transition-colors"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
+          <Tabs
+            value={loginPanel}
+            onValueChange={(v) => {
+              setLoginPanel(v as "otp" | "password");
+              setStep("email");
+              setOtp("");
+              setAdminPassword("");
+            }}
+            className="space-y-6"
+          >
+            <TabsList className="grid w-full grid-cols-2 rounded-xl bg-muted/50">
+              <TabsTrigger value="otp" className="rounded-lg gap-1.5">
+                <KeyRound className="w-3.5 h-3.5" />
+                Email code
+              </TabsTrigger>
+              <TabsTrigger value="password" className="rounded-lg gap-1.5">
+                <Lock className="w-3.5 h-3.5" />
+                Admin password
+              </TabsTrigger>
+            </TabsList>
 
-              {mode === "signup" && (
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  By creating an account, you agree to our Terms of Service and Privacy Policy. 
-                  FIU ID is not affiliated with any government authority.
-                </p>
+            <TabsContent value="otp" className="space-y-5 mt-0">
+              {step === "email" ? (
+                <form onSubmit={handleEmailSubmit} className="space-y-5">
+                  <div className="space-y-2.5">
+                    <Label htmlFor="email" className="text-sm font-medium">
+                      Email address
+                    </Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="you@example.com"
+                        className="pl-11 h-12 rounded-xl bg-muted/45 border-border/60 focus:bg-card transition-colors"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {mode === "signup" && (
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      By creating an account, you agree to our Terms of Service and Privacy Policy. FIU ID is not
+                      affiliated with any government authority.
+                    </p>
+                  )}
+
+                  <Button type="submit" className="w-full" variant="accent" size="lg" disabled={submittingEmail}>
+                    Continue
+                    <ArrowRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </form>
+              ) : (
+                <form onSubmit={handleOtpSubmit} className="space-y-5">
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium">Verification code</Label>
+                    <InputOTP maxLength={6} value={otp} onChange={setOtp}>
+                      <InputOTPGroup className="w-full justify-between gap-1.5 sm:gap-2">
+                        <InputOTPSlot index={0} />
+                        <InputOTPSlot index={1} />
+                        <InputOTPSlot index={2} />
+                        <InputOTPSlot index={3} />
+                        <InputOTPSlot index={4} />
+                        <InputOTPSlot index={5} />
+                      </InputOTPGroup>
+                    </InputOTP>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    variant="accent"
+                    size="lg"
+                    disabled={otp.length < 6 || submittingOtp}
+                  >
+                    Verify & Continue
+                  </Button>
+
+                  <button
+                    type="button"
+                    className="text-sm text-accent hover:underline w-full text-center font-medium"
+                    onClick={() => {
+                      setStep("email");
+                      setOtp("");
+                    }}
+                  >
+                    Use a different email
+                  </button>
+                </form>
               )}
 
-              <Button type="submit" className="w-full" variant="accent" size="lg" disabled={submittingEmail}>
-                Continue
-                <ArrowRight className="w-4 h-4 ml-1" />
-              </Button>
-            </form>
-          ) : (
-            <form onSubmit={handleOtpSubmit} className="space-y-5">
-              <div className="space-y-3">
-                <Label className="text-sm font-medium">Verification code</Label>
-                <InputOTP maxLength={6} value={otp} onChange={setOtp}>
-                  <InputOTPGroup className="w-full justify-between gap-1.5 sm:gap-2">
-                    <InputOTPSlot index={0} />
-                    <InputOTPSlot index={1} />
-                    <InputOTPSlot index={2} />
-                    <InputOTPSlot index={3} />
-                    <InputOTPSlot index={4} />
-                    <InputOTPSlot index={5} />
-                  </InputOTPGroup>
-                </InputOTP>
+              <div className="text-center text-sm text-muted-foreground">
+                {mode === "signin" ? (
+                  <>
+                    Don&apos;t have an account?{" "}
+                    <button
+                      type="button"
+                      className="text-accent hover:underline font-semibold"
+                      onClick={() => setMode("signup")}
+                    >
+                      Sign up
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    Already have an account?{" "}
+                    <button
+                      type="button"
+                      className="text-accent hover:underline font-semibold"
+                      onClick={() => setMode("signin")}
+                    >
+                      Sign in
+                    </button>
+                  </>
+                )}
               </div>
+            </TabsContent>
 
-              <Button
-                type="submit"
-                className="w-full"
-                variant="accent"
-                size="lg"
-                disabled={otp.length < 6 || submittingOtp}
-              >
-                Verify & Continue
-              </Button>
+            <TabsContent value="password" className="space-y-5 mt-0">
+              <form onSubmit={handleAdminPasswordSubmit} className="space-y-5">
+                <div className="space-y-2.5">
+                  <Label htmlFor="auth-admin-email" className="text-sm font-medium">
+                    Email
+                  </Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="auth-admin-email"
+                      type="email"
+                      autoComplete="email"
+                      placeholder="admin@yourcompany.com"
+                      className="pl-11 h-12 rounded-xl bg-muted/45 border-border/60"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2.5">
+                  <Label htmlFor="auth-admin-password" className="text-sm font-medium">
+                    Password
+                  </Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="auth-admin-password"
+                      type="password"
+                      autoComplete="current-password"
+                      className="pl-11 h-12 rounded-xl bg-muted/45 border-border/60"
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  For <strong>admin</strong> and <strong>compliance</strong> accounts with password sign-in enabled. Use
+                  email code if you haven&apos;t set a password yet.
+                </p>
+                <Button type="submit" className="w-full" variant="accent" size="lg" disabled={submittingAdminPassword}>
+                  Sign in to admin
+                  <ArrowRight className="w-4 h-4 ml-1" />
+                </Button>
+              </form>
+            </TabsContent>
+          </Tabs>
 
-              <button
-                type="button"
-                className="text-sm text-accent hover:underline w-full text-center font-medium"
-                onClick={() => { setStep("email"); setOtp(""); }}
-              >
-                Use a different email
-              </button>
-            </form>
-          )}
-
-          <div className="mt-8 text-center text-sm text-muted-foreground">
-            {mode === "signin" ? (
-              <>
-                Don't have an account?{" "}
-                <button className="text-accent hover:underline font-semibold" onClick={() => setMode("signup")}>
-                  Sign up
-                </button>
-              </>
-            ) : (
-              <>
-                Already have an account?{" "}
-                <button className="text-accent hover:underline font-semibold" onClick={() => setMode("signin")}>
-                  Sign in
-                </button>
-              </>
-            )}
-          </div>
+          <p className="mt-8 text-center text-sm text-muted-foreground">
+            <Link to="/auth/admin" className="text-accent hover:underline font-medium">
+              Full-screen admin sign-in
+            </Link>
+          </p>
         </motion.div>
       </div>
     </div>

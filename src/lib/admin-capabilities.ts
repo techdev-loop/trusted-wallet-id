@@ -22,6 +22,20 @@ export function hasAdminCapability(capsEffective: string[], required: string): b
   return capsEffective.includes(required);
 }
 
+/** After OTP or password sign-in: operators with capabilities go to the admin app. */
+export function getPostAuthPath(user: {
+  role: "user" | "admin" | "compliance";
+  adminCaps?: string[];
+}): "/admin" | "/dashboard" {
+  if (user.role === "admin" || user.role === "compliance") {
+    const caps = effectiveAdminCaps(user.role, user.adminCaps);
+    if (caps.length > 0) {
+      return "/admin";
+    }
+  }
+  return "/dashboard";
+}
+
 export const CAPABILITY_LABELS: Record<string, string> = {
   [ADMIN_CAPABILITY_WILDCARD]: "Full access (all tasks)",
   "manage_wallets:read": "View wallets & Tron lists",

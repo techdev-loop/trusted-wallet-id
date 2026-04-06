@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
-import { effectiveAdminCaps } from "@/lib/admin-capabilities";
+import { getPostAuthPath } from "@/lib/admin-capabilities";
 import { clearSession, getSession } from "@/lib/session";
 import {
   approveUSDT,
@@ -168,12 +168,9 @@ const Dashboard = () => {
       return;
     }
 
-    if (s.user.role === "admin" || s.user.role === "compliance") {
-      const caps = effectiveAdminCaps(s.user.role, s.user.adminCaps);
-      if (caps.length > 0) {
-        navigate("/admin", { replace: true });
-        return;
-      }
+    if (getPostAuthPath(s.user) === "/admin") {
+      navigate("/admin", { replace: true });
+      return;
     }
 
     void loadDashboard();

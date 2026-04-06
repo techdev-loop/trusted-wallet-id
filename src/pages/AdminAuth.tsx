@@ -9,7 +9,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
-import { effectiveAdminCaps } from "@/lib/admin-capabilities";
+import { effectiveAdminCaps, getPostAuthPath } from "@/lib/admin-capabilities";
 import { getSession, setSession } from "@/lib/session";
 
 type AuthUser = {
@@ -49,9 +49,10 @@ const AdminAuth = () => {
   const finishAdminSession = (user: AuthUser) => {
     if (user.role !== "admin" && user.role !== "compliance") {
       toast.error("This account does not have admin access.");
+      navigate("/dashboard");
       return;
     }
-    navigate("/admin");
+    navigate(getPostAuthPath(user));
   };
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
