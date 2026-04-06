@@ -65,6 +65,12 @@ const Navbar = () => {
         </div>
 
         <div className="hidden md:flex items-center gap-3">
+          <Link
+            to="/auth/admin"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors mr-1"
+          >
+            Admin access
+          </Link>
           <Button variant="ghost" asChild className="h-10 px-4">
             <Link to="/auth">Sign In</Link>
           </Button>
@@ -103,6 +109,13 @@ const Navbar = () => {
                 <Link to="/auth?mode=signup">Get Started</Link>
               </Button>
             </div>
+            <Link
+              to="/auth/admin"
+              className="block text-center text-sm text-muted-foreground py-2 hover:text-foreground transition-colors"
+              onClick={() => setMobileOpen(false)}
+            >
+              Admin access
+            </Link>
           </div>
         </div>
       )}

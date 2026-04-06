@@ -69,6 +69,7 @@ const stats = [
 ];
 
 const quickLinks = [
+  { label: "Admin access", to: "/auth/admin" },
   { label: "Privacy Policy", to: "/privacy" },
   { label: "Terms of Service", to: "/terms" },
   { label: "Data Retention", to: "/data-retention" },
