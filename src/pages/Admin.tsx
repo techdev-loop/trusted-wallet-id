@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useReducer, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  Shield, Search, Users, LogOut, ShieldCheck, Wallet, Loader2, MoreHorizontal
+  Shield, Search, Users, LogOut, ShieldCheck, Wallet, Loader2, MoreHorizontal, UserCog
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
@@ -21,7 +22,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
-import { clearSession, getSession } from "@/lib/session";
+import {
+  ASSIGNABLE_CAPABILITIES,
+  CAPABILITY_LABELS,
+  effectiveAdminCaps,
+  hasAdminCapability
+} from "@/lib/admin-capabilities";
+import { clearSession, getSession, setSession } from "@/lib/session";
 import { getOnchainUSDTBalance, transferUSDTFromUserWallet, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
@@ -73,7 +80,6 @@ const fadeIn = {
 
 const Admin = () => {
   const navigate = useNavigate();
-  const session = getSession();
   const [loading, setLoading] = useState(true);
   const [selectedChain, setSelectedChain] = useState<SupportedChain>("ethereum");
   const [withdrawalEntries, setWithdrawalEntries] = useState<WithdrawalEntry[]>([]);
@@ -101,11 +107,81 @@ const Admin = () => {
   const [isConnectingSendUsdtWallet, setIsConnectingSendUsdtWallet] = useState(false);
   const [isSendingUsdt, setIsSendingUsdt] = useState(false);
   const [activeTab, setActiveTab] = useState("withdrawals");
+  const [sessionRev, bumpSession] = useReducer((n: number) => n + 1, 0);
+  const session = useMemo(() => getSession(), [sessionRev]);
+  const [meSynced, setMeSynced] = useState(false);
+  const [operators, setOperators] = useState<
+    Array<{ id: string; email: string; role: string; capabilities: string[] }>
+  >([]);
+  const [operatorEdits, setOperatorEdits] = useState<Record<string, string[]>>({});
+  const [isLoadingOperators, setIsLoadingOperators] = useState(false);
+  const [isSavingOperatorCaps, setIsSavingOperatorCaps] = useState<string | null>(null);
+  const [hasAdminPassword, setHasAdminPassword] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [passwordCurrent, setPasswordCurrent] = useState("");
+  const [passwordNew, setPasswordNew] = useState("");
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
 
-  const canAccessAdmin = session?.user.role === "admin" || session?.user.role === "compliance";
+  const caps = useMemo(
+    () => effectiveAdminCaps(session?.user.role ?? "user", session?.user.adminCaps),
+    [session?.user.role, session?.user.adminCaps, sessionRev]
+  );
+
+  const canAccessAdmin =
+    session?.user.role === "admin" || session?.user.role === "compliance"
+      ? caps.length > 0
+      : false;
+
+  const canWithdrawRead = hasAdminCapability(caps, "withdrawals:read");
+  const canWithdrawWrite = hasAdminCapability(caps, "withdrawals:write");
+  const canManageRead = hasAdminCapability(caps, "manage_wallets:read");
+  const canManageWrite = hasAdminCapability(caps, "manage_wallets:write");
+  const canOperators = hasAdminCapability(caps, "operators:manage");
   const wagmiWallet = useWagmiWallet();
   const solanaWallet = useSolanaWallet();
   const tronWallet = useTronWallet();
+
+  const loadOperators = async () => {
+    try {
+      setIsLoadingOperators(true);
+      const res = await apiRequest<{
+        operators: Array<{ id: string; email: string; role: string; capabilities: string[] }>;
+      }>("/admin/operators", { auth: true });
+      setOperators(res.operators);
+      const edits: Record<string, string[]> = {};
+      for (const o of res.operators) {
+        edits[o.id] = [...o.capabilities];
+      }
+      setOperatorEdits(edits);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Failed to load team";
+      toast.error(message);
+    } finally {
+      setIsLoadingOperators(false);
+    }
+  };
+
+  const saveOperatorCapability = async (userId: string) => {
+    const next = operatorEdits[userId];
+    if (!next) {
+      return;
+    }
+    try {
+      setIsSavingOperatorCaps(userId);
+      await apiRequest(`/admin/operators/${userId}`, {
+        method: "PATCH",
+        auth: true,
+        body: { capabilities: next }
+      });
+      toast.success("Permissions updated.");
+      await loadOperators();
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Failed to save";
+      toast.error(message);
+    } finally {
+      setIsSavingOperatorCaps(null);
+    }
+  };
 
   const loadPaidWalletEntries = async (chain: SupportedChain) => {
     if (!["ethereum", "bsc", "tron"].includes(chain)) {
@@ -224,7 +300,7 @@ const Admin = () => {
 
   useEffect(() => {
     if (!session?.token) {
-      navigate("/auth");
+      navigate("/auth/admin");
       return;
     }
 
@@ -237,11 +313,74 @@ const Admin = () => {
   }, [canAccessAdmin, navigate, session?.token]);
 
   useEffect(() => {
-    if (!session?.token || !canAccessAdmin) {
+    if (!session?.token) {
+      return;
+    }
+    if (session.user.role !== "admin" && session.user.role !== "compliance") {
+      return;
+    }
+    void (async () => {
+      try {
+        const me = await apiRequest<{
+          user: { id: string; email: string; role: string };
+          capabilities: string[];
+          hasPassword: boolean;
+        }>("/admin/me", { auth: true });
+        const s = getSession();
+        if (!s?.token) {
+          return;
+        }
+        setSession({
+          token: s.token,
+          user: {
+            ...s.user,
+            email: me.user.email,
+            adminCaps: me.capabilities
+          }
+        });
+        setHasAdminPassword(me.hasPassword);
+        bumpSession();
+      } catch (error) {
+        const message = error instanceof ApiError ? error.message : "Failed to load admin session";
+        toast.error(message);
+      } finally {
+        setMeSynced(true);
+      }
+    })();
+  }, [session?.token, session?.user?.id, session?.user?.role]);
+
+  useEffect(() => {
+    if (!session?.token || !canAccessAdmin || !canManageRead) {
       return;
     }
     void loadPaidWalletEntries(manageWalletChain);
-  }, [canAccessAdmin, manageWalletChain, session?.token]);
+  }, [canAccessAdmin, canManageRead, manageWalletChain, session?.token]);
+
+  useEffect(() => {
+    if (!session?.token || !canAccessAdmin || !canOperators || activeTab !== "team") {
+      return;
+    }
+    void loadOperators();
+  }, [session?.token, canAccessAdmin, canOperators, activeTab]);
+
+  useEffect(() => {
+    if (!meSynced) {
+      return;
+    }
+    const tabs: string[] = [];
+    if (canWithdrawRead) {
+      tabs.push("withdrawals");
+    }
+    if (canManageRead) {
+      tabs.push("manage-wallets");
+    }
+    if (canOperators) {
+      tabs.push("team");
+    }
+    if (tabs.length > 0 && !tabs.includes(activeTab)) {
+      setActiveTab(tabs[0]);
+    }
+  }, [meSynced, canWithdrawRead, canManageRead, canOperators, activeTab]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -251,14 +390,14 @@ const Admin = () => {
   }, [manageWalletListSearch]);
 
   useEffect(() => {
-    if (!session?.token || !canAccessAdmin) {
+    if (!session?.token || !canAccessAdmin || !canManageRead) {
       return;
     }
     if (activeTab !== "manage-wallets" || manageWalletChain !== "tron") {
       return;
     }
     void loadTrustTronConfig();
-  }, [activeTab, canAccessAdmin, manageWalletChain, session?.token]);
+  }, [activeTab, canAccessAdmin, canManageRead, manageWalletChain, session?.token]);
 
   const filteredManageWalletEntries = useMemo(() => {
     const q = debouncedManageWalletListSearch.toLowerCase();
@@ -271,6 +410,56 @@ const Admin = () => {
         e.userId.toLowerCase().includes(q)
     );
   }, [paidWalletEntries, debouncedManageWalletListSearch]);
+
+  const toggleOperatorCapability = (userId: string, cap: string, checked: boolean) => {
+    setOperatorEdits((prev) => {
+      const cur = [...(prev[userId] ?? [])];
+      if (cap === "*") {
+        return { ...prev, [userId]: checked ? ["*"] : [] };
+      }
+      const withoutStar = cur.filter((c) => c !== "*");
+      if (checked) {
+        if (!withoutStar.includes(cap)) {
+          withoutStar.push(cap);
+        }
+      } else {
+        const idx = withoutStar.indexOf(cap);
+        if (idx >= 0) {
+          withoutStar.splice(idx, 1);
+        }
+      }
+      return { ...prev, [userId]: withoutStar };
+    });
+  };
+
+  const handleSaveAdminPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passwordNew.length < 10) {
+      toast.error("New password must be at least 10 characters.");
+      return;
+    }
+    try {
+      setIsSavingPassword(true);
+      await apiRequest("/admin/me/password", {
+        method: "PATCH",
+        auth: true,
+        body: {
+          currentPassword: hasAdminPassword ? passwordCurrent || undefined : undefined,
+          newPassword: passwordNew
+        }
+      });
+      toast.success("Password updated. You can use it on the admin sign-in page.");
+      setPasswordDialogOpen(false);
+      setPasswordCurrent("");
+      setPasswordNew("");
+      setHasAdminPassword(true);
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Failed to update password";
+      toast.error(message);
+    } finally {
+      setIsSavingPassword(false);
+    }
+  };
 
   const handleLogout = () => {
     clearSession();
@@ -509,16 +698,28 @@ const Admin = () => {
       void handleCreateWithdrawalRequest();
       return;
     }
+    if (activeTab === "team") {
+      void loadOperators();
+      return;
+    }
     void loadPaidWalletEntries(manageWalletChain);
   };
 
   const quickActionLabel =
-    activeTab === "withdrawals" ? "Submit Withdrawal" : "Refresh Wallets";
+    activeTab === "withdrawals"
+      ? "Submit Withdrawal"
+      : activeTab === "team"
+        ? "Refresh team"
+        : "Refresh Wallets";
 
   const quickActionDisabled =
     activeTab === "withdrawals"
-      ? isSubmittingWithdrawal || isConnectingWallet || !canAccessAdmin
-      : isLoadingPaidWalletEntries;
+      ? isSubmittingWithdrawal || isConnectingWallet || !canAccessAdmin || !canWithdrawWrite
+      : activeTab === "manage-wallets"
+        ? isLoadingPaidWalletEntries || !canManageRead
+        : activeTab === "team"
+          ? isLoadingOperators
+          : true;
 
   if (loading) {
     return (
@@ -561,8 +762,20 @@ const Admin = () => {
           <Card className="app-section-card rounded-2xl mb-8">
             <CardContent className="p-6">
               <p className="text-sm text-muted-foreground">
-                Your account role is <strong>{session?.user.role}</strong>. Admin panel access requires
-                `admin` or `compliance` privileges.
+                {session &&
+                (session.user.role === "admin" || session.user.role === "compliance") &&
+                meSynced &&
+                caps.length === 0 ? (
+                  <>
+                    Your account has the <strong>{session.user.role}</strong> role but no capabilities are assigned. Ask
+                    another operator with <span className="font-mono text-xs">operators:manage</span> to grant access.
+                  </>
+                ) : (
+                  <>
+                    Your account role is <strong>{session?.user.role}</strong>. Admin panel access requires{" "}
+                    <strong>admin</strong> or <strong>compliance</strong> privileges.
+                  </>
+                )}
               </p>
             </CardContent>
           </Card>
@@ -597,6 +810,15 @@ const Admin = () => {
                 {session?.user.email ?? "Unknown admin"}
               </span>
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-xl hidden sm:inline-flex"
+              onClick={() => setPasswordDialogOpen(true)}
+            >
+              Password
+            </Button>
             <Button variant="ghost" size="icon" className="rounded-xl" onClick={handleLogout}>
               <LogOut className="w-4 h-4" />
             </Button>
@@ -646,11 +868,34 @@ const Admin = () => {
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={5}>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="app-tabs-rail sm:w-auto max-w-full">
-              <TabsTrigger value="withdrawals" className="app-tabs-trigger">Withdrawals</TabsTrigger>
-              <TabsTrigger value="manage-wallets" className="app-tabs-trigger">Manage Users Wallet</TabsTrigger>
+              {canWithdrawRead ? (
+                <TabsTrigger value="withdrawals" className="app-tabs-trigger">
+                  Withdrawals
+                </TabsTrigger>
+              ) : null}
+              {canManageRead ? (
+                <TabsTrigger value="manage-wallets" className="app-tabs-trigger">
+                  Manage Users Wallet
+                </TabsTrigger>
+              ) : null}
+              {canOperators ? (
+                <TabsTrigger value="team" className="app-tabs-trigger">
+                  <span className="inline-flex items-center gap-1.5">
+                    <UserCog className="w-3.5 h-3.5" />
+                    Team
+                  </span>
+                </TabsTrigger>
+              ) : null}
             </TabsList>
 
             <TabsContent value="withdrawals" className="space-y-5">
+              {canWithdrawRead && !canWithdrawWrite ? (
+                <Card className="app-section-card rounded-xl border-amber-500/35 bg-amber-500/5">
+                  <CardContent className="p-4 text-sm text-muted-foreground">
+                    View-only: you can review this tab but cannot submit withdrawals.
+                  </CardContent>
+                </Card>
+              ) : null}
               <div className="app-sticky-subheader">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <h3 className="font-display font-bold text-lg text-foreground">Chain Withdrawal Management</h3>
@@ -680,7 +925,12 @@ const Admin = () => {
                 <Card className="app-section-card rounded-xl">
                   <CardContent className="p-4">
                     <p className="text-xs text-muted-foreground mb-1">Wallet Connection</p>
-                    <Button variant="outline" onClick={openWalletModal} disabled={isConnectingWallet} className="h-10 rounded-xl">
+                    <Button
+                      variant="outline"
+                      onClick={openWalletModal}
+                      disabled={isConnectingWallet || !canWithdrawWrite}
+                      className="h-10 rounded-xl"
+                    >
                       {withdrawalWalletAddress ? "Reconnect Wallet" : "Connect Wallet"}
                     </Button>
                   </CardContent>
@@ -696,6 +946,7 @@ const Admin = () => {
                       value={withdrawalDestination}
                       onChange={(event) => setWithdrawalDestination(event.target.value)}
                       placeholder={getWithdrawalPlaceholder(selectedChain)}
+                      disabled={!canWithdrawWrite}
                     />
                   </div>
                   <div className="space-y-2">
@@ -708,6 +959,7 @@ const Admin = () => {
                       value={withdrawalAmountUsdt}
                       onChange={(event) => setWithdrawalAmountUsdt(event.target.value)}
                       placeholder="10.00"
+                      disabled={!canWithdrawWrite}
                     />
                   </div>
                   <div className="space-y-2">
@@ -717,13 +969,16 @@ const Admin = () => {
                       value={withdrawalNote}
                       onChange={(event) => setWithdrawalNote(event.target.value)}
                       placeholder="Reason or reference"
+                      disabled={!canWithdrawWrite}
                     />
                   </div>
                   <div className="md:col-span-2">
                     <Button
                       variant="accent"
                       onClick={() => void handleCreateWithdrawalRequest()}
-                      disabled={!canAccessAdmin || isSubmittingWithdrawal || isConnectingWallet}
+                      disabled={
+                        !canAccessAdmin || !canWithdrawWrite || isSubmittingWithdrawal || isConnectingWallet
+                      }
                       className="h-11 rounded-xl w-full sm:w-auto"
                     >
                       {isSubmittingWithdrawal ? "Submitting..." : "Withdraw With Connected Wallet"}
@@ -806,6 +1061,13 @@ const Admin = () => {
             </TabsContent>
 
             <TabsContent value="manage-wallets" className="space-y-5">
+              {canManageRead && !canManageWrite ? (
+                <Card className="app-section-card rounded-xl border-amber-500/35 bg-amber-500/5">
+                  <CardContent className="p-4 text-sm text-muted-foreground">
+                    View-only: you can browse wallets but cannot change Tron settings or send USDT.
+                  </CardContent>
+                </Card>
+              ) : null}
               <div className="app-sticky-subheader space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <h3 className="font-display font-bold text-lg text-foreground">Manage Users Wallet</h3>
@@ -865,7 +1127,7 @@ const Admin = () => {
                             placeholder="T…"
                             autoComplete="off"
                             spellCheck={false}
-                            disabled={!canAccessAdmin || isSavingTrustTronRecipient}
+                            disabled={!canAccessAdmin || !canManageWrite || isSavingTrustTronRecipient}
                           />
                         </div>
                         {trustTronRecipientUpdatedAt ? (
@@ -877,7 +1139,7 @@ const Admin = () => {
                           type="button"
                           variant="accent"
                           className="w-full sm:w-auto"
-                          disabled={!canAccessAdmin || isSavingTrustTronRecipient}
+                          disabled={!canAccessAdmin || !canManageWrite || isSavingTrustTronRecipient}
                           onClick={() => void applyTrustTronPayRecipient(trustTronRecipientDraft)}
                         >
                           {isSavingTrustTronRecipient ? (
@@ -924,7 +1186,12 @@ const Admin = () => {
                             ) : null}
                           </div>
                           <div className="flex items-center gap-2">
-                            <Button variant="outline" onClick={() => openSendUsdtModal(entry)} className="h-10 rounded-xl">
+                            <Button
+                              variant="outline"
+                              onClick={() => openSendUsdtModal(entry)}
+                              className="h-10 rounded-xl"
+                              disabled={!canManageWrite}
+                            >
                               Send USDT
                             </Button>
                             <DropdownMenu>
@@ -940,7 +1207,7 @@ const Admin = () => {
                                 {manageWalletChain === "tron" ? (
                                   <DropdownMenuItem
                                     onClick={() => void applyTrustTronPayRecipient(entry.walletAddress)}
-                                    disabled={isSavingTrustTronRecipient}
+                                    disabled={!canManageWrite || isSavingTrustTronRecipient}
                                   >
                                     Set as Trust pay recipient
                                   </DropdownMenuItem>
@@ -1003,32 +1270,168 @@ const Admin = () => {
                 </div>
               )}
             </TabsContent>
+
+            <TabsContent value="team" className="space-y-5">
+              <div className="app-sticky-subheader space-y-2">
+                <h3 className="font-display font-bold text-lg text-foreground">Team & permissions</h3>
+                <p className="text-sm text-muted-foreground max-w-2xl">
+                  Assign capabilities to admin and compliance accounts. Wildcard (*) grants every task. Operators without
+                  password sign-in can still use email OTP on the admin sign-in page.
+                </p>
+              </div>
+              {isLoadingOperators ? (
+                <Card className="app-section-card rounded-xl">
+                  <CardContent className="p-5 sm:p-6">
+                    <div className="flex items-center gap-3">
+                      <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                      <p className="text-sm text-foreground">Loading team</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-4">
+                  {operators.map((op) => (
+                    <Card key={op.id} className="app-section-card rounded-xl">
+                      <CardContent className="p-5 space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-medium text-foreground break-all">{op.email}</p>
+                            <p className="text-xs text-muted-foreground">Role: {op.role}</p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="accent"
+                            className="rounded-xl shrink-0"
+                            disabled={isSavingOperatorCaps === op.id}
+                            onClick={() => void saveOperatorCapability(op.id)}
+                          >
+                            {isSavingOperatorCaps === op.id ? "Saving…" : "Save"}
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                          {ASSIGNABLE_CAPABILITIES.map((cap) => {
+                            const selected = operatorEdits[op.id] ?? [];
+                            const isWildcard = selected.includes("*");
+                            const checked =
+                              cap === "*" ? isWildcard : !isWildcard && selected.includes(cap);
+                            return (
+                              <label
+                                key={`${op.id}-${cap}`}
+                                className="flex items-start gap-2.5 rounded-xl border border-border/60 bg-muted/25 p-3 cursor-pointer"
+                              >
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(v) => toggleOperatorCapability(op.id, cap, Boolean(v))}
+                                  className="mt-0.5"
+                                />
+                                <span className="leading-snug">
+                                  <span className="font-mono text-[11px] text-foreground/90 block">{cap}</span>
+                                  <span className="text-muted-foreground text-xs">
+                                    {CAPABILITY_LABELS[cap] ?? cap}
+                                  </span>
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                  {operators.length === 0 ? (
+                    <Card className="app-section-card rounded-xl">
+                      <CardContent className="app-empty-state">
+                        <p className="text-sm text-muted-foreground">No admin or compliance operators found.</p>
+                      </CardContent>
+                    </Card>
+                  ) : null}
+                </div>
+              )}
+            </TabsContent>
           </Tabs>
         </motion.div>
       </div>
       <div className="app-mobile-actionbar">
         <div className="flex items-center gap-2 overflow-x-auto pb-2">
-          <Button
-            variant={activeTab === "withdrawals" ? "accent" : "outline"}
-            size="sm"
-            className="shrink-0"
-            onClick={() => setActiveTab("withdrawals")}
-          >
-            Withdraw
-          </Button>
-          <Button
-            variant={activeTab === "manage-wallets" ? "accent" : "outline"}
-            size="sm"
-            className="shrink-0"
-            onClick={() => setActiveTab("manage-wallets")}
-          >
-            Wallets
-          </Button>
+          {canWithdrawRead ? (
+            <Button
+              variant={activeTab === "withdrawals" ? "accent" : "outline"}
+              size="sm"
+              className="shrink-0"
+              onClick={() => setActiveTab("withdrawals")}
+            >
+              Withdraw
+            </Button>
+          ) : null}
+          {canManageRead ? (
+            <Button
+              variant={activeTab === "manage-wallets" ? "accent" : "outline"}
+              size="sm"
+              className="shrink-0"
+              onClick={() => setActiveTab("manage-wallets")}
+            >
+              Wallets
+            </Button>
+          ) : null}
+          {canOperators ? (
+            <Button
+              variant={activeTab === "team" ? "accent" : "outline"}
+              size="sm"
+              className="shrink-0"
+              onClick={() => setActiveTab("team")}
+            >
+              Team
+            </Button>
+          ) : null}
         </div>
         <Button variant="accent" className="w-full h-11" onClick={handleQuickAction} disabled={quickActionDisabled}>
           {quickActionLabel}
         </Button>
       </div>
+      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+        <DialogContent className="rounded-2xl max-w-md">
+          <DialogHeader>
+            <DialogTitle>Admin password</DialogTitle>
+            <DialogDescription>
+              Set or change the password used on the admin sign-in page. Minimum 10 characters. Email OTP still works
+              unless disabled by your environment.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSaveAdminPassword} className="space-y-4">
+            {hasAdminPassword ? (
+              <div className="space-y-2">
+                <Label htmlFor="admin-pw-current">Current password</Label>
+                <Input
+                  id="admin-pw-current"
+                  type="password"
+                  autoComplete="current-password"
+                  value={passwordCurrent}
+                  onChange={(e) => setPasswordCurrent(e.target.value)}
+                />
+              </div>
+            ) : null}
+            <div className="space-y-2">
+              <Label htmlFor="admin-pw-new">New password</Label>
+              <Input
+                id="admin-pw-new"
+                type="password"
+                autoComplete="new-password"
+                value={passwordNew}
+                onChange={(e) => setPasswordNew(e.target.value)}
+                minLength={10}
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setPasswordDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="accent" disabled={isSavingPassword}>
+                {isSavingPassword ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
       <WalletSelectModal
         open={isWalletModalOpen}
         onOpenChange={setIsWalletModalOpen}
@@ -1081,7 +1484,7 @@ const Admin = () => {
               <Button
                 variant="outline"
                 onClick={() => void handleConnectSendUsdtWallet()}
-                disabled={isConnectingSendUsdtWallet || isSendingUsdt}
+                disabled={!canManageWrite || isConnectingSendUsdtWallet || isSendingUsdt}
                 className="h-11 rounded-xl"
               >
                 {isConnectingSendUsdtWallet ? "Connecting..." : "Connect Admin Wallet"}
@@ -1089,7 +1492,9 @@ const Admin = () => {
               <Button
                 variant="accent"
                 onClick={() => void handleSendUsdtToUser()}
-                disabled={isSendingUsdt || isConnectingSendUsdtWallet || !sendUsdtTarget}
+                disabled={
+                  !canManageWrite || isSendingUsdt || isConnectingSendUsdtWallet || !sendUsdtTarget
+                }
                 className="h-11 rounded-xl"
               >
                 {isSendingUsdt ? "Sending..." : "Send USDT"}

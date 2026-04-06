@@ -2,6 +2,8 @@ export interface SessionUser {
   id: string;
   email: string;
   role: "user" | "admin" | "compliance";
+  /** Server-issued capability strings; omitted on legacy sessions (treated as full access for admin/compliance). */
+  adminCaps?: string[];
 }
 
 export interface SessionData {
@@ -19,7 +21,7 @@ export function getSession(): SessionData | null {
 
   try {
     const parsed = JSON.parse(raw) as SessionData;
-    if (!parsed?.token || !parsed?.user?.id || !parsed?.user?.email || !parsed?.user?.role) {
+    if (!parsed?.token || !parsed?.user?.id || !parsed?.user?.email || parsed?.user?.role == null) {
       return null;
     }
     return parsed;

@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import { HttpError } from "../lib/http-error.js";
 import { verifyAccessToken } from "../security/jwt.js";
+import { effectiveCapabilities, hasCapability } from "../lib/admin-capabilities.js";
 import type { AuthenticatedRequestUser, AppRole } from "../types/auth.js";
 
 export interface AuthenticatedRequest extends Request {
@@ -45,6 +46,34 @@ export function requireRole(...roles: AppRole[]) {
       throw new HttpError("Forbidden", StatusCodes.FORBIDDEN);
     }
 
+    next();
+  };
+}
+
+/** Admin or compliance with at least one effective capability (JWT legacy without caps counts as full). */
+export function requireAdminPanelAccess(req: AuthenticatedRequest, _res: Response, next: NextFunction): void {
+  if (!req.user) {
+    throw new HttpError("Unauthorized", StatusCodes.UNAUTHORIZED);
+  }
+  if (req.user.role !== "admin" && req.user.role !== "compliance") {
+    throw new HttpError("Forbidden", StatusCodes.FORBIDDEN);
+  }
+  const caps = effectiveCapabilities(req.user);
+  if (caps.length === 0) {
+    throw new HttpError("Forbidden: no admin capabilities assigned", StatusCodes.FORBIDDEN);
+  }
+  next();
+}
+
+export function requireCapability(required: string) {
+  return (req: AuthenticatedRequest, _res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      throw new HttpError("Unauthorized", StatusCodes.UNAUTHORIZED);
+    }
+    const caps = effectiveCapabilities(req.user);
+    if (!hasCapability(caps, required)) {
+      throw new HttpError("Forbidden: missing required capability", StatusCodes.FORBIDDEN);
+    }
     next();
   };
 }

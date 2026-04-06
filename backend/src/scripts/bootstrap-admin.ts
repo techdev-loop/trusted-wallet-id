@@ -64,7 +64,8 @@ async function run(): Promise<void> {
     await identityDb.query(
       `
         UPDATE users
-        SET role = $2
+        SET role = $2,
+            admin_capabilities = COALESCE(admin_capabilities, ARRAY['*']::text[])
         WHERE id = $1
       `,
       [existingUser.id, options.role]
@@ -98,8 +99,8 @@ async function run(): Promise<void> {
 
   const insertedUser = await identityDb.query<{ id: string }>(
     `
-      INSERT INTO users (email, role)
-      VALUES ($1, $2)
+      INSERT INTO users (email, role, admin_capabilities)
+      VALUES ($1, $2, ARRAY['*']::text[])
       RETURNING id
     `,
     [options.email, options.role]

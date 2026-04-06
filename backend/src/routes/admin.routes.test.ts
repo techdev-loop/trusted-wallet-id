@@ -18,11 +18,15 @@ vi.mock("../middleware/auth.js", () => ({
     req.user = {
       sub: "admin-user-123",
       email: "admin@example.com",
-      role: "admin"
+      role: "admin",
+      adminCaps: ["*"]
     };
     next();
   },
-  requireRole:
+  requireAdminPanelAccess: (_req: unknown, _res: unknown, next: () => void) => {
+    next();
+  },
+  requireCapability:
     () =>
     (_req: unknown, _res: unknown, next: () => void) => {
       next();

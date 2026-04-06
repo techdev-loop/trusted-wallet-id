@@ -1,12 +1,15 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
 import { StatusCodes } from "http-status-codes";
 import { z } from "zod";
 import { env } from "../config/env.js";
 import { identityDb } from "../db/pool.js";
+import { capabilitiesFromDbRow } from "../lib/admin-capabilities.js";
 import { HttpError } from "../lib/http-error.js";
 import { signAccessToken } from "../security/jwt.js";
 import { sendOtpEmail } from "../services/email.service.js";
 import type { AppRole } from "../types/auth.js";
+import type { AuthTokenPayload } from "../types/auth.js";
 
 const signupSchema = z.object({
   email: z.string().email()
@@ -17,34 +20,62 @@ const verifyOtpSchema = z.object({
   otpCode: z.string().regex(/^\d{6}$/)
 });
 
+const adminPasswordLoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1).max(500)
+});
+
 const router = Router();
 
-async function issueSessionForEmail(email: string) {
-  const upsertedUser = await identityDb.query<{ id: string; email: string; role: AppRole }>(
-    `
-      INSERT INTO users (email)
-      VALUES ($1)
-      ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
-      RETURNING id, email, role
-    `,
-    [email]
-  );
+const BCRYPT_ROUNDS = 12;
 
-  const user = upsertedUser.rows[0];
-  const token = signAccessToken({
+interface UserSessionRow {
+  id: string;
+  email: string;
+  role: AppRole;
+  admin_capabilities: string[] | null;
+}
+
+function buildTokenPayload(user: UserSessionRow): AuthTokenPayload {
+  const caps = capabilitiesFromDbRow(user.role, user.admin_capabilities);
+  const payload: AuthTokenPayload = {
     sub: user.id,
     email: user.email,
     role: user.role
-  });
+  };
+  if (user.role === "admin" || user.role === "compliance") {
+    payload.adminCaps = caps;
+  }
+  return payload;
+}
 
+function sessionResponseFromUser(user: UserSessionRow) {
+  const token = signAccessToken(buildTokenPayload(user));
+  const caps = capabilitiesFromDbRow(user.role, user.admin_capabilities);
   return {
     token,
     user: {
       id: user.id,
       email: user.email,
-      role: user.role
+      role: user.role,
+      ...(user.role === "admin" || user.role === "compliance" ? { adminCaps: caps } : {})
     }
   };
+}
+
+async function issueSessionForEmail(email: string) {
+  const upsertedUser = await identityDb.query<UserSessionRow>(
+    `
+      INSERT INTO users (email)
+      VALUES ($1)
+      ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
+      RETURNING id, email, role, admin_capabilities
+    `,
+    [email]
+  );
+
+  const user = upsertedUser.rows[0];
+  return sessionResponseFromUser(user);
 }
 
 router.post("/signup", async (req, res) => {
@@ -144,6 +175,54 @@ router.post("/verify-otp", async (req, res) => {
   res.status(StatusCodes.OK).json({
     ...session
   });
+});
+
+router.post("/admin/login-password", async (req, res) => {
+  const parsed = adminPasswordLoginSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
+  }
+
+  const email = parsed.data.email.toLowerCase();
+
+  const userResult = await identityDb.query<UserSessionRow & { admin_password_hash: string | null }>(
+    `
+      SELECT id, email, role, admin_capabilities, admin_password_hash
+      FROM users
+      WHERE email = $1
+      LIMIT 1
+    `,
+    [email]
+  );
+
+  const user = userResult.rows[0];
+  if (!user) {
+    throw new HttpError("Invalid email or password", StatusCodes.UNAUTHORIZED);
+  }
+
+  if (user.role !== "admin" && user.role !== "compliance") {
+    throw new HttpError("Invalid email or password", StatusCodes.UNAUTHORIZED);
+  }
+
+  if (!user.admin_password_hash) {
+    throw new HttpError(
+      "Password sign-in is not enabled for this account. Sign in with email OTP or ask a super admin to set a password.",
+      StatusCodes.FORBIDDEN
+    );
+  }
+
+  const ok = await bcrypt.compare(parsed.data.password, user.admin_password_hash);
+  if (!ok) {
+    throw new HttpError("Invalid email or password", StatusCodes.UNAUTHORIZED);
+  }
+
+  const caps = capabilitiesFromDbRow(user.role, user.admin_capabilities);
+  if (caps.length === 0) {
+    throw new HttpError("Forbidden: no admin capabilities assigned", StatusCodes.FORBIDDEN);
+  }
+
+  const { admin_password_hash: _h, ...sessionUser } = user;
+  res.status(StatusCodes.OK).json(sessionResponseFromUser(sessionUser));
 });
 
 export { router as authRoutes };

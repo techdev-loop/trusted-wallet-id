@@ -7,6 +7,7 @@ import { TronWalletProvider } from "@/lib/tronwallet-adapter";
 import { SolanaWalletProvider } from "@/lib/solana-wallet-provider";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import AdminAuth from "./pages/AdminAuth";
 import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
 import Web3Wallet from "./pages/Web3Wallet";
@@ -25,6 +26,7 @@ const App = () => (
             <>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
+              <Route path="/auth/admin" element={<AdminAuth />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/web3-wallet" element={<Web3Wallet />} />
               <Route path="/trustwallet/qr" element={<TrustWalletQr />} />

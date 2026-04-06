@@ -8,16 +8,19 @@ const __dirname = path.dirname(__filename);
 
 async function run(): Promise<void> {
   const identitySchemaPath = path.resolve(__dirname, "../../sql/identity_schema.sql");
+  const identityAdminRbacPath = path.resolve(__dirname, "../../sql/identity_admin_rbac.sql");
   const walletSchemaPath = path.resolve(__dirname, "../../sql/wallet_schema.sql");
   const walletSchemaUpdatePath = path.resolve(__dirname, "../../sql/wallet_schema_update.sql");
 
-  const [identitySql, walletSql, walletUpdateSql] = await Promise.all([
+  const [identitySql, identityAdminRbacSql, walletSql, walletUpdateSql] = await Promise.all([
     readFile(identitySchemaPath, "utf8"),
+    readFile(identityAdminRbacPath, "utf8"),
     readFile(walletSchemaPath, "utf8"),
     readFile(walletSchemaUpdatePath, "utf8").catch(() => "") // Optional migration
   ]);
 
   await identityDb.query(identitySql);
+  await identityDb.query(identityAdminRbacSql);
   await walletDb.query(walletSql);
   
   if (walletUpdateSql) {

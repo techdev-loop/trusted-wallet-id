@@ -35,7 +35,7 @@ const Auth = () => {
         email: string;
         otpRequired?: boolean;
         token?: string;
-        user?: { id: string; email: string; role: "user" | "admin" | "compliance" };
+        user?: { id: string; email: string; role: "user" | "admin" | "compliance"; adminCaps?: string[] };
       }>("/auth/signup", {
         method: "POST",
         body: { email }
@@ -71,7 +71,7 @@ const Auth = () => {
       setSubmittingOtp(true);
       const result = await apiRequest<{
         token: string;
-        user: { id: string; email: string; role: "user" | "admin" | "compliance" };
+        user: { id: string; email: string; role: "user" | "admin" | "compliance"; adminCaps?: string[] };
       }>("/auth/verify-otp", {
         method: "POST",
         body: {

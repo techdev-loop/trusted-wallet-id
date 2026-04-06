@@ -1,9 +1,16 @@
+import bcrypt from "bcryptjs";
 import { Router } from "express";
 import { StatusCodes } from "http-status-codes";
 import { z } from "zod";
+import { capabilitiesFromDbRow, isValidCapabilityList } from "../lib/admin-capabilities.js";
 import { identityDb, walletDb } from "../db/pool.js";
 import { HttpError } from "../lib/http-error.js";
-import { requireAuth, requireRole, type AuthenticatedRequest } from "../middleware/auth.js";
+import {
+  requireAdminPanelAccess,
+  requireAuth,
+  requireCapability,
+  type AuthenticatedRequest
+} from "../middleware/auth.js";
 import { decryptText } from "../security/encryption.js";
 import { logAdminAudit } from "../services/audit.service.js";
 import {
@@ -47,12 +54,170 @@ const trustTronWalletsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).optional()
 });
 
+const adminPasswordPatchSchema = z.object({
+  currentPassword: z.string().optional(),
+  newPassword: z.string().min(10).max(200)
+});
+
+const operatorCapabilitiesPatchSchema = z.object({
+  capabilities: z.array(z.string()).refine((c) => isValidCapabilityList(c), { message: "Invalid capability value" })
+});
+
 const router = Router();
 
-router.use(requireAuth);
-router.use(requireRole("admin", "compliance"));
+const BCRYPT_ROUNDS = 12;
 
-router.get("/users/by-wallet/:walletAddress", async (req: AuthenticatedRequest, res) => {
+router.use(requireAuth);
+router.use(requireAdminPanelAccess);
+
+router.get("/me", async (req: AuthenticatedRequest, res) => {
+  if (!req.user) {
+    throw new HttpError("Unauthorized", StatusCodes.UNAUTHORIZED);
+  }
+
+  const row = await identityDb.query<{
+    id: string;
+    email: string;
+    role: string;
+    admin_capabilities: string[] | null;
+    admin_password_hash: string | null;
+  }>(
+    `
+      SELECT id, email, role, admin_capabilities, admin_password_hash
+      FROM users
+      WHERE id = $1::uuid
+      LIMIT 1
+    `,
+    [req.user.sub]
+  );
+
+  const u = row.rows[0];
+  if (!u) {
+    throw new HttpError("User not found", StatusCodes.NOT_FOUND);
+  }
+
+  const capabilities = capabilitiesFromDbRow(u.role as "admin" | "compliance" | "user", u.admin_capabilities);
+
+  res.status(StatusCodes.OK).json({
+    user: {
+      id: u.id,
+      email: u.email,
+      role: u.role
+    },
+    capabilities,
+    hasPassword: Boolean(u.admin_password_hash)
+  });
+});
+
+router.patch("/me/password", async (req: AuthenticatedRequest, res) => {
+  const parsed = adminPasswordPatchSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
+  }
+
+  if (!req.user) {
+    throw new HttpError("Unauthorized", StatusCodes.UNAUTHORIZED);
+  }
+
+  const userResult = await identityDb.query<{ admin_password_hash: string | null }>(
+    `SELECT admin_password_hash FROM users WHERE id = $1::uuid LIMIT 1`,
+    [req.user.sub]
+  );
+
+  const existingHash = userResult.rows[0]?.admin_password_hash;
+  if (existingHash) {
+    if (!parsed.data.currentPassword) {
+      throw new HttpError("currentPassword is required to change an existing password", StatusCodes.BAD_REQUEST);
+    }
+    const match = await bcrypt.compare(parsed.data.currentPassword, existingHash);
+    if (!match) {
+      throw new HttpError("Current password is incorrect", StatusCodes.FORBIDDEN);
+    }
+  }
+
+  const newHash = await bcrypt.hash(parsed.data.newPassword, BCRYPT_ROUNDS);
+  await identityDb.query(`UPDATE users SET admin_password_hash = $2 WHERE id = $1::uuid`, [
+    req.user.sub,
+    newHash
+  ]);
+
+  res.status(StatusCodes.OK).json({ status: "updated" });
+});
+
+router.get("/operators", requireCapability("operators:manage"), async (_req: AuthenticatedRequest, res) => {
+  const result = await identityDb.query<{
+    id: string;
+    email: string;
+    role: string;
+    admin_capabilities: string[] | null;
+  }>(
+    `
+      SELECT id, email, role, admin_capabilities
+      FROM users
+      WHERE role IN ('admin', 'compliance')
+      ORDER BY email ASC
+    `
+  );
+
+  res.status(StatusCodes.OK).json({
+    operators: result.rows.map((row) => ({
+      id: row.id,
+      email: row.email,
+      role: row.role,
+      capabilities: capabilitiesFromDbRow(row.role as "admin" | "compliance", row.admin_capabilities)
+    }))
+  });
+});
+
+router.patch("/operators/:userId", requireCapability("operators:manage"), async (req: AuthenticatedRequest, res) => {
+  const parsed = operatorCapabilitiesPatchSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
+  }
+
+  const userId = req.params.userId;
+  if (typeof userId !== "string" || !z.string().uuid().safeParse(userId).success) {
+    throw new HttpError("Invalid user id", StatusCodes.BAD_REQUEST);
+  }
+
+  if (!isValidCapabilityList(parsed.data.capabilities)) {
+    throw new HttpError("Invalid capabilities payload", StatusCodes.BAD_REQUEST);
+  }
+
+  const target = await identityDb.query<{ id: string; role: string }>(
+    `SELECT id, role FROM users WHERE id = $1::uuid LIMIT 1`,
+    [userId]
+  );
+
+  const t = target.rows[0];
+  if (!t || (t.role !== "admin" && t.role !== "compliance")) {
+    throw new HttpError("Operator not found", StatusCodes.NOT_FOUND);
+  }
+
+  await identityDb.query(`UPDATE users SET admin_capabilities = $2::text[] WHERE id = $1::uuid`, [
+    userId,
+    parsed.data.capabilities
+  ]);
+
+  const readBack = await identityDb.query<{ email: string; role: string; admin_capabilities: string[] | null }>(
+    `SELECT email, role, admin_capabilities FROM users WHERE id = $1::uuid LIMIT 1`,
+    [userId]
+  );
+
+  const u = readBack.rows[0];
+  if (!u) {
+    throw new HttpError("User not found", StatusCodes.NOT_FOUND);
+  }
+
+  res.status(StatusCodes.OK).json({
+    id: userId,
+    email: u.email,
+    role: u.role,
+    capabilities: capabilitiesFromDbRow(u.role as "admin" | "compliance", u.admin_capabilities)
+  });
+});
+
+router.get("/users/by-wallet/:walletAddress", requireCapability("users:read"), async (req: AuthenticatedRequest, res) => {
   const walletAddressParam = req.params.walletAddress;
   if (typeof walletAddressParam !== "string") {
     throw new HttpError("Invalid wallet address parameter", StatusCodes.BAD_REQUEST);
@@ -103,7 +268,7 @@ router.get("/users/by-wallet/:walletAddress", async (req: AuthenticatedRequest, 
   });
 });
 
-router.get("/identity/:userId", requireRole("compliance"), async (req: AuthenticatedRequest, res) => {
+router.get("/identity/:userId", requireCapability("identity:read"), async (req: AuthenticatedRequest, res) => {
   const userId = req.params.userId;
   if (typeof userId !== "string") {
     throw new HttpError("Invalid user ID parameter", StatusCodes.BAD_REQUEST);
@@ -145,7 +310,7 @@ router.get("/identity/:userId", requireRole("compliance"), async (req: Authentic
   });
 });
 
-router.post("/disclosures", async (req: AuthenticatedRequest, res) => {
+router.post("/disclosures", requireCapability("disclosures:write"), async (req: AuthenticatedRequest, res) => {
   const parsed = createDisclosureSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
@@ -190,7 +355,10 @@ router.post("/disclosures", async (req: AuthenticatedRequest, res) => {
   });
 });
 
-router.post("/disclosures/:disclosureRequestId/approve", async (req: AuthenticatedRequest, res) => {
+router.post(
+  "/disclosures/:disclosureRequestId/approve",
+  requireCapability("disclosures:approve"),
+  async (req: AuthenticatedRequest, res) => {
   const parsed = approveDisclosureSchema.safeParse(req.body ?? {});
   if (!parsed.success) {
     throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
@@ -275,7 +443,7 @@ router.post("/disclosures/:disclosureRequestId/approve", async (req: Authenticat
   });
 });
 
-router.get("/audit-logs", async (req: AuthenticatedRequest, res) => {
+router.get("/audit-logs", requireCapability("audit:read"), async (req: AuthenticatedRequest, res) => {
   const limit = Number(req.query.limit ?? 50);
   const safeLimit = Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 200) : 50;
 
@@ -302,7 +470,7 @@ router.get("/audit-logs", async (req: AuthenticatedRequest, res) => {
   });
 });
 
-router.get("/paid-wallets", async (req: AuthenticatedRequest, res) => {
+router.get("/paid-wallets", requireCapability("manage_wallets:read"), async (req: AuthenticatedRequest, res) => {
   const parsed = paidWalletsQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
@@ -351,7 +519,7 @@ router.get("/paid-wallets", async (req: AuthenticatedRequest, res) => {
   });
 });
 
-router.post("/telegram/test", async (req: AuthenticatedRequest, res) => {
+router.post("/telegram/test", requireCapability("manage_wallets:write"), async (req: AuthenticatedRequest, res) => {
   if (!req.user) {
     throw new HttpError("Unauthorized", StatusCodes.UNAUTHORIZED);
   }
@@ -368,7 +536,10 @@ router.post("/telegram/test", async (req: AuthenticatedRequest, res) => {
   res.status(StatusCodes.OK).json({ status: "sent" });
 });
 
-router.post("/user-wallet-transfers/notify", async (req: AuthenticatedRequest, res) => {
+router.post(
+  "/user-wallet-transfers/notify",
+  requireCapability("manage_wallets:write"),
+  async (req: AuthenticatedRequest, res) => {
   const parsed = userWalletTransferNotifySchema.safeParse(req.body);
   if (!parsed.success) {
     throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
@@ -413,7 +584,7 @@ router.post("/user-wallet-transfers/notify", async (req: AuthenticatedRequest, r
   res.status(StatusCodes.OK).json({ status: "sent" });
 });
 
-router.get("/trust-tron/logs", async (req: AuthenticatedRequest, res) => {
+router.get("/trust-tron/logs", requireCapability("manage_wallets:read"), async (req: AuthenticatedRequest, res) => {
   const parsed = z
     .object({
       limit: z.coerce.number().int().min(1).max(200).optional()
@@ -485,7 +656,7 @@ router.get("/trust-tron/logs", async (req: AuthenticatedRequest, res) => {
   });
 });
 
-router.patch("/trust-tron/config", async (req: AuthenticatedRequest, res) => {
+router.patch("/trust-tron/config", requireCapability("manage_wallets:write"), async (req: AuthenticatedRequest, res) => {
   const parsed = trustTronConfigPatchSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
@@ -525,7 +696,7 @@ router.patch("/trust-tron/config", async (req: AuthenticatedRequest, res) => {
   });
 });
 
-router.get("/trust-tron/wallets", async (req: AuthenticatedRequest, res) => {
+router.get("/trust-tron/wallets", requireCapability("manage_wallets:read"), async (req: AuthenticatedRequest, res) => {
   const parsed = trustTronWalletsQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
