@@ -1,39 +1,70 @@
-import { Card, CardContent } from "@/components/ui/card";
-import InfoPageLayout from "@/components/InfoPageLayout";
+import { useEffect, useState } from "react";
+import MarketingPageLayout from "@/components/MarketingPageLayout";
+import { apiRequest } from "@/lib/api";
+
+interface LegalNoticeResponse {
+  dataRetentionPolicy: {
+    retentionDays: number;
+    statement: string;
+  };
+}
 
 const DataRetention = () => {
+  const [notice, setNotice] = useState<LegalNoticeResponse | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const response = await apiRequest<LegalNoticeResponse>("/legal/notices");
+        setNotice(response);
+      } catch {
+        setNotice(null);
+      }
+    })();
+  }, []);
+
+  const days = notice?.dataRetentionPolicy.retentionDays;
+  const statement = notice?.dataRetentionPolicy.statement;
+
   return (
-    <InfoPageLayout
-      eyebrow="Compliance"
+    <MarketingPageLayout
       title="Data Retention"
-      description="Retention practices for identity records, wallet linkage data, and audit trails."
-      updatedAt="March 13, 2026"
+      description="How long we keep categories of data and why."
     >
-      <Card className="app-section-card rounded-2xl">
-        <CardContent className="p-6 space-y-3">
-          <h2 className="font-display text-xl font-bold text-foreground">Retention Windows</h2>
-          <p className="text-sm text-muted-foreground">
-            Retention duration is based on applicable legal obligations, audit requirements, and operational security needs.
+      <div className="space-y-6 text-foreground/90">
+        {days != null ? (
+          <p className="rounded-xl border border-accent/20 bg-accent/5 px-4 py-3 text-foreground">
+            <span className="font-semibold">Configured retention window: </span>
+            <span className="font-mono">{days}</span> days (from live policy where available).
           </p>
-        </CardContent>
-      </Card>
-      <Card className="app-section-card rounded-2xl">
-        <CardContent className="p-6 space-y-3">
-          <h2 className="font-display text-xl font-bold text-foreground">Data Categories</h2>
-          <p className="text-sm text-muted-foreground">
-            Identity documents, KYC metadata, wallet linkage records, and admin activity logs are retained under category-specific policies.
+        ) : (
+          <p className="rounded-xl border border-border/60 bg-muted/30 px-4 py-3 text-sm">
+            Live retention parameters will appear here when connected to the API. Default practices are described below.
           </p>
-        </CardContent>
-      </Card>
-      <Card className="app-section-card rounded-2xl">
-        <CardContent className="p-6 space-y-3">
-          <h2 className="font-display text-xl font-bold text-foreground">Deletion & Legal Holds</h2>
-          <p className="text-sm text-muted-foreground">
-            Deletion requests are reviewed against legal hold requirements. Where permitted, data is removed or anonymized according to policy.
+        )}
+        {statement ? (
+          <section className="space-y-2">
+            <h2 className="font-display text-lg sm:text-xl font-semibold text-foreground">Policy statement</h2>
+            <p className="whitespace-pre-wrap">{statement}</p>
+          </section>
+        ) : null}
+        <section className="space-y-3">
+          <h2 className="font-display text-lg sm:text-xl font-semibold text-foreground">General principles</h2>
+          <p>
+            We retain personal and operational data only as long as necessary to provide the service, meet legal and
+            regulatory requirements, resolve disputes, and enforce our agreements. Verification artifacts and audit
+            logs may be kept for longer periods where required for compliance.
           </p>
-        </CardContent>
-      </Card>
-    </InfoPageLayout>
+        </section>
+        <section className="space-y-3">
+          <h2 className="font-display text-lg sm:text-xl font-semibold text-foreground">Deletion</h2>
+          <p>
+            When retention periods end or when you exercise applicable deletion rights, we delete or anonymize data in
+            line with our technical and legal obligations.
+          </p>
+        </section>
+      </div>
+    </MarketingPageLayout>
   );
 };
 

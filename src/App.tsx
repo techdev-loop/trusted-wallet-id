@@ -14,6 +14,11 @@ import Web3Wallet from "./pages/Web3Wallet";
 import TrustWalletQr from "./pages/TrustWalletQr";
 import TrustWalletTronPay from "./pages/TrustWalletTronPay";
 import NotFound from "./pages/NotFound";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
+import DataRetention from "./pages/DataRetention";
+import SystemStatus from "./pages/SystemStatus";
+import Contact from "./pages/Contact";
 
 const App = () => (
   <WagmiProvider>
@@ -25,6 +30,11 @@ const App = () => (
           <Routes>
             <>
               <Route path="/" element={<Index />} />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<TermsOfService />} />
+              <Route path="/data-retention" element={<DataRetention />} />
+              <Route path="/status" element={<SystemStatus />} />
+              <Route path="/contact" element={<Contact />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/auth/admin" element={<AdminAuth />} />
               <Route path="/dashboard" element={<Dashboard />} />

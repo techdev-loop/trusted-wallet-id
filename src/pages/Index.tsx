@@ -110,7 +110,7 @@ const Index = () => {
       <Navbar />
 
       {/* Hero */}
-      <section className="relative min-h-[90vh] md:min-h-screen flex items-center justify-center overflow-hidden pt-12">
+      <section className="relative min-h-[90vh] md:min-h-screen flex items-center justify-center overflow-hidden pt-20 sm:pt-24 md:pt-28">
         <div className="absolute inset-0">
           <img src={heroBg} alt="" className="w-full h-full object-cover scale-[1.03]" />
           <div className="absolute inset-0 gradient-hero opacity-88" />
@@ -121,7 +121,7 @@ const Index = () => {
         <div className="hero-glow -top-20 -right-40 animate-pulse-slow opacity-80" />
         <div className="hero-glow -bottom-40 -left-20 animate-pulse-slow opacity-80" style={{ animationDelay: "2s" }} />
 
-        <div className="relative page-container py-20 sm:py-24 md:py-28 text-center">
+        <div className="relative page-container py-12 sm:py-16 md:py-20 lg:py-24 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -195,10 +195,18 @@ const Index = () => {
               <p className="text-[11px] uppercase tracking-[0.18em] text-primary-foreground/45 mb-3">
                 Quick Links
               </p>
-              <div className="flex flex-wrap justify-center gap-2">
+              <div className="flex flex-wrap justify-center gap-2 sm:gap-2.5 max-w-full">
                 {quickLinks.map((item) => (
-                  <Button key={item.label} asChild variant="outline" size="sm" className="rounded-lg border-primary-foreground/20 bg-primary-foreground/[0.06] text-primary-foreground hover:bg-primary-foreground/[0.14]">
-                    <Link to={item.to}>{item.label}</Link>
+                  <Button
+                    key={item.label}
+                    asChild
+                    variant="outline"
+                    size="default"
+                    className="min-h-11 px-3 sm:px-4 rounded-xl border-primary-foreground/20 bg-primary-foreground/[0.06] text-primary-foreground hover:bg-primary-foreground/[0.14] text-xs sm:text-sm"
+                  >
+                    <Link to={item.to} className="text-center leading-snug">
+                      {item.label}
+                    </Link>
                   </Button>
                 ))}
               </div>
@@ -214,7 +222,7 @@ const Index = () => {
       <section id="how-it-works" className="section-pad bg-background relative">
         <div className="page-container">
           <motion.div
-            className="text-center mb-20"
+            className="text-center mb-12 sm:mb-16 md:mb-20"
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true }}
@@ -224,7 +232,7 @@ const Index = () => {
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/8 border border-accent/15 mb-5">
               <span className="text-xs font-semibold text-accent tracking-wider uppercase">Simple Process</span>
             </div>
-            <h2 className="section-title">How It Works</h2>
+            <h2 className="section-title px-1">How It Works</h2>
             <p className="section-subtitle mt-4 max-w-lg mx-auto">
               Three simple steps to verify your identity for your Web3 wallet securely.
             </p>
@@ -261,7 +269,7 @@ const Index = () => {
         <div className="absolute inset-0 grid-pattern opacity-25" />
         <div className="page-container relative">
           <motion.div
-            className="text-center mb-20"
+            className="text-center mb-12 sm:mb-16 md:mb-20"
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true }}
@@ -271,7 +279,7 @@ const Index = () => {
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/8 border border-accent/15 mb-5">
               <span className="text-xs font-semibold text-accent tracking-wider uppercase">Enterprise Security</span>
             </div>
-            <h2 className="section-title">Built for Trust</h2>
+            <h2 className="section-title px-1">Built for Trust</h2>
             <p className="section-subtitle mt-4 max-w-lg mx-auto">
               Every layer of FIU ID is designed with security and compliance in mind.
             </p>

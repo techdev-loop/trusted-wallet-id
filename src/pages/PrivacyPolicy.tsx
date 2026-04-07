@@ -1,50 +1,55 @@
-import { Card, CardContent } from "@/components/ui/card";
-import InfoPageLayout from "@/components/InfoPageLayout";
+import MarketingPageLayout from "@/components/MarketingPageLayout";
 
-const PrivacyPolicy = () => {
-  return (
-    <InfoPageLayout
-      eyebrow="Legal"
-      title="Privacy Policy"
-      description="How FIU ID collects, processes, and protects personal and wallet-related information."
-      updatedAt="March 13, 2026"
-    >
-      <Card className="app-section-card rounded-2xl">
-        <CardContent className="p-6 space-y-3">
-          <h2 className="font-display text-xl font-bold text-foreground">1. Information We Collect</h2>
-          <p className="text-sm text-muted-foreground">
-            We collect account information, identity verification inputs, wallet linkage data, and operational security logs
-            necessary to provide identity-to-wallet verification services.
-          </p>
-        </CardContent>
-      </Card>
-      <Card className="app-section-card rounded-2xl">
-        <CardContent className="p-6 space-y-3">
-          <h2 className="font-display text-xl font-bold text-foreground">2. How We Use Information</h2>
-          <p className="text-sm text-muted-foreground">
-            Data is used for KYC processing, wallet ownership validation, compliance workflows, fraud prevention, and auditability.
-            We do not sell personal information.
-          </p>
-        </CardContent>
-      </Card>
-      <Card className="app-section-card rounded-2xl">
-        <CardContent className="p-6 space-y-3">
-          <h2 className="font-display text-xl font-bold text-foreground">3. Security & Access Controls</h2>
-          <p className="text-sm text-muted-foreground">
-            Sensitive data is protected by encryption, strict role-based access, and immutable audit logging for administrative actions.
-          </p>
-        </CardContent>
-      </Card>
-      <Card className="app-section-card rounded-2xl">
-        <CardContent className="p-6 space-y-3">
-          <h2 className="font-display text-xl font-bold text-foreground">4. Contact</h2>
-          <p className="text-sm text-muted-foreground">
-            For privacy questions or requests, use the Contact page and include your registered email and request details.
-          </p>
-        </CardContent>
-      </Card>
-    </InfoPageLayout>
-  );
-};
+const PrivacyPolicy = () => (
+  <MarketingPageLayout
+    title="Privacy Policy"
+    description="How FIU ID collects, uses, and protects your information."
+  >
+    <div className="space-y-6 text-foreground/90">
+      <section className="space-y-3">
+        <h2 className="font-display text-lg sm:text-xl font-semibold text-foreground">Overview</h2>
+        <p>
+          This Privacy Policy describes how we handle personal information when you use FIU ID services, including
+          identity verification and wallet linking. We process data only as needed to provide the service and meet legal
+          obligations.
+        </p>
+      </section>
+      <section className="space-y-3">
+        <h2 className="font-display text-lg sm:text-xl font-semibold text-foreground">Information we collect</h2>
+        <ul className="list-disc pl-5 space-y-2">
+          <li>Account identifiers such as email address used for sign-in and OTP verification.</li>
+          <li>Identity verification data submitted through our KYC flow, stored with strong encryption.</li>
+          <li>Wallet addresses and on-chain activity metadata required to verify ownership and operate the registry.</li>
+          <li>Technical logs needed for security, fraud prevention, and service reliability.</li>
+        </ul>
+      </section>
+      <section className="space-y-3">
+        <h2 className="font-display text-lg sm:text-xl font-semibold text-foreground">How we use information</h2>
+        <p>
+          We use your information to operate the platform, verify identities, link wallets, comply with law, enforce
+          our terms, and improve security. We do not sell your personal information.
+        </p>
+      </section>
+      <section className="space-y-3">
+        <h2 className="font-display text-lg sm:text-xl font-semibold text-foreground">Retention & disclosure</h2>
+        <p>
+          Data is retained according to our data retention practices and lawful disclosure policies. See the Data
+          Retention page for high-level retention parameters. Information may be disclosed when required by law or with
+          your consent where applicable.
+        </p>
+      </section>
+      <section className="space-y-3">
+        <h2 className="font-display text-lg sm:text-xl font-semibold text-foreground">Your choices</h2>
+        <p>
+          Depending on your region, you may have rights to access, correct, or delete certain personal data. Contact us
+          through the Contact page for requests.
+        </p>
+      </section>
+      <p className="text-xs text-muted-foreground pt-2 border-t border-border/60">
+        This summary is provided for convenience. Your use of FIU ID is also governed by our Terms of Service.
+      </p>
+    </div>
+  </MarketingPageLayout>
+);
 
 export default PrivacyPolicy;

@@ -58,8 +58,8 @@ const Footer = () => {
       <div className="absolute inset-0 grid-pattern opacity-[0.06]" />
       <div className="absolute inset-0 mesh-overlay opacity-30" />
       <div className="page-container py-12 sm:py-14 md:py-16 relative">
-        <div className="grid lg:grid-cols-12 gap-10 mb-10 md:mb-12">
-          <div className="lg:col-span-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 mb-10 md:mb-12">
+          <div className="md:col-span-2 lg:col-span-6">
             <Link to="/" className="flex items-center gap-2.5 mb-5 group">
               <div className="w-9 h-9 rounded-xl gradient-accent flex items-center justify-center shadow-[var(--shadow-accent)] group-hover:shadow-[var(--shadow-lg)] transition-shadow">
                 <Shield className="w-4 h-4 text-accent-foreground" />
@@ -89,7 +89,7 @@ const Footer = () => {
             </p>
           </div>
 
-          <div className="lg:col-span-3 lg:col-start-8">
+          <div className="md:col-span-1 lg:col-span-3 lg:col-start-8">
             <h4 className="font-display font-semibold text-sm mb-4 text-primary-foreground/85 tracking-wide">Platform</h4>
             <ul className="space-y-3">
               {[
@@ -97,6 +97,7 @@ const Footer = () => {
                 { label: "Features", id: "features", type: "section" as const },
                 { label: "Security", id: "security", type: "section" as const },
                 { label: "Start Verification", href: "/auth?mode=signup", type: "route" as const },
+                { label: "Admin access", href: "/auth/admin", type: "route" as const },
               ].map((item) => (
                 <li key={item.label}>
                   {item.type === "section" ? (
@@ -119,7 +120,7 @@ const Footer = () => {
             </ul>
           </div>
 
-          <div className="lg:col-span-2">
+          <div className="md:col-span-1 lg:col-span-2 lg:col-start-11">
             <h4 className="font-display font-semibold text-sm mb-4 text-primary-foreground/85 tracking-wide">Legal</h4>
             <ul className="space-y-3">
               {[
