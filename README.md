@@ -46,3 +46,9 @@ See [WEB3_IMPLEMENTATION.md](./WEB3_IMPLEMENTATION.md) for detailed setup.
 - shadcn-ui
 - Tailwind CSS
 - Ethers.js (for Web3)
+
+## Deploying on Vercel
+
+- **Install:** The repo includes [`.npmrc`](./.npmrc) with `legacy-peer-deps=true`. `@solana/wallet-adapter-react` pulls optional React Native / mobile peers that disagree with **React 18** on the web; legacy peer resolution matches npm v6 behavior and avoids install failures.
+- **Node:** Set the project to **Node 20.17+** or **22.x** (Vercel → Project → Settings → General → Node.js Version). The `engines` field in `package.json` guides compatible versions.
+- **Build:** Default `npm install` + `npm run build` (Vite outputs `dist/`). Ensure `VITE_*` env vars are set in Vercel for production API URLs.

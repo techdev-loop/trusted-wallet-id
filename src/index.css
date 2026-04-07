@@ -257,7 +257,7 @@
   }
 
   .surface-card {
-    @apply rounded-2xl border border-border/60 bg-card/88 shadow-[var(--shadow-sm)] backdrop-blur-md;
+    @apply rounded-2xl border border-border/60 bg-card shadow-[var(--shadow-sm)] backdrop-blur-md;
   }
 
   .surface-card-strong {
