@@ -1,6 +1,9 @@
 import { getSession } from "./session";
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "https://api.fiulink.com/api";
+/** Same-origin `/api` works on Vercel Services when the Express backend uses `routePrefix: "/api"` and `VITE_API_BASE_URL` is unset at build time. */
+const API_BASE_URL =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ||
+  (!import.meta.env.DEV ? "/api" : "https://api.fiulink.com/api");
 const TRANSIENT_HTTP_STATUSES = new Set([502, 503, 504]);
 
 function wait(ms: number): Promise<void> {
