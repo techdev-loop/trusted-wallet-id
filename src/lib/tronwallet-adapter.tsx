@@ -653,7 +653,7 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         }
 
         addTronDebug('connect:trust:not-available');
-        throw new Error('Trust Wallet Tron provider not available. Open this site in Trust Wallet Discover, switch to a Tron account, and allow connection.');
+        throw new Error('Trust Wallet Tron provider not available. Open this site in Trust Wallet Discover, switch to a Tron account, and allow linking.');
       }
 
       // Direct injected connection first (especially important on mobile).

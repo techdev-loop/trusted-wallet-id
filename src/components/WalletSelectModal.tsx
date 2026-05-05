@@ -53,7 +53,7 @@ const WALLET_OPTIONS: WalletOption[] = [
     id: "trust",
     name: "Trust Wallet",
     icon: "🛡️",
-    description: "Open this page in Trust Wallet app browser to connect Tron wallet",
+    description: "Open this page in Trust Wallet app browser to link your Tron wallet",
     method: "injected",
     supportedChains: ["tron"],
     installUrl: "https://trustwallet.com/",
@@ -62,7 +62,7 @@ const WALLET_OPTIONS: WalletOption[] = [
     id: "okxwallet",
     name: "OKX Wallet",
     icon: "⭕",
-    description: "Connect with OKX Wallet for Tron",
+    description: "Link with OKX Wallet for Tron",
     method: "injected",
     supportedChains: ["tron"],
     installUrl: "https://www.okx.com/web3",
@@ -71,7 +71,7 @@ const WALLET_OPTIONS: WalletOption[] = [
     id: "safepal",
     name: "SafePal",
     icon: "🛡️",
-    description: "Connect SafePal in dApp browser for Tron",
+    description: "Use SafePal in dApp browser for Tron",
     method: "injected",
     supportedChains: ["tron"],
     installUrl: "https://www.safepal.com/",
@@ -80,7 +80,7 @@ const WALLET_OPTIONS: WalletOption[] = [
     id: "phantom",
     name: "Phantom",
     icon: "👻",
-    description: "Connect with Phantom via Solana Wallet Adapter",
+    description: "Link with Phantom via Solana Wallet Adapter",
     method: "injected",
     supportedChains: ["solana"],
     installUrl: "https://phantom.app/",
@@ -89,7 +89,7 @@ const WALLET_OPTIONS: WalletOption[] = [
     id: "solflare",
     name: "Solflare",
     icon: "☀️",
-    description: "Connect with Solflare via Solana Wallet Adapter",
+    description: "Link with Solflare via Solana Wallet Adapter",
     method: "injected",
     supportedChains: ["solana"],
     installUrl: "https://solflare.com/",
@@ -98,7 +98,7 @@ const WALLET_OPTIONS: WalletOption[] = [
     id: "walletconnect",
     name: "WalletConnect (QR)",
     icon: "🔗",
-    description: "Connect Tron wallets by scanning WalletConnect QR code",
+    description: "Link Tron wallets by scanning WalletConnect QR code",
     method: "walletconnect",
     supportedChains: ["tron"],
   },
@@ -315,10 +315,10 @@ export function WalletSelectModal({
         <div className="max-h-[85vh] overflow-y-auto p-5 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold">
-              Connect Wallet
+              Link wallet
             </DialogTitle>
             <DialogDescription>
-              Select a wallet to connect to {selectedChain.charAt(0).toUpperCase() + selectedChain.slice(1)} network
+              Select a wallet to link to {selectedChain.charAt(0).toUpperCase() + selectedChain.slice(1)} network
             </DialogDescription>
           </DialogHeader>
 
@@ -378,9 +378,9 @@ export function WalletSelectModal({
                         // Show mobile-specific instructions for Phantom
                         if (wallet.id === "phantom") {
                           if (isMobile) {
-                            return "Mobile: Tap to open Phantom app and connect";
+                            return "Mobile: Tap to open Phantom app and link";
                           } else {
-                            return "Desktop: Connect using Phantom browser extension";
+                            return "Desktop: Link using Phantom browser extension";
                           }
                         }
                         
@@ -408,7 +408,7 @@ export function WalletSelectModal({
 
           <div className="mt-4 pt-4 border-t border-border/50">
             <p className="text-xs text-muted-foreground text-center whitespace-normal break-words">
-              By connecting, you agree to our Terms of Service and Privacy Policy.
+              By linking a wallet, you agree to our Terms of Service and Privacy Policy.
               New to Web3?{" "}
               <a
                 href="https://ethereum.org/en/wallets/"

