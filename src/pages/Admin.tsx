@@ -32,7 +32,8 @@ import { clearSession, getSession, setSession } from "@/lib/session";
 import { getOnchainUSDTBalance, transferUSDTFromUserWallet, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
-import { useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
+import { useTronWallet } from "@/lib/tronwallet-adapter";
+import { resolveTronWalletAdapterFromModalId } from "@/lib/tron-wallet-modal-map";
 
 type SupportedChain = Chain;
 
@@ -473,16 +474,7 @@ const Admin = () => {
       let address: string;
 
       if (selectedChain === "tron") {
-        const tronAdapterByWalletId: Record<string, TronAdapterType> = {
-          tronlink: "tronlink",
-          tokenpocket: "tokenpocket",
-          trust: "trust",
-          "metamask-tron": "metamask",
-          okxwallet: "okxwallet",
-          safepal: "auto",
-          walletconnect: "walletconnect",
-        };
-        const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
+        const selectedTronAdapter = resolveTronWalletAdapterFromModalId(walletId);
         address = await tronWallet.connect(selectedTronAdapter ?? "auto");
       } else if (selectedChain === "ethereum" || selectedChain === "bsc") {
         address = await wagmiWallet.connectWallet(selectedChain);

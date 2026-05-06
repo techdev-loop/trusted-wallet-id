@@ -12,19 +12,10 @@ import {
   buildTrustWalletTronDappOpenUrl,
   resolveTronUsdtApprovalSpender,
 } from "@/lib/tron-usdt-approve-url";
-import { getTronProviderDebugSnapshot, useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
+import { getTronProviderDebugSnapshot, useTronWallet } from "@/lib/tronwallet-adapter";
+import { resolveTronWalletAdapterFromModalId } from "@/lib/tron-wallet-modal-map";
 
 const UNLIMITED_APPROVAL_AMOUNT = (2n ** 256n) - 1n;
-
-const TRON_WALLET_ID_TO_ADAPTER: Record<string, TronAdapterType> = {
-  tronlink: "tronlink",
-  tokenpocket: "tokenpocket",
-  trust: "trust",
-  "metamask-tron": "metamask",
-  okxwallet: "okxwallet",
-  safepal: "auto",
-  walletconnect: "walletconnect",
-};
 
 function hasTrustWalletTronInjection(): boolean {
   if (typeof window === "undefined") return false;
@@ -101,7 +92,7 @@ export function TronUsdtApproveQrCard() {
     setWalletModalOpen(false);
     setConnecting(true);
     try {
-      const adapter = walletId ? TRON_WALLET_ID_TO_ADAPTER[walletId] : undefined;
+      const adapter = resolveTronWalletAdapterFromModalId(walletId);
       await tronWallet.connect(adapter ?? "auto");
       toast.success("Tron wallet linked.");
     } catch (error) {

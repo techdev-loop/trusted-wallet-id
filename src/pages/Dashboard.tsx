@@ -25,7 +25,8 @@ import {
 } from "@/lib/web3";
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
-import { getTronProviderDebugSnapshot, useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
+import { getTronProviderDebugSnapshot, useTronWallet } from "@/lib/tronwallet-adapter";
+import { resolveTronWalletAdapterFromModalId } from "@/lib/tron-wallet-modal-map";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
 import { TronUsdtApproveQrCard } from "@/components/TronUsdtApproveQrCard";
 import {
@@ -283,18 +284,7 @@ const Dashboard = () => {
       if (selectedChain === "ethereum" || selectedChain === "bsc") {
         normalizedAddress = await wagmiWallet.connectWallet(selectedChain);
       } else if (selectedChain === "tron") {
-        // Use selected Tron wallet adapter from modal.
-        const tronAdapterByWalletId: Record<string, TronAdapterType> = {
-          tronlink: "tronlink",
-          tokenpocket: "tokenpocket",
-          trust: "trust",
-          "metamask-tron": "metamask",
-          okxwallet: "okxwallet",
-          safepal: "auto",
-          walletconnect: "walletconnect",
-        };
-
-        const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
+        const selectedTronAdapter = resolveTronWalletAdapterFromModalId(walletId);
 
         // Reuse existing connection only when no explicit wallet was selected.
         if (!selectedTronAdapter && tronWallet.isConnected && tronWallet.address) {

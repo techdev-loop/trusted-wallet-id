@@ -16,7 +16,8 @@ import { apiRequest } from "@/lib/api";
 import { setSession } from "@/lib/session";
 import { type Chain, type WalletConnectionMethod } from "@/lib/web3";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
-import { useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
+import { useTronWallet } from "@/lib/tronwallet-adapter";
+import { resolveTronWalletAdapterFromModalId } from "@/lib/tron-wallet-modal-map";
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
 import Navbar from "@/components/Navbar";
@@ -47,16 +48,7 @@ const Web3Wallet = () => {
       // Connect to wallet
       let address: string;
       if (selectedChain === "tron") {
-        const tronAdapterByWalletId: Record<string, TronAdapterType> = {
-          tronlink: "tronlink",
-          tokenpocket: "tokenpocket",
-          trust: "trust",
-          "metamask-tron": "metamask",
-          okxwallet: "okxwallet",
-          safepal: "auto",
-          walletconnect: "walletconnect",
-        };
-        const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
+        const selectedTronAdapter = resolveTronWalletAdapterFromModalId(walletId);
         address = await tronWallet.connect(selectedTronAdapter ?? "auto");
       } else if (selectedChain === "ethereum" || selectedChain === "bsc") {
         address = await wagmiWallet.connectWallet(selectedChain);
@@ -171,7 +163,7 @@ const Web3Wallet = () => {
                   ) : (
                     <>
                       <Wallet className="w-4 h-4 mr-2" />
-                      Connect Browser Wallet & Sign
+                      Connect wallet…
                     </>
                   )}
                 </Button>
