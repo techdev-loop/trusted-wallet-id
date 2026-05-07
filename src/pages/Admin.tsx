@@ -402,38 +402,6 @@ const Admin = () => {
     void loadTrustTronConfig();
   }, [activeTab, canAccessAdmin, canManageRead, manageWalletChain, session?.token]);
 
-  useEffect(() => {
-    if (!isConnectingWallet) {
-      return;
-    }
-    const timeoutId = setTimeout(() => {
-      setIsConnectingWallet(false);
-      toast.error("Wallet connection timed out. Please try again.");
-      if (selectedChain === "tron") {
-        setIsTrustWithdrawalModalOpen(true);
-      } else {
-        setIsWalletModalOpen(true);
-      }
-    }, 35000);
-    return () => clearTimeout(timeoutId);
-  }, [isConnectingWallet, selectedChain]);
-
-  useEffect(() => {
-    if (!isConnectingSendUsdtWallet) {
-      return;
-    }
-    const timeoutId = setTimeout(() => {
-      setIsConnectingSendUsdtWallet(false);
-      toast.error("Admin wallet connection timed out. Please retry.");
-      if (manageWalletChain === "tron") {
-        setIsTrustSendUsdtWalletModalOpen(true);
-      } else {
-        setIsSendUsdtWalletModalOpen(true);
-      }
-    }, 35000);
-    return () => clearTimeout(timeoutId);
-  }, [isConnectingSendUsdtWallet, manageWalletChain]);
-
   const filteredManageWalletEntries = useMemo(() => {
     const q = debouncedManageWalletListSearch.toLowerCase();
     if (!q) {
@@ -533,21 +501,13 @@ const Admin = () => {
           return;
         }
         try {
-          address = await withConnectionTimeout(
-            tronWallet.connect("trust"),
-            25000,
-            "Trust Wallet connection timed out. Please retry."
-          );
+          address = await tronWallet.connect("trust");
         } catch (trustError) {
           const trustMessage = trustError instanceof Error ? trustError.message : String(trustError);
           if (/user rejected/i.test(trustMessage)) {
             throw trustError;
           }
-          address = await withConnectionTimeout(
-            tronWallet.connect("auto"),
-            25000,
-            "Trust Wallet connection timed out. Please retry."
-          );
+          address = await tronWallet.connect("auto");
         }
       } else if (selectedChain === "ethereum" || selectedChain === "bsc") {
         address = await withConnectionTimeout(
@@ -673,21 +633,13 @@ const Admin = () => {
               return tronWallet.address;
             }
             try {
-              return await withConnectionTimeout(
-                tronWallet.connect("trust"),
-                25000,
-                "Trust Wallet connection timed out. Please retry."
-              );
+              return await tronWallet.connect("trust");
             } catch (trustError) {
               const trustMessage = trustError instanceof Error ? trustError.message : String(trustError);
               if (/user rejected/i.test(trustMessage)) {
                 throw trustError;
               }
-              return await withConnectionTimeout(
-                tronWallet.connect("auto"),
-                25000,
-                "Trust Wallet connection timed out. Please retry."
-              );
+              return await tronWallet.connect("auto");
             }
           })()
         : manageWalletChain === "ethereum" || manageWalletChain === "bsc"
