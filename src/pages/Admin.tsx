@@ -591,7 +591,7 @@ const Admin = () => {
       setIsConnectingSendUsdtWallet(true);
       const address =
         manageWalletChain === "tron"
-          ? await tronWallet.connect("auto")
+          ? await tronWallet.connect("walletconnect")
           : manageWalletChain === "ethereum" || manageWalletChain === "bsc"
             ? await wagmiWallet.connectWallet(manageWalletChain)
             : await solanaWallet.connectWallet();
