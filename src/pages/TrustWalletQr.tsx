@@ -19,10 +19,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { buildTrustWalletTronDappOpenUrl } from "@/lib/tron-usdt-approve-url";
 
 /** Trust deeplink that opens `/trustwallet/tron` inside Trust Wallet's Tron dApp browser. */
-const TRUST_WALLET_DEEPLINK = buildTrustWalletTronDappOpenUrl("https://www.fiulink.com/trustwallet/tron");
+const TRUST_WALLET_DEEPLINK =
+  "https://link.trustwallet.com/open_url?coin=195&url=https%3A%2F%2Fwww.fiulink.com%2Ftrustwallet%2Ftron";
 
 const STYLED_QR_SIZE = 268;
 
