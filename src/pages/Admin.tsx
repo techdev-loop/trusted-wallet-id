@@ -578,7 +578,7 @@ const Admin = () => {
       setIsConnectingSendUsdtWallet(true);
       setIsTrustWalletConnectModalOpen(false);
       const address = manageWalletChain === "tron"
-        ? await tronWallet.connect("trust")
+        ? await tronWallet.connect("auto")
         : manageWalletChain === "ethereum" || manageWalletChain === "bsc"
           ? await wagmiWallet.connectWallet(manageWalletChain)
           : await solanaWallet.connectWallet();
@@ -588,7 +588,7 @@ const Admin = () => {
       const message = error instanceof Error ? error.message : "Failed to connect admin wallet";
       if (manageWalletChain === "tron" && error instanceof Error && !/user rejected/i.test(message)) {
         try {
-          const fallbackAddress = await tronWallet.connect("auto");
+          const fallbackAddress = await tronWallet.connect("trust");
           setSendUsdtWalletAddress(fallbackAddress);
           toast.success("Trust Wallet linked.");
           return;
