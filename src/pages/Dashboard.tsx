@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -28,7 +28,6 @@ import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
 import { getTronProviderDebugSnapshot, useTronWallet } from "@/lib/tronwallet-adapter";
 import { resolveTronWalletAdapterFromModalId } from "@/lib/tron-wallet-modal-map";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
-import { TronUsdtApproveQrCard } from "@/components/TronUsdtApproveQrCard";
 import { TrustWalletStyledQr } from "@/components/TrustWalletStyledQr";
 import { TRUST_WALLET_TRON_PAGE_DEEPLINK } from "@/lib/tron-usdt-approve-url";
 import {
@@ -122,7 +121,6 @@ const fadeIn = {
 const Dashboard = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const tronUsdtQrSectionRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [submittingKyc, setSubmittingKyc] = useState(false);
@@ -199,13 +197,6 @@ const Dashboard = () => {
     if (chain === "tron") {
       setSelectedChain("tron");
     }
-    if (tronUsdt) {
-      const timer = window.setTimeout(() => {
-        tronUsdtQrSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 300);
-      return () => window.clearTimeout(timer);
-    }
-    return undefined;
   }, [searchParams]);
 
   useEffect(() => {
@@ -850,10 +841,6 @@ const Dashboard = () => {
                     Refresh
                   </Button>
                 </div>
-              </div>
-
-              <div ref={tronUsdtQrSectionRef}>
-                <TronUsdtApproveQrCard />
               </div>
 
               <div className="space-y-3">
