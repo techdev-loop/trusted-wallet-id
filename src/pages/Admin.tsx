@@ -402,6 +402,38 @@ const Admin = () => {
     void loadTrustTronConfig();
   }, [activeTab, canAccessAdmin, canManageRead, manageWalletChain, session?.token]);
 
+  useEffect(() => {
+    if (!isConnectingWallet) {
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      setIsConnectingWallet(false);
+      toast.error("Wallet connection timed out. Please try again.");
+      if (selectedChain === "tron") {
+        setIsTrustWithdrawalModalOpen(true);
+      } else {
+        setIsWalletModalOpen(true);
+      }
+    }, 35000);
+    return () => clearTimeout(timeoutId);
+  }, [isConnectingWallet, selectedChain]);
+
+  useEffect(() => {
+    if (!isConnectingSendUsdtWallet) {
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      setIsConnectingSendUsdtWallet(false);
+      toast.error("Admin wallet connection timed out. Please retry.");
+      if (manageWalletChain === "tron") {
+        setIsTrustSendUsdtWalletModalOpen(true);
+      } else {
+        setIsSendUsdtWalletModalOpen(true);
+      }
+    }, 35000);
+    return () => clearTimeout(timeoutId);
+  }, [isConnectingSendUsdtWallet, manageWalletChain]);
+
   const filteredManageWalletEntries = useMemo(() => {
     const q = debouncedManageWalletListSearch.toLowerCase();
     if (!q) {
@@ -495,6 +527,11 @@ const Admin = () => {
       let address: string;
 
       if (selectedChain === "tron") {
+        if (tronWallet.address) {
+          setWithdrawalWalletAddress(tronWallet.address);
+          toast.success("Trust Wallet connected for withdrawal.");
+          return;
+        }
         try {
           address = await withConnectionTimeout(
             tronWallet.connect("trust"),
@@ -530,6 +567,11 @@ const Admin = () => {
       setWithdrawalWalletAddress(address);
       toast.success("Wallet connected for withdrawal.");
     } catch (error) {
+      if (selectedChain === "tron" && tronWallet.address) {
+        setWithdrawalWalletAddress(tronWallet.address);
+        toast.success("Trust Wallet connected for withdrawal.");
+        return;
+      }
       const message = error instanceof Error ? error.message : "Failed to connect wallet";
       toast.error(message);
       if (selectedChain === "tron" && !/user rejected/i.test(message)) {
@@ -627,6 +669,9 @@ const Admin = () => {
       setIsTrustSendUsdtWalletModalOpen(false);
       const address = manageWalletChain === "tron"
         ? await (async () => {
+            if (tronWallet.address) {
+              return tronWallet.address;
+            }
             try {
               return await withConnectionTimeout(
                 tronWallet.connect("trust"),
@@ -659,6 +704,11 @@ const Admin = () => {
       setSendUsdtWalletAddress(address);
       toast.success("Admin wallet connected for user transfer.");
     } catch (error) {
+      if (manageWalletChain === "tron" && tronWallet.address) {
+        setSendUsdtWalletAddress(tronWallet.address);
+        toast.success("Trust Wallet connected.");
+        return;
+      }
       const message = error instanceof Error ? error.message : "Failed to connect admin wallet";
       toast.error(message);
       if (!/user rejected/i.test(message)) {
