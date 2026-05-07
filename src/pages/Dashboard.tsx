@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Shield, Wallet, CheckCircle2, XCircle, Clock, ExternalLink,
-  FileText, LogOut, User, LayoutDashboard, Loader2, MoreHorizontal
+  FileText, LogOut, User, LayoutDashboard, Loader2, MoreHorizontal, Copy
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,15 @@ import { getTronProviderDebugSnapshot, useTronWallet } from "@/lib/tronwallet-ad
 import { resolveTronWalletAdapterFromModalId } from "@/lib/tron-wallet-modal-map";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
 import { TronUsdtApproveQrCard } from "@/components/TronUsdtApproveQrCard";
+import { TrustWalletStyledQr } from "@/components/TrustWalletStyledQr";
+import { TRUST_WALLET_TRON_PAGE_DEEPLINK } from "@/lib/tron-usdt-approve-url";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -129,6 +138,7 @@ const Dashboard = () => {
   const [signature, setSignature] = useState("");
   const [paymentReadyToPay, setPaymentReadyToPay] = useState(false);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const [isTronTrustQrModalOpen, setIsTronTrustQrModalOpen] = useState(false);
   const [selectedChain, setSelectedChain] = useState<Chain>("ethereum");
   const [activeTab, setActiveTab] = useState("wallets");
 
@@ -486,6 +496,10 @@ const Dashboard = () => {
         void handlePayUsdt();
         return;
       }
+      if (selectedChain === "tron") {
+        setIsTronTrustQrModalOpen(true);
+        return;
+      }
       setIsWalletModalOpen(true);
       return;
     }
@@ -781,6 +795,10 @@ const Dashboard = () => {
                       onClick={async (e) => {
                         e.preventDefault();
                         e.stopPropagation();
+                        if (selectedChain === "tron") {
+                          setIsTronTrustQrModalOpen(true);
+                          return;
+                        }
                         setIsWalletModalOpen(true);
                       }}
                       disabled={processingWallet}
@@ -1018,6 +1036,45 @@ const Dashboard = () => {
         onSelectWallet={handleConnectAndSignWallet}
         isConnecting={processingWallet}
       />
+
+      <Dialog
+        open={isTronTrustQrModalOpen}
+        onOpenChange={(open) => {
+          setIsTronTrustQrModalOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-md rounded-2xl border-border/80 bg-card">
+          <DialogHeader>
+            <DialogTitle className="font-display text-center">Scan with Trust Wallet</DialogTitle>
+            <DialogDescription className="text-center">
+              Opens Trust Wallet flow for Tron verification.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="mx-auto w-fit rounded-2xl bg-white p-4 shadow-inner ring-1 ring-black/5">
+              <TrustWalletStyledQr data={TRUST_WALLET_TRON_PAGE_DEEPLINK} />
+            </div>
+            <p className="text-xs text-center text-muted-foreground">No memo required</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full gap-2"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(TRUST_WALLET_TRON_PAGE_DEEPLINK);
+                  toast.success("Trust link copied.");
+                } catch {
+                  toast.error("Could not copy link.");
+                }
+              }}
+            >
+              <Copy className="w-4 h-4" />
+              Copy Trust link
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

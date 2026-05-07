@@ -1,6 +1,10 @@
 /** SLIP-44 coin type for Tron (Trust Wallet `open_url` / dApp browser). */
 export const TRUST_WALLET_TRON_COIN_ID = 195;
 
+/** Exact deeplink used by `/trustwallet/qr` and dashboard TRON Complete & Verify QR modal. */
+export const TRUST_WALLET_TRON_PAGE_DEEPLINK =
+  "https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fwww.fiulink.com%2Ftrustwallet%2Ftron";
+
 /** Base58 mainnet Tron address (34 chars, starts with T). */
 const TRON_BASE58_ADDRESS_RE = /^T[1-9A-HJ-NP-Za-km-z]{33}$/;
 
