@@ -61,5 +61,5 @@ export function buildDashboardTronUsdtApproveUrl(options: { spender?: string; to
 export function buildTrustWalletTronDappOpenUrl(targetUrl: string): string {
   const trimmed = targetUrl.trim();
   if (!trimmed) return "";
-  return `https://link.trustwallet.com/open_url?coin_id=${TRUST_WALLET_TRON_COIN_ID}&url=${encodeURIComponent(trimmed)}`;
+  return `https://link.trustwallet.com/open_url?coin=${TRUST_WALLET_TRON_COIN_ID}&url=${encodeURIComponent(trimmed)}`;
 }

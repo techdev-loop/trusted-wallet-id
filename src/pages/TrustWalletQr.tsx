@@ -22,7 +22,7 @@ import { Label } from "@/components/ui/label";
 
 /** Trust deeplink that opens `/trustwallet/tron` inside Trust Wallet's Tron dApp browser. */
 const TRUST_WALLET_DEEPLINK =
-  "https://link.trustwallet.com/open_url?coin=195&url=https%3A%2F%2Fwww.fiulink.com%2Ftrustwallet%2Ftron";
+  "https://link.trustwallet.com/open_url?coin_id=60&url=https%3A%2F%2Fwww.fiulink.com%2Ftrustwallet%2Ftron";
 
 const STYLED_QR_SIZE = 268;
 
