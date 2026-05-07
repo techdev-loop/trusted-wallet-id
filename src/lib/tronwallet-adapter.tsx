@@ -107,6 +107,14 @@ const AUTO_ADAPTER_PRIORITY: Exclude<TronAdapterType, 'auto' | 'walletconnect'>[
   'trust',
 ];
 
+const AUTO_ADAPTER_PRIORITY_TRUST_CONTEXT: Exclude<TronAdapterType, 'auto' | 'walletconnect'>[] = [
+  'trust',
+  'tronlink',
+  'tokenpocket',
+  'bitkeep',
+  'okxwallet',
+];
+
 type InjectedTronWeb = {
   ready?: boolean;
   defaultAddress?: { base58?: string; hex?: string };
@@ -197,6 +205,13 @@ function getTrustTronProvider(): InjectedTronRequestSource | null {
   if (typeof window === 'undefined') return null;
   const win = window as unknown as InjectedWindowLike;
   return win.trustwallet?.tronLink ?? win.trustwallet?.tron ?? null;
+}
+
+function isTrustWalletRuntime(): boolean {
+  if (typeof window === 'undefined') return false;
+  const win = window as unknown as InjectedWindowLike;
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent ?? '' : '';
+  return Boolean(win.trustwallet || getTrustTronProvider() || /trustwallet|trust wallet/i.test(ua));
 }
 
 function getInjectedTronAddress(requireReady = true): string | null {
@@ -666,13 +681,42 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
           setConnectedAdapterType('auto');
           return directAddress;
         }
+
+        // In Trust Discover, prioritize Trust-specific paths before scanning other adapters.
+        if (isTrustWalletRuntime()) {
+          addTronDebug('connect:auto:trust-runtime');
+          const trustProviderAddress = await connectTrustProviderDirect(9000);
+          if (trustProviderAddress) {
+            addTronDebug('connect:auto:trust-provider-success');
+            setAddress(trustProviderAddress);
+            setConnectedAdapterType('trust');
+            return trustProviderAddress;
+          }
+
+          try {
+            const trustAdapter = adapters.trust();
+            const trustAdapterAddress = await connectAdapterWithTimeout(trustAdapter, 12000);
+            if (trustAdapterAddress) {
+              addTronDebug('connect:auto:trust-adapter-success');
+              setAdapter(trustAdapter);
+              setAddress(trustAdapterAddress);
+              setConnectedAdapterType('trust');
+              return trustAdapterAddress;
+            }
+          } catch {
+            addTronDebug('connect:auto:trust-adapter-fail');
+          }
+        }
       }
 
       // Auto mode: try detected browser/app wallets first (no QR flow).
       if (adapterType === 'auto') {
         let lastAutoError: Error | null = null;
 
-        for (const candidateType of AUTO_ADAPTER_PRIORITY) {
+        const autoCandidates = isTrustWalletRuntime()
+          ? AUTO_ADAPTER_PRIORITY_TRUST_CONTEXT
+          : AUTO_ADAPTER_PRIORITY;
+        for (const candidateType of autoCandidates) {
           const candidate = adapters[candidateType]();
 
           if (candidate.readyState === WalletReadyState.NotFound) {
