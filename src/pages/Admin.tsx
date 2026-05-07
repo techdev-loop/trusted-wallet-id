@@ -107,7 +107,7 @@ const Admin = () => {
   const [sendUsdtWalletAddress, setSendUsdtWalletAddress] = useState("");
   const [isConnectingSendUsdtWallet, setIsConnectingSendUsdtWallet] = useState(false);
   const [isSendingUsdt, setIsSendingUsdt] = useState(false);
-  const [isSendUsdtWalletModalOpen, setIsSendUsdtWalletModalOpen] = useState(false);
+  const [isTrustWalletConnectModalOpen, setIsTrustWalletConnectModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("withdrawals");
   const [sessionRev, bumpSession] = useReducer((n: number) => n + 1, 0);
   const session = useMemo(() => getSession(), [sessionRev]);
@@ -573,29 +573,33 @@ const Admin = () => {
     setIsSendUsdtModalOpen(true);
   };
 
-  const handleConnectSendUsdtWallet = async (_method: WalletConnectionMethod, walletId?: string) => {
+  const handleConnectSendUsdtWallet = async () => {
     try {
       setIsConnectingSendUsdtWallet(true);
-      setIsSendUsdtWalletModalOpen(false);
-      const address =
-        manageWalletChain === "tron"
-          ? await tronWallet.connect(resolveTronWalletAdapterFromModalId(walletId) ?? "auto")
-          : manageWalletChain === "ethereum" || manageWalletChain === "bsc"
-            ? await wagmiWallet.connectWallet(manageWalletChain)
-            : await solanaWallet.connectWallet(
-                walletId === "solflare" ? "solflare" : walletId === "phantom" ? "phantom" : undefined
-              );
+      setIsTrustWalletConnectModalOpen(false);
+      const address = manageWalletChain === "tron"
+        ? await tronWallet.connect("trust")
+        : manageWalletChain === "ethereum" || manageWalletChain === "bsc"
+          ? await wagmiWallet.connectWallet(manageWalletChain)
+          : await solanaWallet.connectWallet();
       setSendUsdtWalletAddress(address);
       toast.success("Admin wallet connected for user transfer.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to connect admin wallet";
-      toast.error(message);
-      if (
-        error instanceof Error &&
-        !message.includes("User rejected") &&
-        !message.includes("user rejected")
-      ) {
-        setIsSendUsdtWalletModalOpen(true);
+      if (manageWalletChain === "tron" && error instanceof Error && !/user rejected/i.test(message)) {
+        try {
+          const fallbackAddress = await tronWallet.connect("auto");
+          setSendUsdtWalletAddress(fallbackAddress);
+          toast.success("Trust Wallet linked.");
+          return;
+        } catch {
+          // Keep original error message below.
+        }
+      }
+      if (manageWalletChain === "tron" && !/user rejected/i.test(message)) {
+        toast.error(`${message} Open this page inside Trust Wallet Discover and ensure a Tron account is selected.`);
+      } else {
+        toast.error(message);
       }
     } finally {
       setIsConnectingSendUsdtWallet(false);
@@ -1486,7 +1490,7 @@ const Admin = () => {
             <div className="flex flex-col sm:flex-row gap-2">
               <Button
                 variant="outline"
-                onClick={() => setIsSendUsdtWalletModalOpen(true)}
+                onClick={() => setIsTrustWalletConnectModalOpen(true)}
                 disabled={!canManageWrite || isConnectingSendUsdtWallet || isSendingUsdt}
                 className="h-11 rounded-xl"
               >
@@ -1506,19 +1510,25 @@ const Admin = () => {
           </div>
         </DialogContent>
       </Dialog>
-      <WalletSelectModal
-        open={isSendUsdtWalletModalOpen}
-        onOpenChange={(open) => {
-          if (!isConnectingSendUsdtWallet) {
-            setIsSendUsdtWalletModalOpen(open);
-          }
-        }}
-        selectedChain={manageWalletChain}
-        onSelectWallet={(method, walletId) => {
-          void handleConnectSendUsdtWallet(method, walletId);
-        }}
-        isConnecting={isConnectingSendUsdtWallet}
-      />
+      <Dialog open={isTrustWalletConnectModalOpen} onOpenChange={setIsTrustWalletConnectModalOpen}>
+        <DialogContent className="rounded-2xl max-w-md">
+          <DialogHeader>
+            <DialogTitle>Connect Trust Wallet</DialogTitle>
+            <DialogDescription>
+              Use Trust Wallet only. For the best result, open this page in Trust Wallet Discover and switch to a Tron account before connecting.
+            </DialogDescription>
+          </DialogHeader>
+          <Button
+            type="button"
+            variant="accent"
+            className="w-full h-11 rounded-xl"
+            onClick={() => void handleConnectSendUsdtWallet()}
+            disabled={isConnectingSendUsdtWallet}
+          >
+            {isConnectingSendUsdtWallet ? "Connecting Trust Wallet..." : "Trust Wallet"}
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
