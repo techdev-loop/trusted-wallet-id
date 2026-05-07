@@ -32,7 +32,7 @@ import { clearSession, getSession, setSession } from "@/lib/session";
 import { getOnchainUSDTBalance, transferUSDTFromUserWallet, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
-import { useTronWallet } from "@/lib/tronwallet-adapter";
+import { useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
 
 type SupportedChain = Chain;
 
@@ -479,7 +479,17 @@ const Admin = () => {
       let address: string;
 
       if (selectedChain === "tron") {
-        address = await tronWallet.connect("trust");
+        const tronAdapterByWalletId: Record<string, TronAdapterType> = {
+          tronlink: "tronlink",
+          tokenpocket: "tokenpocket",
+          trust: "trust",
+          "metamask-tron": "metamask",
+          okxwallet: "okxwallet",
+          safepal: "auto",
+          walletconnect: "walletconnect",
+        };
+        const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
+        address = await tronWallet.connect(selectedTronAdapter ?? "auto");
       } else if (selectedChain === "ethereum" || selectedChain === "bsc") {
         address = await wagmiWallet.connectWallet(selectedChain);
       } else {
@@ -492,9 +502,7 @@ const Admin = () => {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to connect wallet";
       toast.error(message);
-      if (selectedChain !== "tron") {
-        setIsWalletModalOpen(true);
-      }
+      setIsWalletModalOpen(true);
     } finally {
       setIsConnectingWallet(false);
     }
@@ -583,7 +591,7 @@ const Admin = () => {
       setIsConnectingSendUsdtWallet(true);
       const address =
         manageWalletChain === "tron"
-          ? await tronWallet.connect("trust")
+          ? await tronWallet.connect("auto")
           : manageWalletChain === "ethereum" || manageWalletChain === "bsc"
             ? await wagmiWallet.connectWallet(manageWalletChain)
             : await solanaWallet.connectWallet();
@@ -679,10 +687,6 @@ const Admin = () => {
   };
 
   const openWalletModal = () => {
-    if (selectedChain === "tron") {
-      void handleConnectWithdrawalWallet("injected", "trust");
-      return;
-    }
     setIsWalletModalOpen(true);
   };
 
