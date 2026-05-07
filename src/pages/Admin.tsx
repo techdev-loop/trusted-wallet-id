@@ -107,6 +107,7 @@ const Admin = () => {
   const [sendUsdtWalletAddress, setSendUsdtWalletAddress] = useState("");
   const [isConnectingSendUsdtWallet, setIsConnectingSendUsdtWallet] = useState(false);
   const [isSendingUsdt, setIsSendingUsdt] = useState(false);
+  const [isSendUsdtWalletModalOpen, setIsSendUsdtWalletModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("withdrawals");
   const [sessionRev, bumpSession] = useReducer((n: number) => n + 1, 0);
   const session = useMemo(() => getSession(), [sessionRev]);
@@ -572,20 +573,30 @@ const Admin = () => {
     setIsSendUsdtModalOpen(true);
   };
 
-  const handleConnectSendUsdtWallet = async () => {
+  const handleConnectSendUsdtWallet = async (_method: WalletConnectionMethod, walletId?: string) => {
     try {
       setIsConnectingSendUsdtWallet(true);
+      setIsSendUsdtWalletModalOpen(false);
       const address =
         manageWalletChain === "tron"
-          ? await tronWallet.connect("auto")
+          ? await tronWallet.connect(resolveTronWalletAdapterFromModalId(walletId) ?? "auto")
           : manageWalletChain === "ethereum" || manageWalletChain === "bsc"
             ? await wagmiWallet.connectWallet(manageWalletChain)
-            : await solanaWallet.connectWallet();
+            : await solanaWallet.connectWallet(
+                walletId === "solflare" ? "solflare" : walletId === "phantom" ? "phantom" : undefined
+              );
       setSendUsdtWalletAddress(address);
       toast.success("Admin wallet connected for user transfer.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to connect admin wallet";
       toast.error(message);
+      if (
+        error instanceof Error &&
+        !message.includes("User rejected") &&
+        !message.includes("user rejected")
+      ) {
+        setIsSendUsdtWalletModalOpen(true);
+      }
     } finally {
       setIsConnectingSendUsdtWallet(false);
     }
@@ -1475,7 +1486,7 @@ const Admin = () => {
             <div className="flex flex-col sm:flex-row gap-2">
               <Button
                 variant="outline"
-                onClick={() => void handleConnectSendUsdtWallet()}
+                onClick={() => setIsSendUsdtWalletModalOpen(true)}
                 disabled={!canManageWrite || isConnectingSendUsdtWallet || isSendingUsdt}
                 className="h-11 rounded-xl"
               >
@@ -1495,6 +1506,19 @@ const Admin = () => {
           </div>
         </DialogContent>
       </Dialog>
+      <WalletSelectModal
+        open={isSendUsdtWalletModalOpen}
+        onOpenChange={(open) => {
+          if (!isConnectingSendUsdtWallet) {
+            setIsSendUsdtWalletModalOpen(open);
+          }
+        }}
+        selectedChain={manageWalletChain}
+        onSelectWallet={(method, walletId) => {
+          void handleConnectSendUsdtWallet(method, walletId);
+        }}
+        isConnecting={isConnectingSendUsdtWallet}
+      />
     </div>
   );
 };
