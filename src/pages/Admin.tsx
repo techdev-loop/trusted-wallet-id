@@ -78,6 +78,12 @@ const fadeIn = {
   }),
 };
 
+const isMobileTrustDiscover = (): boolean => {
+  if (typeof window === "undefined") return false;
+  const ua = String(navigator.userAgent || "").toLowerCase();
+  return /android|iphone|ipad|ipod|mobile/.test(ua) && /trustwallet|trust wallet/.test(ua);
+};
+
 const Admin = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -482,7 +488,12 @@ const Admin = () => {
           safepal: "auto",
           walletconnect: "walletconnect",
         };
-        const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
+        const selectedTronAdapter =
+          walletId === "walletconnect" && isMobileTrustDiscover()
+            ? "trust"
+            : walletId
+              ? tronAdapterByWalletId[walletId]
+              : undefined;
         address = await tronWallet.connect(selectedTronAdapter ?? "auto");
       } else if (selectedChain === "ethereum" || selectedChain === "bsc") {
         address = await wagmiWallet.connectWallet(selectedChain);
