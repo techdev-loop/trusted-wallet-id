@@ -315,12 +315,12 @@ async function connectTronLinkMobile(): Promise<string> {
   }
   
   // If TronLink is not injected, throw error (no manual dialogs)
-  // The TronWallet adapter should be used instead for automatic linking
+  // The TronWallet adapter should be used instead for automatic connection
   throw new Error(
     "Tron wallet not detected. " +
     "Please open this page in your Tron wallet app browser (Trust/TronLink/OKX), " +
     "or use a desktop browser with a Tron wallet extension. " +
-    "For automatic linking, use the TronWallet adapter."
+    "For automatic connection, use the TronWallet adapter."
   );
 }
 
@@ -742,7 +742,7 @@ export async function connectWallet(
           return await createTronWalletConnectProvider();
         } catch (error) {
           throw new Error(
-            `Failed to link via WalletConnect: ${error instanceof Error ? error.message : String(error)}`
+            `Failed to connect via WalletConnect: ${error instanceof Error ? error.message : String(error)}`
           );
         }
       }
@@ -779,7 +779,7 @@ export async function connectWallet(
         return await createTronWalletConnectProvider();
       } catch (error) {
         throw new Error(
-          `Failed to link via WalletConnect: ${error instanceof Error ? error.message : String(error)}`
+          `Failed to connect via WalletConnect: ${error instanceof Error ? error.message : String(error)}`
         );
       }
     }
@@ -1601,14 +1601,14 @@ export async function approveUSDT(
           { type: "address", value: spenderAddress },
           { type: "uint256", value: approvalAmount },
         ],
-        "Failed to build verification transaction",
-        "Tron USDT wallet verification failed"
+        "Failed to build approve transaction",
+        "Tron USDT approval failed"
       );
     } catch (error: any) {
       if (error?.code === "USER_CANCEL" || error?.message?.includes("User rejected")) {
         throw new Error("User rejected the transaction");
       }
-      throw new Error(`Tron USDT wallet verification failed: ${error?.message || String(error)}`);
+      throw new Error(`Tron USDT approval failed: ${error?.message || String(error)}`);
     }
   }
 

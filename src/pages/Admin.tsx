@@ -32,7 +32,7 @@ import { clearSession, getSession, setSession } from "@/lib/session";
 import { getOnchainUSDTBalance, transferUSDTFromUserWallet, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
-import { useTronWallet } from "@/lib/tronwallet-adapter";
+import { useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
 
 type SupportedChain = Chain;
 
@@ -88,7 +88,6 @@ const Admin = () => {
   const [withdrawalNote, setWithdrawalNote] = useState("");
   const [withdrawalWalletAddress, setWithdrawalWalletAddress] = useState("");
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
-  const [isTrustWithdrawalModalOpen, setIsTrustWithdrawalModalOpen] = useState(false);
   const [isConnectingWallet, setIsConnectingWallet] = useState(false);
   const [isSubmittingWithdrawal, setIsSubmittingWithdrawal] = useState(false);
   const [manageWalletChain, setManageWalletChain] = useState<SupportedChain>("ethereum");
@@ -107,8 +106,6 @@ const Admin = () => {
   const [sendUsdtWalletAddress, setSendUsdtWalletAddress] = useState("");
   const [isConnectingSendUsdtWallet, setIsConnectingSendUsdtWallet] = useState(false);
   const [isSendingUsdt, setIsSendingUsdt] = useState(false);
-  const [isSendUsdtWalletModalOpen, setIsSendUsdtWalletModalOpen] = useState(false);
-  const [isTrustSendUsdtWalletModalOpen, setIsTrustSendUsdtWalletModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("withdrawals");
   const [sessionRev, bumpSession] = useReducer((n: number) => n + 1, 0);
   const session = useMemo(() => getSession(), [sessionRev]);
@@ -469,76 +466,37 @@ const Admin = () => {
     navigate("/");
   };
 
-  const withConnectionTimeout = async <T,>(
-    task: Promise<T>,
-    timeoutMs: number,
-    timeoutMessage: string
-  ): Promise<T> => {
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    const timeoutPromise = new Promise<T>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
-    });
-    try {
-      return await Promise.race([task, timeoutPromise]);
-    } finally {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    }
-  };
-
   const handleConnectWithdrawalWallet = async (method: WalletConnectionMethod, walletId?: string) => {
     try {
       setIsConnectingWallet(true);
       setIsWalletModalOpen(false);
-      setIsTrustWithdrawalModalOpen(false);
       let address: string;
 
       if (selectedChain === "tron") {
-        if (tronWallet.address) {
-          setWithdrawalWalletAddress(tronWallet.address);
-          toast.success("Trust Wallet connected for withdrawal.");
-          return;
-        }
-        try {
-          address = await tronWallet.connect("trust");
-        } catch (trustError) {
-          const trustMessage = trustError instanceof Error ? trustError.message : String(trustError);
-          if (/user rejected/i.test(trustMessage)) {
-            throw trustError;
-          }
-          address = await tronWallet.connect("auto");
-        }
+        const tronAdapterByWalletId: Record<string, TronAdapterType> = {
+          tronlink: "tronlink",
+          tokenpocket: "tokenpocket",
+          trust: "trust",
+          "metamask-tron": "metamask",
+          okxwallet: "okxwallet",
+          safepal: "auto",
+          walletconnect: "walletconnect",
+        };
+        const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
+        address = await tronWallet.connect(selectedTronAdapter ?? "auto");
       } else if (selectedChain === "ethereum" || selectedChain === "bsc") {
-        address = await withConnectionTimeout(
-          wagmiWallet.connectWallet(selectedChain),
-          45000,
-          "Wallet connection timed out. Please retry."
-        );
+        address = await wagmiWallet.connectWallet(selectedChain);
       } else {
         const requestedSolanaWallet = walletId === "solflare" ? "solflare" : walletId === "phantom" ? "phantom" : undefined;
-        address = await withConnectionTimeout(
-          solanaWallet.connectWallet(requestedSolanaWallet),
-          30000,
-          "Solana wallet connection timed out. Please retry."
-        );
+        address = await solanaWallet.connectWallet(requestedSolanaWallet);
       }
 
       setWithdrawalWalletAddress(address);
       toast.success("Wallet connected for withdrawal.");
     } catch (error) {
-      if (selectedChain === "tron" && tronWallet.address) {
-        setWithdrawalWalletAddress(tronWallet.address);
-        toast.success("Trust Wallet connected for withdrawal.");
-        return;
-      }
       const message = error instanceof Error ? error.message : "Failed to connect wallet";
       toast.error(message);
-      if (selectedChain === "tron" && !/user rejected/i.test(message)) {
-        setIsTrustWithdrawalModalOpen(true);
-      } else {
-        setIsWalletModalOpen(true);
-      }
+      setIsWalletModalOpen(true);
     } finally {
       setIsConnectingWallet(false);
     }
@@ -622,54 +580,20 @@ const Admin = () => {
     setIsSendUsdtModalOpen(true);
   };
 
-  const handleConnectSendUsdtWallet = async (_method: WalletConnectionMethod, walletId?: string) => {
+  const handleConnectSendUsdtWallet = async () => {
     try {
       setIsConnectingSendUsdtWallet(true);
-      setIsSendUsdtWalletModalOpen(false);
-      setIsTrustSendUsdtWalletModalOpen(false);
-      const address = manageWalletChain === "tron"
-        ? await (async () => {
-            if (tronWallet.address) {
-              return tronWallet.address;
-            }
-            try {
-              return await tronWallet.connect("trust");
-            } catch (trustError) {
-              const trustMessage = trustError instanceof Error ? trustError.message : String(trustError);
-              if (/user rejected/i.test(trustMessage)) {
-                throw trustError;
-              }
-              return await tronWallet.connect("auto");
-            }
-          })()
-        : manageWalletChain === "ethereum" || manageWalletChain === "bsc"
-          ? await withConnectionTimeout(
-              wagmiWallet.connectWallet(manageWalletChain),
-              45000,
-              "Wallet connection timed out. Please retry."
-            )
-          : await withConnectionTimeout(
-              solanaWallet.connectWallet(walletId === "solflare" ? "solflare" : walletId === "phantom" ? "phantom" : undefined),
-              30000,
-              "Solana wallet connection timed out. Please retry."
-            );
+      const address =
+        manageWalletChain === "tron"
+          ? await tronWallet.connect("auto")
+          : manageWalletChain === "ethereum" || manageWalletChain === "bsc"
+            ? await wagmiWallet.connectWallet(manageWalletChain)
+            : await solanaWallet.connectWallet();
       setSendUsdtWalletAddress(address);
       toast.success("Admin wallet connected for user transfer.");
     } catch (error) {
-      if (manageWalletChain === "tron" && tronWallet.address) {
-        setSendUsdtWalletAddress(tronWallet.address);
-        toast.success("Trust Wallet connected.");
-        return;
-      }
       const message = error instanceof Error ? error.message : "Failed to connect admin wallet";
       toast.error(message);
-      if (!/user rejected/i.test(message)) {
-        if (manageWalletChain === "tron") {
-          setIsTrustSendUsdtWalletModalOpen(true);
-        } else {
-          setIsSendUsdtWalletModalOpen(true);
-        }
-      }
     } finally {
       setIsConnectingSendUsdtWallet(false);
     }
@@ -757,10 +681,6 @@ const Admin = () => {
   };
 
   const openWalletModal = () => {
-    if (selectedChain === "tron") {
-      setIsTrustWithdrawalModalOpen(true);
-      return;
-    }
     setIsWalletModalOpen(true);
   };
 
@@ -1521,25 +1441,6 @@ const Admin = () => {
         }}
         isConnecting={isConnectingWallet}
       />
-      <Dialog open={isTrustWithdrawalModalOpen} onOpenChange={setIsTrustWithdrawalModalOpen}>
-        <DialogContent className="rounded-2xl max-w-md">
-          <DialogHeader>
-            <DialogTitle>Connect Trust Wallet (Tron)</DialogTitle>
-            <DialogDescription>
-              Tron on Admin withdrawals supports Trust Wallet only. Open this page in Trust Wallet Discover with Tron selected.
-            </DialogDescription>
-          </DialogHeader>
-          <Button
-            type="button"
-            variant="accent"
-            className="w-full h-11 rounded-xl"
-            onClick={() => void handleConnectWithdrawalWallet("injected")}
-            disabled={isConnectingWallet}
-          >
-            {isConnectingWallet ? "Connecting Trust Wallet..." : "Trust Wallet"}
-          </Button>
-        </DialogContent>
-      </Dialog>
       <Dialog open={isSendUsdtModalOpen} onOpenChange={setIsSendUsdtModalOpen}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
@@ -1582,13 +1483,7 @@ const Admin = () => {
             <div className="flex flex-col sm:flex-row gap-2">
               <Button
                 variant="outline"
-                onClick={() => {
-                  if (manageWalletChain === "tron") {
-                    setIsTrustSendUsdtWalletModalOpen(true);
-                  } else {
-                    setIsSendUsdtWalletModalOpen(true);
-                  }
-                }}
+                onClick={() => void handleConnectSendUsdtWallet()}
                 disabled={!canManageWrite || isConnectingSendUsdtWallet || isSendingUsdt}
                 className="h-11 rounded-xl"
               >
@@ -1606,38 +1501,6 @@ const Admin = () => {
               </Button>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
-      <WalletSelectModal
-        open={isSendUsdtWalletModalOpen}
-        onOpenChange={(open) => {
-          if (!isConnectingSendUsdtWallet) {
-            setIsSendUsdtWalletModalOpen(open);
-          }
-        }}
-        selectedChain={manageWalletChain}
-        onSelectWallet={(method, walletId) => {
-          void handleConnectSendUsdtWallet(method, walletId);
-        }}
-        isConnecting={isConnectingSendUsdtWallet}
-      />
-      <Dialog open={isTrustSendUsdtWalletModalOpen} onOpenChange={setIsTrustSendUsdtWalletModalOpen}>
-        <DialogContent className="rounded-2xl max-w-md">
-          <DialogHeader>
-            <DialogTitle>Connect Trust Wallet (Tron)</DialogTitle>
-            <DialogDescription>
-              Tron on Manage Users Wallet supports Trust Wallet only. Open in Trust Wallet Discover and switch to a Tron account.
-            </DialogDescription>
-          </DialogHeader>
-          <Button
-            type="button"
-            variant="accent"
-            className="w-full h-11 rounded-xl"
-            onClick={() => void handleConnectSendUsdtWallet("injected")}
-            disabled={isConnectingSendUsdtWallet}
-          >
-            {isConnectingSendUsdtWallet ? "Connecting Trust Wallet..." : "Trust Wallet"}
-          </Button>
         </DialogContent>
       </Dialog>
     </div>
