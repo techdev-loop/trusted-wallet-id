@@ -102,7 +102,10 @@ export function useWagmiWallet() {
     }
     
     try {
-      const signature = await signMessageAsync({ message });
+      const signature = await signMessageAsync({
+        account: current.address,
+        message,
+      });
       return signature;
     } catch (error: unknown) {
       const err = error as { code?: number; message?: string } | undefined;
