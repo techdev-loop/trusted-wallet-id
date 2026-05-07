@@ -502,7 +502,9 @@ const Admin = () => {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to connect wallet";
       toast.error(message);
-      setIsWalletModalOpen(true);
+      if (selectedChain !== "tron") {
+        setIsWalletModalOpen(true);
+      }
     } finally {
       setIsConnectingWallet(false);
     }
@@ -687,6 +689,10 @@ const Admin = () => {
   };
 
   const openWalletModal = () => {
+    if (selectedChain === "tron") {
+      void handleConnectWithdrawalWallet("auto");
+      return;
+    }
     setIsWalletModalOpen(true);
   };
 
