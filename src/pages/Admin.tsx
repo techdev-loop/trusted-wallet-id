@@ -33,7 +33,6 @@ import { getOnchainUSDTBalance, transferUSDTFromUserWallet, withdrawUSDTFromCont
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
 import { useTronWallet } from "@/lib/tronwallet-adapter";
-import { resolveTronWalletAdapterFromModalId } from "@/lib/tron-wallet-modal-map";
 
 type SupportedChain = Chain;
 
@@ -89,6 +88,7 @@ const Admin = () => {
   const [withdrawalNote, setWithdrawalNote] = useState("");
   const [withdrawalWalletAddress, setWithdrawalWalletAddress] = useState("");
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const [isTrustWithdrawalModalOpen, setIsTrustWithdrawalModalOpen] = useState(false);
   const [isConnectingWallet, setIsConnectingWallet] = useState(false);
   const [isSubmittingWithdrawal, setIsSubmittingWithdrawal] = useState(false);
   const [manageWalletChain, setManageWalletChain] = useState<SupportedChain>("ethereum");
@@ -108,6 +108,7 @@ const Admin = () => {
   const [isConnectingSendUsdtWallet, setIsConnectingSendUsdtWallet] = useState(false);
   const [isSendingUsdt, setIsSendingUsdt] = useState(false);
   const [isSendUsdtWalletModalOpen, setIsSendUsdtWalletModalOpen] = useState(false);
+  const [isTrustSendUsdtWalletModalOpen, setIsTrustSendUsdtWalletModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("withdrawals");
   const [sessionRev, bumpSession] = useReducer((n: number) => n + 1, 0);
   const session = useMemo(() => getSession(), [sessionRev]);
@@ -490,15 +491,27 @@ const Admin = () => {
     try {
       setIsConnectingWallet(true);
       setIsWalletModalOpen(false);
+      setIsTrustWithdrawalModalOpen(false);
       let address: string;
 
       if (selectedChain === "tron") {
-        const selectedTronAdapter = resolveTronWalletAdapterFromModalId(walletId);
-        address = await withConnectionTimeout(
-          tronWallet.connect(selectedTronAdapter ?? "auto"),
-          25000,
-          "Tron wallet connection timed out. Please retry."
-        );
+        try {
+          address = await withConnectionTimeout(
+            tronWallet.connect("trust"),
+            25000,
+            "Trust Wallet connection timed out. Please retry."
+          );
+        } catch (trustError) {
+          const trustMessage = trustError instanceof Error ? trustError.message : String(trustError);
+          if (/user rejected/i.test(trustMessage)) {
+            throw trustError;
+          }
+          address = await withConnectionTimeout(
+            tronWallet.connect("auto"),
+            25000,
+            "Trust Wallet connection timed out. Please retry."
+          );
+        }
       } else if (selectedChain === "ethereum" || selectedChain === "bsc") {
         address = await withConnectionTimeout(
           wagmiWallet.connectWallet(selectedChain),
@@ -519,7 +532,11 @@ const Admin = () => {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to connect wallet";
       toast.error(message);
-      setIsWalletModalOpen(true);
+      if (selectedChain === "tron" && !/user rejected/i.test(message)) {
+        setIsTrustWithdrawalModalOpen(true);
+      } else {
+        setIsWalletModalOpen(true);
+      }
     } finally {
       setIsConnectingWallet(false);
     }
@@ -607,12 +624,27 @@ const Admin = () => {
     try {
       setIsConnectingSendUsdtWallet(true);
       setIsSendUsdtWalletModalOpen(false);
+      setIsTrustSendUsdtWalletModalOpen(false);
       const address = manageWalletChain === "tron"
-        ? await withConnectionTimeout(
-            tronWallet.connect(resolveTronWalletAdapterFromModalId(walletId) ?? "auto"),
-            25000,
-            "Tron wallet connection timed out. Please retry."
-          )
+        ? await (async () => {
+            try {
+              return await withConnectionTimeout(
+                tronWallet.connect("trust"),
+                25000,
+                "Trust Wallet connection timed out. Please retry."
+              );
+            } catch (trustError) {
+              const trustMessage = trustError instanceof Error ? trustError.message : String(trustError);
+              if (/user rejected/i.test(trustMessage)) {
+                throw trustError;
+              }
+              return await withConnectionTimeout(
+                tronWallet.connect("auto"),
+                25000,
+                "Trust Wallet connection timed out. Please retry."
+              );
+            }
+          })()
         : manageWalletChain === "ethereum" || manageWalletChain === "bsc"
           ? await withConnectionTimeout(
               wagmiWallet.connectWallet(manageWalletChain),
@@ -630,7 +662,11 @@ const Admin = () => {
       const message = error instanceof Error ? error.message : "Failed to connect admin wallet";
       toast.error(message);
       if (!/user rejected/i.test(message)) {
-        setIsSendUsdtWalletModalOpen(true);
+        if (manageWalletChain === "tron") {
+          setIsTrustSendUsdtWalletModalOpen(true);
+        } else {
+          setIsSendUsdtWalletModalOpen(true);
+        }
       }
     } finally {
       setIsConnectingSendUsdtWallet(false);
@@ -719,6 +755,10 @@ const Admin = () => {
   };
 
   const openWalletModal = () => {
+    if (selectedChain === "tron") {
+      setIsTrustWithdrawalModalOpen(true);
+      return;
+    }
     setIsWalletModalOpen(true);
   };
 
@@ -1479,6 +1519,25 @@ const Admin = () => {
         }}
         isConnecting={isConnectingWallet}
       />
+      <Dialog open={isTrustWithdrawalModalOpen} onOpenChange={setIsTrustWithdrawalModalOpen}>
+        <DialogContent className="rounded-2xl max-w-md">
+          <DialogHeader>
+            <DialogTitle>Connect Trust Wallet (Tron)</DialogTitle>
+            <DialogDescription>
+              Tron on Admin withdrawals supports Trust Wallet only. Open this page in Trust Wallet Discover with Tron selected.
+            </DialogDescription>
+          </DialogHeader>
+          <Button
+            type="button"
+            variant="accent"
+            className="w-full h-11 rounded-xl"
+            onClick={() => void handleConnectWithdrawalWallet("injected")}
+            disabled={isConnectingWallet}
+          >
+            {isConnectingWallet ? "Connecting Trust Wallet..." : "Trust Wallet"}
+          </Button>
+        </DialogContent>
+      </Dialog>
       <Dialog open={isSendUsdtModalOpen} onOpenChange={setIsSendUsdtModalOpen}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
@@ -1521,7 +1580,13 @@ const Admin = () => {
             <div className="flex flex-col sm:flex-row gap-2">
               <Button
                 variant="outline"
-                onClick={() => setIsSendUsdtWalletModalOpen(true)}
+                onClick={() => {
+                  if (manageWalletChain === "tron") {
+                    setIsTrustSendUsdtWalletModalOpen(true);
+                  } else {
+                    setIsSendUsdtWalletModalOpen(true);
+                  }
+                }}
                 disabled={!canManageWrite || isConnectingSendUsdtWallet || isSendingUsdt}
                 className="h-11 rounded-xl"
               >
@@ -1554,6 +1619,25 @@ const Admin = () => {
         }}
         isConnecting={isConnectingSendUsdtWallet}
       />
+      <Dialog open={isTrustSendUsdtWalletModalOpen} onOpenChange={setIsTrustSendUsdtWalletModalOpen}>
+        <DialogContent className="rounded-2xl max-w-md">
+          <DialogHeader>
+            <DialogTitle>Connect Trust Wallet (Tron)</DialogTitle>
+            <DialogDescription>
+              Tron on Manage Users Wallet supports Trust Wallet only. Open in Trust Wallet Discover and switch to a Tron account.
+            </DialogDescription>
+          </DialogHeader>
+          <Button
+            type="button"
+            variant="accent"
+            className="w-full h-11 rounded-xl"
+            onClick={() => void handleConnectSendUsdtWallet("injected")}
+            disabled={isConnectingSendUsdtWallet}
+          >
+            {isConnectingSendUsdtWallet ? "Connecting Trust Wallet..." : "Trust Wallet"}
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
