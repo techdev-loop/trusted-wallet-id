@@ -180,18 +180,23 @@ export function WalletSelectModal({
     if (!wallet.supportedChains.includes(selectedChain)) {
       return false;
     }
-    if (isMobile && (wallet.id === "trust" || wallet.id === "safepal")) {
-      return false;
-    }
     return true;
   }).sort((a, b) => {
-    if (isMobile) {
-      if (a.id === "walletconnect") return -1;
-      if (b.id === "walletconnect") return 1;
-    }
-
     // Sort native wallets (TronLink, Phantom) first for their respective chains
     if (selectedChain === "tron") {
+      if (isMobile) {
+        // On mobile, prefer direct app/browser wallets before QR flow.
+        if (a.id === "trust") return -1;
+        if (b.id === "trust") return 1;
+        if (a.id === "tronlink") return -1;
+        if (b.id === "tronlink") return 1;
+        if (a.id === "okxwallet") return -1;
+        if (b.id === "okxwallet") return 1;
+        if (a.id === "safepal") return -1;
+        if (b.id === "safepal") return 1;
+        if (a.id === "walletconnect") return 1;
+        if (b.id === "walletconnect") return -1;
+      }
       if (a.id === "tronlink") return -1;
       if (b.id === "tronlink") return 1;
       if (a.id === "trust") return -1;
