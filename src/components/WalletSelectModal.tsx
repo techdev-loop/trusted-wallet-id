@@ -96,9 +96,9 @@ const WALLET_OPTIONS: WalletOption[] = [
   },
   {
     id: "walletconnect",
-    name: "WalletConnect (QR)",
+    name: "WalletConnect",
     icon: "🔗",
-    description: "Connect Tron wallets by scanning WalletConnect QR code",
+    description: "Desktop: scan QR | Mobile: opens your wallet app directly",
     method: "walletconnect",
     supportedChains: ["tron"],
   },
@@ -358,7 +358,7 @@ export function WalletSelectModal({
                           Install
                         </Badge>
                       )}
-                      {wallet.id === "walletconnect" && (
+                      {wallet.id === "walletconnect" && !isMobile && (
                         <Badge variant="secondary" className="text-xs">
                           QR
                         </Badge>
@@ -379,6 +379,11 @@ export function WalletSelectModal({
                           if (isMobile && !isInstalled) {
                             return `Mobile: Open this page in ${wallet.name} app's browser tab`;
                           }
+                        }
+                        if (wallet.id === "walletconnect" && selectedChain === "tron") {
+                          return isMobile
+                            ? "Mobile: Tap to open Trust/other wallet app and approve connection"
+                            : "Desktop: Scan WalletConnect QR with your wallet app";
                         }
                         // Show mobile-specific instructions for Phantom
                         if (wallet.id === "phantom") {

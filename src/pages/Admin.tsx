@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -84,6 +84,22 @@ const isMobileTrustDiscover = (): boolean => {
   return /android|iphone|ipad|ipod|mobile/.test(ua) && /trustwallet|trust wallet/.test(ua);
 };
 
+function normalizeWalletConnectPairingUri(uri: unknown): string | null {
+  if (uri == null) return null;
+  const s = (typeof uri === "string" ? uri : String(uri)).trim();
+  if (s.length < 12) return null;
+  if (!s.toLowerCase().startsWith("wc:")) return null;
+  return s;
+}
+
+function openTrustWalletForWalletConnect(uri: string): boolean {
+  const normalized = normalizeWalletConnectPairingUri(uri);
+  if (!normalized) return false;
+  const url = `https://link.trustwallet.com/wc?uri=${encodeURIComponent(normalized)}`;
+  window.location.assign(url);
+  return true;
+}
+
 const Admin = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -112,7 +128,10 @@ const Admin = () => {
   const [sendUsdtWalletAddress, setSendUsdtWalletAddress] = useState("");
   const [isConnectingSendUsdtWallet, setIsConnectingSendUsdtWallet] = useState(false);
   const [isSendingUsdt, setIsSendingUsdt] = useState(false);
+  const [trustConnecting, setTrustConnecting] = useState(false);
   const [activeTab, setActiveTab] = useState("withdrawals");
+  const wcTrustNavigatedRef = useRef(false);
+  const connectMethodRef = useRef<string>("unknown");
   const [sessionRev, bumpSession] = useReducer((n: number) => n + 1, 0);
   const session = useMemo(() => getSession(), [sessionRev]);
   const [meSynced, setMeSynced] = useState(false);
@@ -587,12 +606,50 @@ const Admin = () => {
   };
 
   const handleConnectSendUsdtWallet = async () => {
+    if (manageWalletChain === "tron") {
+      try {
+        delete (window as any).__tronWalletConnectOnUri;
+      } catch {
+        /* ignore */
+      }
+      wcTrustNavigatedRef.current = false;
+
+      try {
+        connectMethodRef.current = "walletconnect";
+        setTrustConnecting(true);
+        setIsConnectingSendUsdtWallet(true);
+        (window as any).__tronWalletConnectOnUri = (uri: string) => {
+          if (wcTrustNavigatedRef.current) return;
+          if (openTrustWalletForWalletConnect(uri)) {
+            wcTrustNavigatedRef.current = true;
+          }
+        };
+        const address = await tronWallet.connect("walletconnect");
+        setSendUsdtWalletAddress(address);
+        toast.success("Wallet linked");
+      } catch (error) {
+        if (wcTrustNavigatedRef.current) {
+          return;
+        }
+        toast.error(
+          error instanceof Error ? error.message : "WalletConnect failed"
+        );
+      } finally {
+        try {
+          delete (window as any).__tronWalletConnectOnUri;
+        } catch {
+          /* ignore */
+        }
+        setTrustConnecting(false);
+        setIsConnectingSendUsdtWallet(false);
+      }
+      return;
+    }
+
     try {
       setIsConnectingSendUsdtWallet(true);
       const address =
-        manageWalletChain === "tron"
-          ? await tronWallet.connect("walletconnect")
-          : manageWalletChain === "ethereum" || manageWalletChain === "bsc"
+        manageWalletChain === "ethereum" || manageWalletChain === "bsc"
             ? await wagmiWallet.connectWallet(manageWalletChain)
             : await solanaWallet.connectWallet();
       setSendUsdtWalletAddress(address);
@@ -1493,7 +1550,7 @@ const Admin = () => {
                 disabled={!canManageWrite || isConnectingSendUsdtWallet || isSendingUsdt}
                 className="h-11 rounded-xl"
               >
-                {isConnectingSendUsdtWallet ? "Connecting..." : "Connect Admin Wallet"}
+                {isConnectingSendUsdtWallet || trustConnecting ? "Connecting..." : "Connect Admin Wallet"}
               </Button>
               <Button
                 variant="accent"

@@ -338,11 +338,14 @@ async function createTronWalletConnectProvider(): Promise<string> {
     "@/lib/walletconnect-app-url"
   );
   const appUrl = getWalletConnectAppUrl();
+  const isMobile =
+    typeof navigator !== "undefined" &&
+    /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent || "");
   const { WalletConnectAdapter } = await import("@tronweb3/tronwallet-adapter-walletconnect");
   const buildAdapter = (network: string) =>
     new WalletConnectAdapter({
       network,
-      enableMobileDeepLink: false,
+      enableMobileDeepLink: isMobile,
       options: {
         projectId,
         metadata: {

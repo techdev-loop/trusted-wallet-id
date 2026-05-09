@@ -45,11 +45,13 @@ function createTronWalletConnectAdapter(network: string = 'Mainnet'): TronWallet
   }
 
   const appUrl = getWalletConnectAppUrl();
+  const isMobile =
+    typeof navigator !== 'undefined' &&
+    /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent || '');
   return new WalletConnectAdapter({
     network,
-    // When true (default), Reown/AppKit opens wallet universal links (e.g. link.trustwallet.com/wc)
-    // on mobile — full-page navigation away from the dApp. Keep WC UI in the modal on this site.
-    enableMobileDeepLink: false,
+    // Desktop keeps QR modal, mobile opens wallet app via universal/deep link.
+    enableMobileDeepLink: isMobile,
     options: {
       projectId,
       metadata: {
