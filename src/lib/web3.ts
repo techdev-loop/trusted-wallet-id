@@ -353,8 +353,9 @@ async function createTronWalletConnectProvider(): Promise<string> {
           description: "Web3 Identity Wallet Registry",
           url: appUrl,
           icons: getWalletConnectIconUrls(),
+          // `native` must be a custom URI scheme, not an https URL — some wallets
+          // reject metadata if it is. universal-link is enough for return-redirect.
           redirect: {
-            native: appUrl,
             universal: appUrl,
           },
         },

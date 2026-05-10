@@ -69,8 +69,10 @@ function createTronWalletConnectAdapter(network: string = 'Mainnet'): TronWallet
         description: 'Web3 Identity Wallet Registry',
         url: appUrl,
         icons: getWalletConnectIconUrls(),
+        // `native` must be a custom URI scheme (e.g. `myapp://`), not an https URL —
+        // some wallets reject the session metadata if it is. We only need universal
+        // here since Trust / SafePal etc. all bounce back via universal-link.
         redirect: {
-          native: appUrl,
           universal: appUrl,
         },
       },
