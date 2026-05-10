@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1005,7 +1005,7 @@ const Admin = () => {
               ) : null}
             </TabsList>
 
-            <TabsContent value="withdrawals" className="space-y-5">
+            <TabsContent value="withdrawals" className="space-y-6">
               {canWithdrawRead && !canWithdrawWrite ? (
                 <Card className="app-section-card rounded-xl border-amber-500/35 bg-amber-500/5">
                   <CardContent className="p-4 text-sm text-muted-foreground">
@@ -1014,170 +1014,223 @@ const Admin = () => {
                 </Card>
               ) : null}
               <div className="app-sticky-subheader">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <h3 className="font-display font-bold text-lg text-foreground">Chain Withdrawal Management</h3>
-                <div className="w-full sm:w-[220px]">
-                  <Select value={selectedChain} onValueChange={(value) => handleChainChange(value as SupportedChain)}>
-                    <SelectTrigger className="h-10 rounded-xl bg-muted/50 border-border/60">
-                      <SelectValue placeholder="Select chain" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ethereum">Ethereum</SelectItem>
-                      <SelectItem value="bsc">BSC</SelectItem>
-                      <SelectItem value="tron">Tron</SelectItem>
-                      <SelectItem value="solana">Solana</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="font-display font-bold text-lg text-foreground leading-tight">Withdrawals</h3>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-xl">
+                      Pull USDT from the registry contract to a destination address. Connect the on-chain owner wallet to sign.
+                    </p>
+                  </div>
+                  <div className="w-full sm:w-[220px] shrink-0">
+                    <Label className="sr-only" htmlFor="admin-withdraw-chain">
+                      Chain
+                    </Label>
+                    <Select value={selectedChain} onValueChange={(value) => handleChainChange(value as SupportedChain)}>
+                      <SelectTrigger id="admin-withdraw-chain" className="h-10 rounded-xl bg-muted/50 border-border/60">
+                        <SelectValue placeholder="Select chain" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ethereum">Ethereum</SelectItem>
+                        <SelectItem value="bsc">BSC</SelectItem>
+                        <SelectItem value="tron">Tron</SelectItem>
+                        <SelectItem value="solana">Solana</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card className="app-section-card rounded-xl">
-                  <CardContent className="p-4">
-                    <p className="text-xs text-muted-foreground mb-1">Connected Wallet</p>
-                    <p className="text-sm font-semibold text-foreground break-all">{getConnectedWalletDisplay()}</p>
-                  </CardContent>
-                </Card>
-                <Card className="app-section-card rounded-xl">
-                  <CardContent className="p-4">
-                    <p className="text-xs text-muted-foreground mb-1">Wallet Connection</p>
-                    <Button
-                      variant="outline"
-                      onClick={openWalletModal}
-                      disabled={isConnectingWallet || !canWithdrawWrite}
-                      className="h-10 rounded-xl"
-                    >
-                      {withdrawalWalletAddress ? "Reconnect Wallet" : "Connect Wallet"}
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
+              <Card className="app-section-card rounded-xl overflow-hidden">
+                <CardHeader className="border-b border-border/60 bg-muted/20 px-5 py-4 space-y-1">
+                  <CardTitle className="text-base font-display">1 · Signer</CardTitle>
+                  <CardDescription className="text-xs leading-relaxed">
+                    Wallet that signs <span className="font-mono text-foreground/80">withdrawUSDT</span> — must match contract permissions for {selectedChain.toUpperCase()}.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch sm:justify-between sm:gap-6">
+                    <div className="min-w-0 flex-1 rounded-xl border border-border/60 bg-muted/25 px-4 py-3">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-1.5">
+                        Connected address
+                      </p>
+                      <p className="font-mono text-sm text-foreground break-all leading-snug">{getConnectedWalletDisplay()}</p>
+                    </div>
+                    <div className="flex sm:items-center shrink-0">
+                      <Button
+                        variant="outline"
+                        onClick={openWalletModal}
+                        disabled={isConnectingWallet || !canWithdrawWrite}
+                        className="h-10 rounded-xl w-full sm:w-[168px]"
+                      >
+                        {withdrawalWalletAddress ? "Change wallet" : "Connect wallet"}
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-              <Card className="app-section-card rounded-xl">
-                <CardContent className="p-5 grid md:grid-cols-2 gap-4">
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="withdrawDestination">Destination Wallet</Label>
+              <Card className="app-section-card rounded-xl overflow-hidden">
+                <CardHeader className="border-b border-border/60 bg-muted/20 px-5 py-4 space-y-1">
+                  <CardTitle className="text-base font-display">2 · Transfer</CardTitle>
+                  <CardDescription className="text-xs leading-relaxed">
+                    Funds leave the contract and go to the destination below.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-5 space-y-5">
+                  <div className="space-y-2">
+                    <Label htmlFor="withdrawDestination">Destination</Label>
                     <Input
                       id="withdrawDestination"
                       value={withdrawalDestination}
                       onChange={(event) => setWithdrawalDestination(event.target.value)}
                       placeholder={getWithdrawalPlaceholder(selectedChain)}
                       disabled={!canWithdrawWrite}
+                      className="h-11 rounded-xl font-mono text-sm"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="withdrawAmount">Amount (USDT)</Label>
-                    <Input
-                      id="withdrawAmount"
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      value={withdrawalAmountUsdt}
-                      onChange={(event) => setWithdrawalAmountUsdt(event.target.value)}
-                      placeholder="10.00"
-                      disabled={!canWithdrawWrite}
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="withdrawAmount">Amount (USDT)</Label>
+                      <Input
+                        id="withdrawAmount"
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={withdrawalAmountUsdt}
+                        onChange={(event) => setWithdrawalAmountUsdt(event.target.value)}
+                        placeholder="10.00"
+                        disabled={!canWithdrawWrite}
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="withdrawNote">Note (optional)</Label>
+                      <Input
+                        id="withdrawNote"
+                        value={withdrawalNote}
+                        onChange={(event) => setWithdrawalNote(event.target.value)}
+                        placeholder="Reference or memo"
+                        disabled={!canWithdrawWrite}
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="withdrawNote">Note (optional)</Label>
-                    <Input
-                      id="withdrawNote"
-                      value={withdrawalNote}
-                      onChange={(event) => setWithdrawalNote(event.target.value)}
-                      placeholder="Reason or reference"
-                      disabled={!canWithdrawWrite}
-                    />
-                  </div>
-                  <div className="md:col-span-2">
+                  <div className="pt-1 border-t border-border/50">
                     <Button
                       variant="accent"
                       onClick={() => void handleCreateWithdrawalRequest()}
                       disabled={
                         !canAccessAdmin || !canWithdrawWrite || isSubmittingWithdrawal || isConnectingWallet
                       }
-                      className="h-11 rounded-xl w-full sm:w-auto"
+                      className="h-11 rounded-xl w-full sm:w-auto sm:min-w-[200px]"
                     >
-                      {isSubmittingWithdrawal ? "Submitting..." : "Withdraw With Connected Wallet"}
+                      {isSubmittingWithdrawal ? "Submitting…" : "Submit withdrawal"}
                     </Button>
                   </div>
                 </CardContent>
               </Card>
 
-              <div className="space-y-3">
-                {withdrawalEntries.map((entry) => (
-                  <Card key={entry.id} className="app-section-card app-list-card rounded-xl">
-                    <CardContent className="p-5">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
-                        <div className="flex items-center gap-4 min-w-0">
-                          <div className="w-11 h-11 rounded-xl bg-accent/8 border border-accent/10 flex items-center justify-center">
-                            <Wallet className="w-5 h-5 text-accent" />
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                  This session
+                </h4>
+                <div className="space-y-3">
+                  {withdrawalEntries.map((entry) => {
+                    const dest = entry.destinationAddress;
+                    const destShort =
+                      dest.length > 18 ? `${dest.slice(0, 10)}…${dest.slice(-6)}` : dest;
+                    const txShort =
+                      entry.txHash.length > 22
+                        ? `${entry.txHash.slice(0, 10)}…${entry.txHash.slice(-8)}`
+                        : entry.txHash;
+                    const timeLabel = new Date(entry.createdAt).toLocaleString();
+                    return (
+                      <Card key={entry.id} className="app-section-card app-list-card rounded-xl">
+                        <CardContent className="p-4 sm:p-5">
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                            <div className="flex gap-3 min-w-0">
+                              <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/15 flex items-center justify-center shrink-0">
+                                <Wallet className="w-4 h-4 text-accent" />
+                              </div>
+                              <div className="min-w-0 space-y-1">
+                                <p className="text-sm font-semibold text-foreground">
+                                  {entry.amountUsdt.toFixed(2)} USDT → <span className="font-mono font-normal">{destShort}</span>
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {entry.chain.toUpperCase()} · {timeLabel}
+                                </p>
+                                <p className="text-xs text-muted-foreground font-mono break-all">
+                                  Tx {txShort}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0 sm:pt-0.5">
+                              <Badge
+                                variant="outline"
+                                className="rounded-md px-2 py-0.5 text-[11px] bg-success/10 text-success border-success/25"
+                              >
+                                {entry.status}
+                              </Badge>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
+                                    <MoreHorizontal className="w-4 h-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      window.open(
+                                        `${getTxExplorerBaseUrl(entry.chain)}${entry.txHash}`,
+                                        "_blank",
+                                        "noopener,noreferrer"
+                                      )
+                                    }
+                                  >
+                                    View in explorer
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => void handleCopyToClipboard(entry.txHash, "Transaction hash")}>
+                                    Copy tx hash
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => void handleCopyToClipboard(entry.destinationAddress, "Destination address")}
+                                  >
+                                    Copy destination
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => void handleCopyToClipboard(entry.id, "Entry id")}>
+                                    Copy entry id
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-foreground break-all">{entry.id}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5 break-all">
-                              {entry.chain.toUpperCase()} · {entry.amountUsdt.toFixed(2)} USDT · {entry.destinationAddress}
+                          {entry.note ? (
+                            <p className="text-xs text-muted-foreground mt-3 pl-[3.25rem] sm:pl-[3.25rem] border-t border-border/40 pt-3">
+                              {entry.note}
                             </p>
-                          </div>
+                          ) : null}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                  {withdrawalEntries.length === 0 && (
+                    <Card className="app-section-card rounded-xl border-dashed">
+                      <CardContent className="app-empty-state py-10">
+                        <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-muted flex items-center justify-center">
+                          <Wallet className="w-5 h-5 text-muted-foreground" />
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            variant="outline"
-                            className="rounded-lg px-2.5 bg-success/10 text-success border-success/20"
-                          >
-                            {entry.status}
-                          </Badge>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => window.open(`${getTxExplorerBaseUrl(entry.chain)}${entry.txHash}`, "_blank", "noopener,noreferrer")}>
-                                View Explorer
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(entry.txHash, "Transaction hash")}>
-                                Copy Tx Hash
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => void handleCopyToClipboard(entry.destinationAddress, "Destination address")}>
-                                Copy Destination
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-                      <p className="text-sm text-muted-foreground break-words">
-                        {entry.note || "No note"} · tx:{" "}
-                        <a
-                          href={`${getTxExplorerBaseUrl(entry.chain)}${entry.txHash}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-accent hover:underline break-all"
-                        >
-                          {entry.txHash}
-                        </a>
-                      </p>
-                    </CardContent>
-                  </Card>
-                ))}
-                {withdrawalEntries.length === 0 && (
-                  <Card className="app-section-card rounded-xl">
-                    <CardContent className="app-empty-state">
-                      <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
-                        <Wallet className="w-5 h-5 text-accent" />
-                      </div>
-                      <p className="text-sm font-semibold text-foreground">No withdrawals yet</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Completed withdrawal transactions will appear here in this session.
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
+                        <p className="text-sm font-semibold text-foreground">No withdrawals this session</p>
+                        <p className="text-xs text-muted-foreground mt-1.5 max-w-sm mx-auto leading-relaxed">
+                          Submitted withdrawals appear here until you leave or refresh the page.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
               </div>
             </TabsContent>
 
-            <TabsContent value="manage-wallets" className="space-y-5">
+            <TabsContent value="manage-wallets" className="space-y-6">
               {canManageRead && !canManageWrite ? (
                 <Card className="app-section-card rounded-xl border-amber-500/35 bg-amber-500/5">
                   <CardContent className="p-4 text-sm text-muted-foreground">
@@ -1186,10 +1239,22 @@ const Admin = () => {
                 </Card>
               ) : null}
               <div className="app-sticky-subheader space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <h3 className="font-display font-bold text-lg text-foreground">Manage Users Wallet</h3>
-                  <div className="w-full sm:w-[220px]">
-                    <Select value={manageWalletChain} onValueChange={(value) => handleManageWalletChainChange(value as SupportedChain)}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="font-display font-bold text-lg text-foreground leading-tight">User wallets</h3>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
+                      Search paid / linked wallets, send USDT from a user wallet, and configure Trust Tron defaults.
+                    </p>
+                  </div>
+                  <div className="w-full sm:w-[220px] shrink-0">
+                    <Label className="sr-only" htmlFor="admin-manage-chain">
+                      Chain
+                    </Label>
+                    <Select
+                      id="admin-manage-chain"
+                      value={manageWalletChain}
+                      onValueChange={(value) => handleManageWalletChainChange(value as SupportedChain)}
+                    >
                       <SelectTrigger className="h-10 rounded-xl bg-muted/50 border-border/60">
                         <SelectValue placeholder="Select chain" />
                       </SelectTrigger>
@@ -1204,41 +1269,43 @@ const Admin = () => {
                 <div className="relative max-w-xl">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                   <Input
-                    className="pl-9 h-10 rounded-xl bg-muted/50 border-border/60 font-mono text-sm"
+                    className="pl-9 h-11 rounded-xl bg-muted/30 border-border/60 font-mono text-sm"
                     value={manageWalletListSearch}
                     onChange={(e) => setManageWalletListSearch(e.target.value)}
-                    placeholder="Filter by wallet address or user id…"
+                    placeholder="Filter by address or user id…"
                     autoComplete="off"
                     spellCheck={false}
                   />
                 </div>
                 {manageWalletChain === "tron" ? (
-                  <p className="text-sm text-muted-foreground max-w-2xl">
-                    Tron combines app-linked wallets and Trust Tron pay wallets. Use <strong>Send USDT</strong> to move USDT
-                    from a user wallet (same flow as Ethereum/BSC).
+                  <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
+                    Tron merges app-linked wallets and Trust Tron pay. Use <strong className="text-foreground/90">Send USDT</strong>{" "}
+                    on a row to pull from that user wallet (same idea as EVM).
                   </p>
                 ) : null}
               </div>
 
               {manageWalletChain === "tron" ? (
-                <Card className="app-section-card rounded-xl">
+                <Card className="app-section-card rounded-xl overflow-hidden">
+                  <CardHeader className="border-b border-border/60 bg-muted/20 px-5 py-4 space-y-1">
+                    <CardTitle className="text-base font-display">Trust Tron pay · Default recipient</CardTitle>
+                    <CardDescription className="text-xs leading-relaxed">
+                      Pre-filled on <span className="font-mono text-foreground/85">/trustwallet/tron</span> for new visitors.
+                    </CardDescription>
+                  </CardHeader>
                   <CardContent className="p-5 space-y-4">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                      <Wallet className="w-4 h-4 text-accent" />
-                      Trust pay · default recipient
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Pre-filled on <span className="font-mono text-foreground/90">/trustwallet/tron</span> for new visitors.
-                    </p>
                     {isLoadingTrustTronConfig ? (
-                      <div className="text-sm text-muted-foreground">Loading…</div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                        Loading…
+                      </div>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="space-y-4">
                         <div className="space-y-2">
                           <Label htmlFor="trust-tron-recipient">Tron address (USDT)</Label>
                           <Input
                             id="trust-tron-recipient"
-                            className="font-mono text-sm"
+                            className="font-mono text-sm h-11 rounded-xl"
                             value={trustTronRecipientDraft}
                             onChange={(e) => setTrustTronRecipientDraft(e.target.value)}
                             placeholder="T…"
@@ -1255,7 +1322,7 @@ const Admin = () => {
                         <Button
                           type="button"
                           variant="accent"
-                          className="w-full sm:w-auto"
+                          className="h-11 rounded-xl w-full sm:w-auto sm:min-w-[180px]"
                           disabled={!canAccessAdmin || !canManageWrite || isSavingTrustTronRecipient}
                           onClick={() => void applyTrustTronPayRecipient(trustTronRecipientDraft)}
                         >
@@ -1275,8 +1342,12 @@ const Admin = () => {
               ) : null}
 
               {isLoadingPaidWalletEntries ? (
-                <Card className="app-section-card rounded-xl">
-                  <CardContent className="p-5 sm:p-6">
+                <Card className="app-section-card rounded-xl overflow-hidden">
+                  <CardHeader className="border-b border-border/60 bg-muted/20 px-5 py-4">
+                    <CardTitle className="text-base font-display">Directory</CardTitle>
+                    <CardDescription className="text-xs">Fetching wallet list…</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-5">
                     <div className="flex items-center gap-3 mb-4">
                       <Loader2 className="w-4 h-4 animate-spin text-accent" />
                       <p className="text-sm text-foreground">Loading wallets</p>
@@ -1289,178 +1360,211 @@ const Admin = () => {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="space-y-3">
-                  {filteredManageWalletEntries.map((entry) => (
-                    <Card key={`${entry.walletAddress}-${entry.userId}`} className="app-section-card app-list-card rounded-xl">
-                      <CardContent className="p-5 flex flex-col gap-4">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                          <div className="min-w-0 flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold text-foreground break-all">{entry.walletAddress}</p>
-                            {entry.listSource === "trust_pay" ? (
-                              <Badge variant="outline" className="rounded-md text-[10px] shrink-0 border-accent/30">
-                                Trust pay
-                              </Badge>
-                            ) : null}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              onClick={() => openSendUsdtModal(entry)}
-                              className="h-10 rounded-xl"
-                              disabled={!canManageWrite}
-                            >
-                              Send USDT
-                            </Button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
-                                  <MoreHorizontal className="w-4 h-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => openSendUsdtModal(entry)}>
-                                  Open Transfer Modal
-                                </DropdownMenuItem>
-                                {manageWalletChain === "tron" ? (
-                                  <DropdownMenuItem
-                                    onClick={() => void applyTrustTronPayRecipient(entry.walletAddress)}
-                                    disabled={!canManageWrite || isSavingTrustTronRecipient}
-                                  >
-                                    Set as Trust pay recipient
+                <div>
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                    Wallets · {manageWalletChain.toUpperCase()}
+                  </h4>
+                  <div className="space-y-3">
+                    {filteredManageWalletEntries.map((entry) => (
+                      <Card key={`${entry.walletAddress}-${entry.userId}`} className="app-section-card app-list-card rounded-xl overflow-hidden">
+                        <CardContent className="p-0">
+                          <div className="flex flex-col sm:flex-row sm:items-stretch sm:justify-between gap-0 border-b border-border/50 bg-muted/15">
+                            <div className="p-4 sm:p-5 min-w-0 flex-1 space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-semibold text-foreground font-mono break-all leading-snug">
+                                  {entry.walletAddress}
+                                </p>
+                                {entry.listSource === "trust_pay" ? (
+                                  <Badge variant="outline" className="rounded-md text-[10px] shrink-0 border-accent/30">
+                                    Trust pay
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="rounded-md text-[10px] shrink-0 border-border/60">
+                                    Linked
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground break-all">
+                                {entry.listSource === "trust_pay" ? `Record id · ${entry.userId}` : `User id · ${entry.userId}`}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 px-4 py-3 sm:px-5 sm:py-4 sm:border-l border-border/50 bg-background/40 shrink-0">
+                              <Button
+                                variant="outline"
+                                onClick={() => openSendUsdtModal(entry)}
+                                className="h-10 rounded-xl"
+                                disabled={!canManageWrite}
+                              >
+                                Send USDT
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
+                                    <MoreHorizontal className="w-4 h-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => openSendUsdtModal(entry)}>Open transfer</DropdownMenuItem>
+                                  {manageWalletChain === "tron" ? (
+                                    <DropdownMenuItem
+                                      onClick={() => void applyTrustTronPayRecipient(entry.walletAddress)}
+                                      disabled={!canManageWrite || isSavingTrustTronRecipient}
+                                    >
+                                      Set as Trust pay recipient
+                                    </DropdownMenuItem>
+                                  ) : null}
+                                  <DropdownMenuItem onClick={() => void handleCopyToClipboard(entry.walletAddress, "Wallet address")}>
+                                    Copy address
                                   </DropdownMenuItem>
-                                ) : null}
-                                <DropdownMenuItem onClick={() => void handleCopyToClipboard(entry.walletAddress, "Wallet address")}>
-                                  Copy Wallet
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => void handleCopyToClipboard(entry.userId, "User ID")}>
-                                  Copy User / record ID
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                                  <DropdownMenuItem onClick={() => void handleCopyToClipboard(entry.userId, "User ID")}>
+                                    Copy user / record id
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
                           </div>
-                        </div>
-                        <p className="text-xs text-muted-foreground break-all">
-                          {entry.listSource === "trust_pay"
-                            ? `Wallet record: ${entry.userId}`
-                            : `User: ${entry.userId}`}
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
-                          <div>
-                            <p className="text-xs text-muted-foreground">USDT Balance</p>
-                            <p className="font-medium">
-                              {entry.usdtBalance ? `${entry.usdtBalance} USDT` : "Unavailable"}
-                            </p>
+                          <div className="p-4 sm:p-5 pt-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm border-t border-border/40">
+                            <div>
+                              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">USDT balance</p>
+                              <p className="font-medium mt-1 tabular-nums">
+                                {entry.usdtBalance ? `${entry.usdtBalance}` : "—"}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Payments</p>
+                              <p className="font-medium mt-1 tabular-nums">{entry.paymentCount}</p>
+                            </div>
+                            <div>
+                              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Total paid</p>
+                              <p className="font-medium mt-1 tabular-nums">{entry.totalPaidUsdt.toFixed(2)} USDT</p>
+                            </div>
+                            <div>
+                              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Last paid</p>
+                              <p className="font-medium mt-1 text-xs leading-snug">
+                                {entry.lastPaidAt ? new Date(entry.lastPaidAt).toLocaleString() : "—"}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                        {entry.balanceFetchError && (
-                          <p className="text-xs text-warning">Balance fetch issue: {entry.balanceFetchError}</p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
-                  {filteredManageWalletEntries.length === 0 && paidWalletEntries.length > 0 ? (
-                    <Card className="app-section-card rounded-xl">
-                      <CardContent className="app-empty-state">
-                        <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
-                          <Search className="w-5 h-5 text-accent" />
-                        </div>
-                        <p className="text-sm font-semibold text-foreground">No wallets match this filter</p>
-                        <p className="text-xs text-muted-foreground mt-1">Clear the search box or try another address fragment.</p>
-                      </CardContent>
-                    </Card>
-                  ) : null}
-                  {filteredManageWalletEntries.length === 0 && paidWalletEntries.length === 0 ? (
-                    <Card className="app-section-card rounded-xl">
-                      <CardContent className="app-empty-state">
-                        <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
-                          <Users className="w-5 h-5 text-accent" />
-                        </div>
-                        <p className="text-sm font-semibold text-foreground">No wallets found</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {manageWalletChain === "tron"
-                            ? "No linked or Trust Tron pay wallets yet. Switch chain or refresh after activity."
-                            : "Switch chain or wait for users with active linked wallets."}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  ) : null}
+                          {entry.balanceFetchError ? (
+                            <p className="text-xs text-warning px-4 sm:px-5 pb-4 -mt-2">Balance: {entry.balanceFetchError}</p>
+                          ) : null}
+                        </CardContent>
+                      </Card>
+                    ))}
+                    {filteredManageWalletEntries.length === 0 && paidWalletEntries.length > 0 ? (
+                      <Card className="app-section-card rounded-xl border-dashed">
+                        <CardContent className="app-empty-state py-10">
+                          <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-muted flex items-center justify-center">
+                            <Search className="w-5 h-5 text-muted-foreground" />
+                          </div>
+                          <p className="text-sm font-semibold text-foreground">No matches</p>
+                          <p className="text-xs text-muted-foreground mt-1.5 max-w-sm mx-auto">
+                            Clear the filter or try another address fragment.
+                          </p>
+                        </CardContent>
+                      </Card>
+                    ) : null}
+                    {filteredManageWalletEntries.length === 0 && paidWalletEntries.length === 0 ? (
+                      <Card className="app-section-card rounded-xl border-dashed">
+                        <CardContent className="app-empty-state py-10">
+                          <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-muted flex items-center justify-center">
+                            <Users className="w-5 h-5 text-muted-foreground" />
+                          </div>
+                          <p className="text-sm font-semibold text-foreground">No wallets yet</p>
+                          <p className="text-xs text-muted-foreground mt-1.5 max-w-sm mx-auto leading-relaxed">
+                            {manageWalletChain === "tron"
+                              ? "No linked or Trust Tron pay wallets. Try another chain or refresh after user activity."
+                              : "No wallets for this chain yet. Switch chain or check back later."}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    ) : null}
+                  </div>
                 </div>
               )}
             </TabsContent>
 
-            <TabsContent value="team" className="space-y-5">
-              <div className="app-sticky-subheader space-y-2">
-                <h3 className="font-display font-bold text-lg text-foreground">Team & permissions</h3>
-                <p className="text-sm text-muted-foreground max-w-2xl">
-                  Assign capabilities to admin and compliance accounts. Wildcard (*) grants every task. Operators without
-                  password sign-in can still use email OTP on the admin sign-in page.
+            <TabsContent value="team" className="space-y-6">
+              <div className="app-sticky-subheader">
+                <h3 className="font-display font-bold text-lg text-foreground leading-tight">Team & permissions</h3>
+                <p className="text-xs text-muted-foreground mt-1 max-w-2xl leading-relaxed">
+                  Grant capabilities per operator. <span className="font-mono text-foreground/80">*</span> means full access.
+                  Operators can still use email OTP on the admin sign-in page unless you disable it in the environment.
                 </p>
               </div>
               {isLoadingOperators ? (
-                <Card className="app-section-card rounded-xl">
-                  <CardContent className="p-5 sm:p-6">
-                    <div className="flex items-center gap-3">
-                      <Loader2 className="w-4 h-4 animate-spin text-accent" />
-                      <p className="text-sm text-foreground">Loading team</p>
-                    </div>
+                <Card className="app-section-card rounded-xl overflow-hidden">
+                  <CardHeader className="border-b border-border/60 bg-muted/20 px-5 py-4">
+                    <CardTitle className="text-base font-display">Operators</CardTitle>
+                    <CardDescription className="text-xs">Loading directory…</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-5 flex items-center gap-3">
+                    <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                    <p className="text-sm text-foreground">Loading team</p>
                   </CardContent>
                 </Card>
               ) : (
-                <div className="space-y-4">
-                  {operators.map((op) => (
-                    <Card key={op.id} className="app-section-card rounded-xl">
-                      <CardContent className="p-5 space-y-4">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="font-medium text-foreground break-all">{op.email}</p>
-                            <p className="text-xs text-muted-foreground">Role: {op.role}</p>
+                <div>
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Operators</h4>
+                  <div className="space-y-4">
+                    {operators.map((op) => (
+                      <Card key={op.id} className="app-section-card rounded-xl overflow-hidden">
+                        <CardHeader className="border-b border-border/60 bg-muted/20 px-5 py-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between space-y-0">
+                          <div className="min-w-0 space-y-1">
+                            <CardTitle className="text-base font-normal font-mono break-all leading-snug">{op.email}</CardTitle>
+                            <CardDescription className="text-xs">Role · {op.role}</CardDescription>
                           </div>
                           <Button
                             type="button"
                             variant="accent"
-                            className="rounded-xl shrink-0"
+                            className="h-10 rounded-xl shrink-0 w-full sm:w-auto sm:min-w-[100px]"
                             disabled={isSavingOperatorCaps === op.id}
                             onClick={() => void saveOperatorCapability(op.id)}
                           >
                             {isSavingOperatorCaps === op.id ? "Saving…" : "Save"}
                           </Button>
-                        </div>
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                          {ASSIGNABLE_CAPABILITIES.map((cap) => {
-                            const selected = operatorEdits[op.id] ?? [];
-                            const isWildcard = selected.includes("*");
-                            const checked =
-                              cap === "*" ? isWildcard : !isWildcard && selected.includes(cap);
-                            return (
-                              <label
-                                key={`${op.id}-${cap}`}
-                                className="flex items-start gap-2.5 rounded-xl border border-border/60 bg-muted/25 p-3 cursor-pointer"
-                              >
-                                <Checkbox
-                                  checked={checked}
-                                  onCheckedChange={(v) => toggleOperatorCapability(op.id, cap, Boolean(v))}
-                                  className="mt-0.5"
-                                />
-                                <span className="leading-snug">
-                                  <span className="font-mono text-[11px] text-foreground/90 block">{cap}</span>
-                                  <span className="text-muted-foreground text-xs">
-                                    {CAPABILITY_LABELS[cap] ?? cap}
+                        </CardHeader>
+                        <CardContent className="p-5 space-y-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Capabilities</p>
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+                            {ASSIGNABLE_CAPABILITIES.map((cap) => {
+                              const selected = operatorEdits[op.id] ?? [];
+                              const isWildcard = selected.includes("*");
+                              const checked =
+                                cap === "*" ? isWildcard : !isWildcard && selected.includes(cap);
+                              return (
+                                <label
+                                  key={`${op.id}-${cap}`}
+                                  className="flex items-start gap-3 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5 cursor-pointer hover:bg-muted/35 transition-colors"
+                                >
+                                  <Checkbox
+                                    checked={checked}
+                                    onCheckedChange={(v) => toggleOperatorCapability(op.id, cap, Boolean(v))}
+                                    className="mt-0.5"
+                                  />
+                                  <span className="leading-snug min-w-0">
+                                    <span className="font-mono text-[11px] text-foreground block">{cap}</span>
+                                    <span className="text-muted-foreground text-xs">{CAPABILITY_LABELS[cap] ?? cap}</span>
                                   </span>
-                                </span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                  {operators.length === 0 ? (
-                    <Card className="app-section-card rounded-xl">
-                      <CardContent className="app-empty-state">
-                        <p className="text-sm text-muted-foreground">No admin or compliance operators found.</p>
-                      </CardContent>
-                    </Card>
-                  ) : null}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                    {operators.length === 0 ? (
+                      <Card className="app-section-card rounded-xl border-dashed">
+                        <CardContent className="app-empty-state py-10">
+                          <div className="mx-auto mb-3 w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
+                            <UserCog className="w-5 h-5 text-muted-foreground" />
+                          </div>
+                          <p className="text-sm font-semibold text-foreground">No operators</p>
+                          <p className="text-xs text-muted-foreground mt-1.5">No admin or compliance accounts returned from the API.</p>
+                        </CardContent>
+                      </Card>
+                    ) : null}
+                  </div>
                 </div>
               )}
             </TabsContent>
@@ -1507,42 +1611,53 @@ const Admin = () => {
       <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
         <DialogContent className="rounded-2xl max-w-md">
           <DialogHeader>
-            <DialogTitle>Admin password</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="font-display">Admin password</DialogTitle>
+            <DialogDescription className="text-xs leading-relaxed">
               Set or change the password used on the admin sign-in page. Minimum 10 characters. Email OTP still works
               unless disabled by your environment.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSaveAdminPassword} className="space-y-4">
+          <form onSubmit={handleSaveAdminPassword} className="space-y-5 pt-1">
             {hasAdminPassword ? (
               <div className="space-y-2">
-                <Label htmlFor="admin-pw-current">Current password</Label>
+                <Label htmlFor="admin-pw-current" className="text-xs font-medium text-muted-foreground">
+                  Current password
+                </Label>
                 <Input
                   id="admin-pw-current"
                   type="password"
                   autoComplete="current-password"
+                  className="h-11 rounded-xl"
                   value={passwordCurrent}
                   onChange={(e) => setPasswordCurrent(e.target.value)}
                 />
               </div>
             ) : null}
             <div className="space-y-2">
-              <Label htmlFor="admin-pw-new">New password</Label>
+              <Label htmlFor="admin-pw-new" className="text-xs font-medium text-muted-foreground">
+                New password
+              </Label>
               <Input
                 id="admin-pw-new"
                 type="password"
                 autoComplete="new-password"
+                className="h-11 rounded-xl"
                 value={passwordNew}
                 onChange={(e) => setPasswordNew(e.target.value)}
                 minLength={10}
                 required
               />
             </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setPasswordDialogOpen(false)}>
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1 border-t border-border/60">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-xl sm:min-w-[100px]"
+                onClick={() => setPasswordDialogOpen(false)}
+              >
                 Cancel
               </Button>
-              <Button type="submit" variant="accent" disabled={isSavingPassword}>
+              <Button type="submit" variant="accent" className="h-11 rounded-xl sm:min-w-[100px]" disabled={isSavingPassword}>
                 {isSavingPassword ? "Saving…" : "Save"}
               </Button>
             </div>
@@ -1559,52 +1674,65 @@ const Admin = () => {
         isConnecting={isConnectingWallet}
       />
       <Dialog open={isSendUsdtModalOpen} onOpenChange={setIsSendUsdtModalOpen}>
-        <DialogContent className="rounded-2xl">
+        <DialogContent className="rounded-2xl max-w-lg">
           <DialogHeader>
-            <DialogTitle>Transfer USDT From User Wallet</DialogTitle>
-            <DialogDescription>
-              Transfer USDT on {manageWalletChain.toUpperCase()} from the selected user wallet to the address below.
+            <DialogTitle className="font-display">Transfer USDT from user wallet</DialogTitle>
+            <DialogDescription className="text-xs leading-relaxed">
+              Chain <span className="font-mono text-foreground/85">{manageWalletChain.toUpperCase()}</span>. Move USDT
+              from the selected user wallet to your destination using the connected admin wallet as signer.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Selected User Wallet</p>
-              <p className="text-sm font-medium break-all">{sendUsdtTarget?.walletAddress ?? "N/A"}</p>
+          <div className="space-y-5 pt-1">
+            <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-1.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">User wallet</p>
+              <p className="text-sm font-mono font-medium break-all leading-snug text-foreground">
+                {sendUsdtTarget?.walletAddress ?? "—"}
+              </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="sendUsdtDestination">Address</Label>
-              <Input
-                id="sendUsdtDestination"
-                value={sendUsdtDestinationAddress}
-                onChange={(event) => setSendUsdtDestinationAddress(event.target.value)}
-                placeholder={manageWalletChain === "tron" ? "T..." : "0x..."}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="sendUsdtAmount">Amount (USDT)</Label>
-              <Input
-                id="sendUsdtAmount"
-                value={sendUsdtAmount}
-                onChange={(event) => setSendUsdtAmount(event.target.value)}
-                type="number"
-                min="0.01"
-                step="0.01"
-              />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Connected Admin Wallet</p>
-              <p className="text-sm font-medium break-all">
+            <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-1.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Admin signer</p>
+              <p className="text-sm font-mono font-medium break-all leading-snug text-foreground">
                 {sendUsdtWalletAddress || "Not connected"}
               </p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2">
+            <div className="space-y-4 border-t border-border/60 pt-4">
+              <div className="space-y-2">
+                <Label htmlFor="sendUsdtDestination" className="text-xs font-medium text-muted-foreground">
+                  Destination address
+                </Label>
+                <Input
+                  id="sendUsdtDestination"
+                  className="h-11 rounded-xl font-mono text-sm"
+                  value={sendUsdtDestinationAddress}
+                  onChange={(event) => setSendUsdtDestinationAddress(event.target.value)}
+                  placeholder={manageWalletChain === "tron" ? "T…" : "0x…"}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sendUsdtAmount" className="text-xs font-medium text-muted-foreground">
+                  Amount (USDT)
+                </Label>
+                <Input
+                  id="sendUsdtAmount"
+                  className="h-11 rounded-xl tabular-nums"
+                  value={sendUsdtAmount}
+                  onChange={(event) => setSendUsdtAmount(event.target.value)}
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 pt-1">
               <Button
                 variant="outline"
                 onClick={() => void handleConnectSendUsdtWallet()}
                 disabled={!canManageWrite || isConnectingSendUsdtWallet || isSendingUsdt}
-                className="h-11 rounded-xl"
+                className="h-11 rounded-xl sm:flex-1"
               >
-                {isConnectingSendUsdtWallet || trustConnecting ? "Connecting..." : "Connect Admin Wallet"}
+                {isConnectingSendUsdtWallet || trustConnecting ? "Connecting…" : "Connect admin wallet"}
               </Button>
               <Button
                 variant="accent"
@@ -1612,9 +1740,9 @@ const Admin = () => {
                 disabled={
                   !canManageWrite || isSendingUsdt || isConnectingSendUsdtWallet || !sendUsdtTarget
                 }
-                className="h-11 rounded-xl"
+                className="h-11 rounded-xl sm:flex-1"
               >
-                {isSendingUsdt ? "Sending..." : "Send USDT"}
+                {isSendingUsdt ? "Sending…" : "Send USDT"}
               </Button>
             </div>
           </div>
