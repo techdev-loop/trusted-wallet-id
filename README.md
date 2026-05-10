@@ -2,7 +2,6 @@
 
 Private Web3 identity-linked wallet registry platform.
 
-
 ## Features
 
 - **Email-based KYC**: Traditional email signup with OTP verification and KYC submission
