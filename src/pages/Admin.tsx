@@ -565,12 +565,20 @@ const Admin = () => {
     }
     try {
       setIsSubmittingWithdrawal(true);
-      
+
+      // Tron: nudge the admin to open their wallet to approve. We can't auto-
+      // open it from JS without cancelling the in-flight WC publish, so we ask
+      // the user to switch apps. Trust/SafePal usually push-notify the user
+      // automatically on receive, but this toast covers the case where they don't.
+      if (selectedChain === "tron") {
+        toast.info("Open your wallet app to approve the withdrawal.");
+      }
+
       // Get contract config to get the contract address
       const contractConfig = await apiRequest<{ contractAddress: string; usdtTokenAddress?: string }>(
         `/web3/contract-config/${selectedChain}`
       );
-      
+
       if (!contractConfig.contractAddress) {
         throw new Error(`Contract address is not configured for ${selectedChain}.`);
       }
@@ -728,6 +736,11 @@ const Admin = () => {
 
     try {
       setIsSendingUsdt(true);
+      // Tron: prompt the admin to open their wallet to approve the transfer.
+      // See the equivalent comment on `handleCreateWithdrawalRequest`.
+      if (manageWalletChain === "tron") {
+        toast.info("Open your wallet app to approve the transfer.");
+      }
       const contractConfig = await apiRequest<{ usdtTokenAddress?: string }>(`/web3/contract-config/${manageWalletChain}`);
       const txHash = await transferUSDTFromUserWallet(
         manageWalletChain,
