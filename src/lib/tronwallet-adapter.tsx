@@ -22,12 +22,22 @@ export type TronAdapterType =
   | 'trust'
   | 'walletconnect';
 
+export interface TronConnectOptions {
+  /**
+   * Skip the "reuse existing connection" shortcut and tear down any prior session
+   * before reconnecting. Set this when the user explicitly picked a wallet from
+   * the picker — otherwise switching from one WalletConnect-backed wallet
+   * (e.g. SafePal) to another (e.g. Trust) would silently reuse the old address.
+   */
+  forceFresh?: boolean;
+}
+
 interface TronWalletContextType {
   adapter: TronWalletAdapter | null;
   address: string | null;
   isConnected: boolean;
   isConnecting: boolean;
-  connect: (adapterType?: TronAdapterType) => Promise<string>;
+  connect: (adapterType?: TronAdapterType, options?: TronConnectOptions) => Promise<string>;
   disconnect: () => Promise<void>;
   signMessage: (message: string) => Promise<string>;
   error: Error | null;
@@ -59,6 +69,10 @@ function createTronWalletConnectAdapter(network: string = 'Mainnet'): TronWallet
         description: 'Web3 Identity Wallet Registry',
         url: appUrl,
         icons: getWalletConnectIconUrls(),
+        redirect: {
+          native: appUrl,
+          universal: appUrl,
+        },
       },
     },
   });
@@ -543,14 +557,38 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
         if (win.trustwallet) {
           return;
         }
+        // OKX dApp browser injects window.okxwallet.tronLink. Connect via the
+        // OKX-specific adapter when we detect we're inside OKX's WebView and
+        // there's no global tronLink already taken by TronLink. Order matters:
+        // OKX must come first because OKX may *also* mirror its provider onto
+        // window.tronLink in some builds, and we want the OKX-specific adapter.
+        if (win.okxwallet?.tronLink && !win.tronLink) {
+          addTronDebug('autoConnect:okx:detected');
+          try {
+            const okxAdapter = adapters.okxwallet();
+            await okxAdapter.connect();
+            setAdapter(okxAdapter);
+            setAddress(okxAdapter.address || null);
+            setConnectedAdapterType('okxwallet');
+            addTronDebug('autoConnect:okx:connected');
+            return;
+          } catch (err) {
+            console.debug('[tron.autoConnect] OKX auto-connect failed:', err);
+            addTronDebug('autoConnect:okx:failed');
+          }
+        }
         if (win.tronWeb || win.tronLink) {
+          addTronDebug('autoConnect:tronlink:detected');
           try {
             const tronLinkAdapter = adapters.tronlink();
             await tronLinkAdapter.connect();
             setAdapter(tronLinkAdapter);
             setAddress(tronLinkAdapter.address || null);
+            setConnectedAdapterType('tronlink');
+            addTronDebug('autoConnect:tronlink:connected');
           } catch (err) {
-            console.debug('TronLink auto-connect failed:', err);
+            console.debug('[tron.autoConnect] TronLink auto-connect failed:', err);
+            addTronDebug('autoConnect:tronlink:failed');
           }
         }
       }
@@ -581,13 +619,39 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
     };
   }, [adapter]);
 
-  const connect = useCallback(async (adapterType: TronAdapterType = 'auto'): Promise<string> => {
+  const connect = useCallback(async (
+    adapterType: TronAdapterType = 'auto',
+    options?: TronConnectOptions
+  ): Promise<string> => {
     try {
       setIsConnecting(true);
       setError(null);
 
-      // Reuse existing connection, except when user explicitly requested WalletConnect QR.
+      // When the caller demands a fresh session (e.g. user picked a different
+      // wallet from the picker), tear down any prior adapter first. Use the
+      // ref so we always see the latest adapter, not the stale closure value.
+      // Without this, switching from one WalletConnect-backed wallet (e.g. SafePal)
+      // to another (e.g. Trust) silently reuses the previous WC session and the
+      // user gets back the previous wallet's address instead of being prompted.
+      if (options?.forceFresh && adapterRef.current) {
+        addTronDebug('connect:forceFresh:disconnecting-prior-adapter');
+        try {
+          await adapterRef.current.disconnect();
+        } catch (disconnectErr) {
+          // Best effort — proceed even if disconnect throws. Some adapters
+          // surface "no active session" as an error here, which is harmless.
+          console.debug('[tron.connect] forceFresh disconnect threw (continuing)', disconnectErr);
+        }
+        adapterRef.current = null;
+        setAdapter(null);
+        setAddress(null);
+        setConnectedAdapterType(null);
+      }
+
+      // Reuse existing connection, except when user explicitly requested WalletConnect QR
+      // or asked for a fresh session. Read state via refs to avoid stale closures.
       const canReuseCurrentConnection =
+        !options?.forceFresh &&
         !!adapter &&
         !!address &&
         (adapterType !== 'walletconnect' || connectedAdapterType === 'walletconnect');

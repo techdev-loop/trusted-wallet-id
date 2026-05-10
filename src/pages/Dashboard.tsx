@@ -27,6 +27,11 @@ import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
 import { getTronProviderDebugSnapshot, useTronWallet } from "@/lib/tronwallet-adapter";
 import { resolveTronWalletAdapterFromModalId } from "@/lib/tron-wallet-modal-map";
+import {
+  installTronWalletConnectRedirect,
+  openTronWalletDappBrowser,
+  resolveTronConnectStrategy,
+} from "@/lib/tron-wallet-deeplinks";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
 import {
   DropdownMenu,
@@ -264,7 +269,7 @@ const Dashboard = () => {
   const solanaWallet = useSolanaWallet();
   const tronWallet = useTronWallet();
 
-  const handleConnectAndSignWallet = async (method: WalletConnectionMethod, walletId?: string) => {
+  const handleConnectAndSignWallet = async (_method: WalletConnectionMethod, walletId?: string) => {
     try {
       setProcessingWallet(true);
       setIsWalletModalOpen(false); // Close modal when connecting starts
@@ -281,7 +286,35 @@ const Dashboard = () => {
         if (!selectedTronAdapter && tronWallet.isConnected && tronWallet.address) {
           normalizedAddress = tronWallet.address;
         } else {
-          normalizedAddress = await tronWallet.connect(selectedTronAdapter ?? "auto");
+          const strategy = resolveTronConnectStrategy(walletId, selectedTronAdapter);
+          console.debug("[dashboard] tron connect strategy", {
+            walletId,
+            adapter: selectedTronAdapter ?? "auto",
+            mode: strategy.mode,
+          });
+
+          if (strategy.mode === "dapp-browser-open") {
+            const launched = openTronWalletDappBrowser(strategy.walletId);
+            if (!launched) {
+              throw new Error(
+                `Could not open ${strategy.walletId}. Please install the app or try a different wallet.`
+              );
+            }
+            return; // navigates away; user reconnects inside wallet's dApp browser
+          }
+          if (strategy.mode === "wc-redirect") {
+            const handle = installTronWalletConnectRedirect(strategy.walletId);
+            try {
+              normalizedAddress = await tronWallet.connect("walletconnect", { forceFresh: true });
+            } catch (wcError) {
+              if (handle.navigatedRef.current) return; // navigated to wallet app
+              throw wcError;
+            } finally {
+              handle.cleanup();
+            }
+          } else {
+            normalizedAddress = await tronWallet.connect(strategy.adapterType, { forceFresh: true });
+          }
         }
       } else {
         const requestedSolanaWallet = walletId === "solflare" ? "solflare" : walletId === "phantom" ? "phantom" : undefined;

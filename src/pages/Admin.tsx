@@ -33,6 +33,11 @@ import { getOnchainUSDTBalance, transferUSDTFromUserWallet, withdrawUSDTFromCont
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
 import { useTronWallet, type TronAdapterType } from "@/lib/tronwallet-adapter";
+import {
+  installTronWalletConnectRedirect,
+  openTronWalletDappBrowser,
+  resolveTronConnectStrategy,
+} from "@/lib/tron-wallet-deeplinks";
 
 type SupportedChain = Chain;
 
@@ -83,22 +88,6 @@ const isMobileTrustDiscover = (): boolean => {
   const ua = String(navigator.userAgent || "").toLowerCase();
   return /android|iphone|ipad|ipod|mobile/.test(ua) && /trustwallet|trust wallet/.test(ua);
 };
-
-function normalizeWalletConnectPairingUri(uri: unknown): string | null {
-  if (uri == null) return null;
-  const s = (typeof uri === "string" ? uri : String(uri)).trim();
-  if (s.length < 12) return null;
-  if (!s.toLowerCase().startsWith("wc:")) return null;
-  return s;
-}
-
-function openTrustWalletForWalletConnect(uri: string): boolean {
-  const normalized = normalizeWalletConnectPairingUri(uri);
-  if (!normalized) return false;
-  const url = `https://link.trustwallet.com/wc?uri=${encodeURIComponent(normalized)}`;
-  window.location.assign(url);
-  return true;
-}
 
 const Admin = () => {
   const navigate = useNavigate();
@@ -508,7 +497,39 @@ const Admin = () => {
           walletconnect: "walletconnect",
         };
         const selectedTronAdapter = walletId ? tronAdapterByWalletId[walletId] : undefined;
-        address = await tronWallet.connect(selectedTronAdapter ?? "auto");
+        const strategy = resolveTronConnectStrategy(walletId, selectedTronAdapter);
+        console.debug("[admin.withdrawal] tron connect strategy", {
+          walletId,
+          adapter: selectedTronAdapter ?? "auto",
+          mode: strategy.mode,
+        });
+
+        if (strategy.mode === "dapp-browser-open") {
+          // Hand off to the wallet's in-app browser. If the deep-link can't
+          // be triggered (e.g. WebView blocks navigation), surface a toast
+          // instead of leaving the user staring at a stalled spinner.
+          const launched = openTronWalletDappBrowser(strategy.walletId);
+          if (!launched) {
+            throw new Error(
+              `Could not open ${strategy.walletId}. Please install the app or try a different wallet.`
+            );
+          }
+          return; // navigates away; user reconnects inside wallet's dApp browser
+        }
+
+        if (strategy.mode === "wc-redirect") {
+          const handle = installTronWalletConnectRedirect(strategy.walletId);
+          try {
+            address = await tronWallet.connect("walletconnect", { forceFresh: true });
+          } catch (wcError) {
+            if (handle.navigatedRef.current) return; // navigated to wallet app
+            throw wcError;
+          } finally {
+            handle.cleanup();
+          }
+        } else {
+          address = await tronWallet.connect(strategy.adapterType, { forceFresh: true });
+        }
       } else if (selectedChain === "ethereum" || selectedChain === "bsc") {
         address = await wagmiWallet.connectWallet(selectedChain);
       } else {
@@ -519,6 +540,11 @@ const Admin = () => {
       setWithdrawalWalletAddress(address);
       toast.success("Wallet connected for withdrawal.");
     } catch (error) {
+      console.error("[admin.withdrawal] connect failed", {
+        chain: selectedChain,
+        walletId,
+        error,
+      });
       const message = error instanceof Error ? error.message : "Failed to connect wallet";
       toast.error(message);
       setIsWalletModalOpen(true);
@@ -607,39 +633,32 @@ const Admin = () => {
 
   const handleConnectSendUsdtWallet = async () => {
     if (manageWalletChain === "tron") {
-      try {
-        delete (window as any).__tronWalletConnectOnUri;
-      } catch {
-        /* ignore */
-      }
-      wcTrustNavigatedRef.current = false;
-
+      // No picker on this modal — default to Trust Wallet via WalletConnect redirect.
+      // We always start a fresh WC session here so that an admin who previously
+      // connected a different Tron wallet doesn't get the stale address back.
+      console.debug("[admin.sendUsdt] starting Tron WalletConnect redirect to Trust");
+      const handle = installTronWalletConnectRedirect("trust");
+      wcTrustNavigatedRef.current = handle.navigatedRef.current;
       try {
         connectMethodRef.current = "walletconnect";
         setTrustConnecting(true);
         setIsConnectingSendUsdtWallet(true);
-        (window as any).__tronWalletConnectOnUri = (uri: string) => {
-          if (wcTrustNavigatedRef.current) return;
-          if (openTrustWalletForWalletConnect(uri)) {
-            wcTrustNavigatedRef.current = true;
-          }
-        };
-        const address = await tronWallet.connect("walletconnect");
+        const address = await tronWallet.connect("walletconnect", { forceFresh: true });
         setSendUsdtWalletAddress(address);
         toast.success("Wallet linked");
       } catch (error) {
-        if (wcTrustNavigatedRef.current) {
+        if (handle.navigatedRef.current) {
+          // We deliberately navigated the page to the Trust app; the
+          // adapter's pending promise rejecting is expected, not an error.
+          wcTrustNavigatedRef.current = true;
           return;
         }
+        console.error("[admin.sendUsdt] tron connect failed", { error });
         toast.error(
           error instanceof Error ? error.message : "WalletConnect failed"
         );
       } finally {
-        try {
-          delete (window as any).__tronWalletConnectOnUri;
-        } catch {
-          /* ignore */
-        }
+        handle.cleanup();
         setTrustConnecting(false);
         setIsConnectingSendUsdtWallet(false);
       }
