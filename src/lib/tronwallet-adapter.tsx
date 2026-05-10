@@ -163,6 +163,47 @@ function addTronDebug(entry: string): void {
   tronDebugTrace = [...tronDebugTrace.slice(-19), `${timestamp} ${entry}`];
 }
 
+/**
+ * Returns true if Reown / WalletConnect v2 has persisted at least one paired
+ * session in localStorage. Used to decide whether to attempt a silent session
+ * restore on page mount (e.g. after a mobile redirect-back from Trust).
+ *
+ * We deliberately read storage directly rather than instantiating the adapter,
+ * so we can avoid triggering a new pairing UI when no session exists.
+ */
+function hasPersistedWalletConnectSession(): boolean {
+  if (typeof window === 'undefined') return false;
+  let storage: Storage | null = null;
+  try {
+    storage = window.localStorage;
+  } catch {
+    return false; // SecurityError in some embedded WebViews / private mode
+  }
+  if (!storage) return false;
+  try {
+    for (let i = 0; i < storage.length; i++) {
+      const key = storage.key(i);
+      if (!key) continue;
+      // Reown / WalletConnect v2 client persists sessions under keys like
+      // "wc@2:client:0.3//session". The exact prefix can vary by SDK version
+      // so we accept any "wc@2:" + "//session" key with a non-empty value.
+      if (key.startsWith('wc@2:') && key.includes('//session')) {
+        const value = storage.getItem(key);
+        if (!value) continue;
+        try {
+          const parsed = JSON.parse(value);
+          if (Array.isArray(parsed) && parsed.length > 0) return true;
+        } catch {
+          // Non-JSON entry, ignore
+        }
+      }
+    }
+  } catch {
+    // Storage iteration failed defensively
+  }
+  return false;
+}
+
 export function getTronProviderDebugSnapshot(): string {
   if (typeof window === 'undefined') {
     return 'tron-debug: no-window';
@@ -591,9 +632,39 @@ export function TronWalletProvider({ children }: { children: ReactNode }) {
             setAddress(tronLinkAdapter.address || null);
             setConnectedAdapterType('tronlink');
             addTronDebug('autoConnect:tronlink:connected');
+            return;
           } catch (err) {
             console.debug('[tron.autoConnect] TronLink auto-connect failed:', err);
             addTronDebug('autoConnect:tronlink:failed');
+          }
+        }
+
+        // No injected provider was found. Restore a previously-paired
+        // WalletConnect session if one was persisted (e.g. user connected via
+        // Trust on mobile, then refreshed the page). Without this, after the
+        // mobile "redirect to wallet → approve → bounce back" round-trip the
+        // localStorage holds a valid session but our React state is empty,
+        // so signing later fails with "Tron wallet not found".
+        if (hasPersistedWalletConnectSession()) {
+          addTronDebug('autoConnect:wc-restore:detected');
+          try {
+            const wcAdapter = createTronWalletConnectAdapter('Mainnet');
+            // Allow the adapter's SignClient to hydrate cached sessions from
+            // storage. We deliberately do NOT call connect() here because that
+            // would trigger a fresh pairing UI if no session is restorable.
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            const restoredAddress = wcAdapter.address;
+            if (restoredAddress) {
+              setAdapter(wcAdapter);
+              setAddress(restoredAddress);
+              setConnectedAdapterType('walletconnect');
+              addTronDebug('autoConnect:wc-restore:ok');
+            } else {
+              addTronDebug('autoConnect:wc-restore:no-address');
+            }
+          } catch (err) {
+            console.debug('[tron.autoConnect] WalletConnect restore failed:', err);
+            addTronDebug('autoConnect:wc-restore:fail');
           }
         }
       }

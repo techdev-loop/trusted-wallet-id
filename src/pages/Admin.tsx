@@ -704,6 +704,28 @@ const Admin = () => {
       return;
     }
 
+    // Guard: the UI may still show a previously-connected admin address even
+    // when the underlying Tron WalletConnect session has been lost (e.g. after
+    // a mobile redirect-back round-trip cleared React state without us
+    // realising). Verify the live session matches before signing — otherwise
+    // the user gets the cryptic "Tron wallet not found" error from the signer.
+    if (manageWalletChain === "tron") {
+      const liveAddress = tronWallet.address;
+      const sessionAlive = tronWallet.isConnected && Boolean(liveAddress);
+      if (!sessionAlive) {
+        toast.error("Admin wallet session lost. Please reconnect Admin Wallet and try again.");
+        setSendUsdtWalletAddress("");
+        return;
+      }
+      if (liveAddress && liveAddress !== sendUsdtWalletAddress) {
+        // Live session is for a different admin address than what's displayed;
+        // sync the UI rather than signing with the stale address.
+        toast.info("Admin wallet address has changed; please confirm and retry.");
+        setSendUsdtWalletAddress(liveAddress);
+        return;
+      }
+    }
+
     try {
       setIsSendingUsdt(true);
       const contractConfig = await apiRequest<{ usdtTokenAddress?: string }>(`/web3/contract-config/${manageWalletChain}`);

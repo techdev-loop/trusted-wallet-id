@@ -272,7 +272,11 @@ async function sendTronSmartContractTransaction(
       adapterType === "auto");
 
   if (!supportsSessionSigning) {
-    throw new Error("Tron wallet not found. Open this site in a Tron-compatible wallet browser and reconnect.");
+    // We get here when there is no injected tronWeb AND no usable WalletConnect
+    // session attached to the page. On mobile this typically means the WC
+    // session was lost during a redirect round-trip; on desktop it usually
+    // means the user never completed a connect or the wallet extension isn't installed.
+    throw new Error("Tron wallet session not active. Please reconnect your wallet and try again.");
   }
 
   const { TronWeb } = await import("tronweb");
@@ -1033,7 +1037,7 @@ async function signTronMessage(message: string, address: string): Promise<string
 }
 
 // Sign message with Phantom
-async function signSolanaMessage(message: string, address: string): Promise<string> {
+async function signSolanaMessage(message: string, _address: string): Promise<string> {
   if (typeof window === "undefined") {
     throw new Error("Phantom is not available");
   }
