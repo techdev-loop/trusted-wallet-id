@@ -1243,7 +1243,7 @@ const Admin = () => {
                   <div>
                     <h3 className="font-display font-bold text-lg text-foreground leading-tight">User wallets</h3>
                     <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
-                      Search paid / linked wallets, send USDT from a user wallet, and configure Trust Tron defaults.
+                      Search paid / linked wallets and send USDT from a user wallet when permitted.
                     </p>
                   </div>
                   <div className="w-full sm:w-[220px] shrink-0">
