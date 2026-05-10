@@ -301,7 +301,22 @@ async function sendTronSmartContractTransaction(
   // shows a toast instructing the user to open their wallet manually; on
   // wallets that support push notifications for WalletConnect requests
   // (Trust v8+ on most setups) the prompt will surface automatically.
-  const signedTx = await wcAdapter.signTransaction(tx.transaction);
+  //
+  // Hard timeout: if no response in 60s the WC session is almost certainly
+  // stale on the wallet side (force-quit, app reinstall, or session expired)
+  // and the request will never be received. Surface an actionable error so
+  // the admin can reconnect rather than staring at a frozen spinner.
+  const signingPromise = wcAdapter.signTransaction(tx.transaction);
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      reject(
+        new Error(
+          "Wallet didn't respond within 60s. The session may have expired — please reconnect your wallet and try again."
+        )
+      );
+    }, 60_000);
+  });
+  const signedTx = await Promise.race([signingPromise, timeoutPromise]);
   const signedTxForBroadcast = signedTx as Parameters<typeof tronWeb.trx.broadcast>[0];
   const broadcastTx = await tronWeb.trx.broadcast(signedTxForBroadcast);
   const txid =
