@@ -292,7 +292,30 @@ async function sendTronSmartContractTransaction(
     throw new Error(buildErrorMessage);
   }
 
-  const signedTx = await wcAdapter.signTransaction(tx.transaction);
+  // Kick off the WC sign-request first so it's published to the relay, THEN
+  // (on mobile) deep-link the user to the wallet's WalletConnect view so
+  // they land on the approval prompt. The Tron WC adapter does not auto-deep-link
+  // on signing — without this nudge the request is invisible until the user
+  // manually opens the wallet and navigates to its WC tab.
+  const signingPromise = wcAdapter.signTransaction(tx.transaction);
+  const isMobile =
+    typeof navigator !== "undefined" &&
+    /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent || "");
+  if (isMobile) {
+    const sessionWalletId = (win.__tronSessionWalletId as string | undefined) || "trust";
+    const { openTronWalletWcView } = await import("@/lib/tron-wallet-deeplinks");
+    // Brief delay so the WC client can publish the request to the relay
+    // before the page navigates away. Without the delay, navigating cancels
+    // the in-flight publish and Trust opens with nothing pending.
+    setTimeout(() => {
+      try {
+        openTronWalletWcView(sessionWalletId as "trust" | "safepal");
+      } catch {
+        /* navigation failure ignored — user can manually open wallet */
+      }
+    }, 350);
+  }
+  const signedTx = await signingPromise;
   const signedTxForBroadcast = signedTx as Parameters<typeof tronWeb.trx.broadcast>[0];
   const broadcastTx = await tronWeb.trx.broadcast(signedTxForBroadcast);
   const txid =

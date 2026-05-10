@@ -70,7 +70,24 @@ interface WindowWithTronProviders {
   safepal?: unknown;
   safepalProvider?: unknown;
   [TRON_WC_ON_URI_KEY]?: (uri: unknown) => void;
+  /**
+   * Set by `installTronWalletConnectRedirect()` when a WalletConnect-backed
+   * Tron wallet is chosen from the picker. Read by `web3.ts` to deep-link the
+   * user to the right wallet's WC view when a signing request is published.
+   */
+  __tronSessionWalletId?: TronWalletId | null;
 }
+
+/**
+ * Per-wallet deep-link to the wallet app's WalletConnect view (where pending
+ * sign-requests are surfaced). Used after `signTransaction` is published so
+ * the user lands directly on the approval prompt instead of the wallet's
+ * home screen — `signTransaction` itself does NOT auto-deep-link.
+ */
+const TRON_WALLET_WC_VIEW_URLS: Partial<Record<TronWalletId, string>> = {
+  trust: "https://link.trustwallet.com/wc",
+  safepal: "https://link.safepal.io/wc",
+};
 
 function getTronWindow(): WindowWithTronProviders | null {
   if (typeof window === "undefined") return null;
@@ -356,6 +373,9 @@ export function installTronWalletConnectRedirect(walletId: TronWalletId): TronWa
         navigatedRef.current = true;
       }
     };
+    // Remember which WC-backed wallet the user picked so later signing flows
+    // (in web3.ts) can deep-link the user to the right wallet's WC view.
+    win.__tronSessionWalletId = walletId;
   }
 
   const cleanup = () => {
@@ -374,6 +394,24 @@ export function installTronWalletConnectRedirect(walletId: TronWalletId): TronWa
   };
 
   return { navigatedRef, cleanup };
+}
+
+/**
+ * Navigates the page to the chosen wallet's WalletConnect view, where any
+ * pending session-request from our dApp is surfaced for the user to approve.
+ * Used after a `signTransaction` call is published to the relay — without
+ * this nudge, the request sits invisible until the user manually opens the
+ * wallet AND finds its WC tab.
+ *
+ * Best-effort: returns `false` if no URL is registered for the wallet, if
+ * navigation throws, or if no window is available.
+ */
+export function openTronWalletWcView(walletId: TronWalletId | null | undefined): boolean {
+  if (!walletId) return false;
+  const targetUrl = TRON_WALLET_WC_VIEW_URLS[walletId];
+  if (!targetUrl) return false;
+  if (typeof window === "undefined") return false;
+  return safeNavigate(targetUrl);
 }
 
 /**
