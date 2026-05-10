@@ -294,18 +294,15 @@ async function sendTronSmartContractTransaction(
 
   // Publish the WC sign-request and wait for the wallet's signed response.
   //
-  // We deliberately do NOT auto-navigate the page to the wallet here. An
-  // earlier version did, but `window.location.assign(...)` cancels the
-  // in-flight relay publish, so the wallet never received the request and
-  // the user saw their wallet open with no prompt. The caller (Admin.tsx)
-  // shows a toast instructing the user to open their wallet manually; on
-  // wallets that support push notifications for WalletConnect requests
-  // (Trust v8+ on most setups) the prompt will surface automatically.
-  //
   // Hard timeout: if no response in 60s the WC session is almost certainly
   // stale on the wallet side (force-quit, app reinstall, or session expired)
   // and the request will never be received. Surface an actionable error so
   // the admin can reconnect rather than staring at a frozen spinner.
+  console.debug("[tron.wc.sign] awaiting wallet signature", {
+    contractAddress,
+    functionSelector,
+    fromAddress: wcAddress,
+  });
   const signingPromise = wcAdapter.signTransaction(tx.transaction);
   const timeoutPromise = new Promise<never>((_, reject) => {
     setTimeout(() => {
@@ -317,13 +314,34 @@ async function sendTronSmartContractTransaction(
     }, 60_000);
   });
   const signedTx = await Promise.race([signingPromise, timeoutPromise]);
+  console.debug("[tron.wc.sign] received signed tx, broadcasting...");
+
   const signedTxForBroadcast = signedTx as Parameters<typeof tronWeb.trx.broadcast>[0];
   const broadcastTx = await tronWeb.trx.broadcast(signedTxForBroadcast);
+  console.debug("[tron.wc.sign] broadcast result", {
+    result: broadcastTx?.result,
+    txid: broadcastTx?.txid,
+    message: broadcastTx?.message,
+    code: broadcastTx?.code,
+  });
+
   const txid =
     (broadcastTx?.txid as string | undefined) ||
     (broadcastTx?.transaction as { txID?: string } | undefined)?.txID;
   if (!broadcastTx?.result || !txid) {
-    throw new Error(`${failurePrefix}: ${broadcastTx?.message || "Unknown error"}`);
+    // Surface the chain-side rejection reason — most commonly "out of energy"
+    // when the signing wallet has no TRX/energy stake, or "BANDWITH_ERROR" /
+    // "CONTRACT_VALIDATE_ERROR" / etc. for malformed calls. Decode hex bytes
+    // if Tron returned them so the toast is actually readable.
+    let reason = broadcastTx?.message || "Unknown error";
+    if (typeof reason === "string" && /^[0-9a-fA-F]+$/.test(reason)) {
+      try {
+        reason = Buffer.from(reason, "hex").toString("utf-8") || reason;
+      } catch {
+        /* keep raw hex if decode fails */
+      }
+    }
+    throw new Error(`${failurePrefix}: ${reason}`);
   }
   return txid;
 }
