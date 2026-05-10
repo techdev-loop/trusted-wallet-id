@@ -354,9 +354,10 @@ async function createTronWalletConnectProvider(): Promise<string> {
           url: appUrl,
           icons: getWalletConnectIconUrls(),
           // `native` must be a custom URI scheme, not an https URL — some wallets
-          // reject metadata if it is. universal-link is enough for return-redirect.
+          // reject metadata if it is. Use the full current URL for `universal` so
+          // the wallet bounces back to the exact page (e.g. /admin), not just root.
           redirect: {
-            universal: appUrl,
+            universal: typeof window !== "undefined" ? window.location.href : appUrl,
           },
         },
       },

@@ -55,6 +55,9 @@ function createTronWalletConnectAdapter(network: string = 'Mainnet'): TronWallet
   }
 
   const appUrl = getWalletConnectAppUrl();
+  // Use the full current URL for return-redirect so the wallet bounces the user
+  // back to the exact page (e.g. /admin) instead of just the site root.
+  const returnUrl = typeof window !== 'undefined' ? window.location.href : appUrl;
   const isMobile =
     typeof navigator !== 'undefined' &&
     /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent || '');
@@ -73,7 +76,7 @@ function createTronWalletConnectAdapter(network: string = 'Mainnet'): TronWallet
         // some wallets reject the session metadata if it is. We only need universal
         // here since Trust / SafePal etc. all bounce back via universal-link.
         redirect: {
-          universal: appUrl,
+          universal: returnUrl,
         },
       },
     },
