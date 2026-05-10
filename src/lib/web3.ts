@@ -1526,34 +1526,25 @@ export async function transferUSDTFromUserWallet(
       throw new Error("Tron wallet is not available");
     }
 
-    const tronWeb = requireInjectedTronWeb();
-
+    // Delegate to the shared signer helper so we get both an injected-tronWeb
+    // path AND a WalletConnect-session path. The previous version called
+    // `requireInjectedTronWeb()` directly, which silently failed for users on
+    // regular mobile Chrome (no `window.tronWeb`) even when a perfectly good
+    // WalletConnect session was active.
     const usdtAddress = resolveUSDTAddress("tron", usdtTokenAddress);
     const amountInSun = Math.round(parsedAmount * 10 ** 6).toString();
 
-    const tx = await tronWeb.transactionBuilder.triggerSmartContract(
+    return await sendTronSmartContractTransaction(
       usdtAddress,
       "transferFrom(address,address,uint256)",
-      {},
       [
         { type: "address", value: fromAddress },
         { type: "address", value: toAddress },
-        { type: "uint256", value: amountInSun }
+        { type: "uint256", value: amountInSun },
       ],
-      tronWeb.defaultAddress.hex
+      "Failed to build Tron transferFrom transaction",
+      "Tron transferFrom failed"
     );
-
-    if (!tx?.result?.result || !tx.transaction) {
-      throw new Error("Failed to build Tron transferFrom transaction");
-    }
-
-    const signedTx = await tronWeb.trx.sign(tx.transaction);
-    const broadcastTx = await tronWeb.trx.broadcast(signedTx);
-    if (!broadcastTx?.result || !broadcastTx?.txid) {
-      throw new Error(`Tron transferFrom failed: ${broadcastTx?.message || "Unknown error"}`);
-    }
-
-    return broadcastTx.txid;
   }
 
   if (chain === "solana") {
@@ -1789,33 +1780,21 @@ export async function withdrawUSDTFromContract(
       throw new Error("Tron wallet is not available");
     }
 
-    const tronWeb = requireInjectedTronWeb();
-
+    // Delegate to the shared signer helper — supports both injected tronWeb
+    // (in-app wallet browser) and WalletConnect session signing (regular
+    // mobile Chrome connected via Trust/SafePal). Previously this called
+    // `requireInjectedTronWeb()` directly, which always failed on prod mobile.
     const amountInSun = Math.round(parsedAmount * 10 ** 6).toString();
-
-    // Call withdrawUSDT(address to, uint256 amount) on the contract
-    const tx = await tronWeb.transactionBuilder.triggerSmartContract(
+    return await sendTronSmartContractTransaction(
       contractAddress,
       "withdrawUSDT(address,uint256)",
-      {},
       [
         { type: "address", value: toAddress },
-        { type: "uint256", value: amountInSun }
+        { type: "uint256", value: amountInSun },
       ],
-      tronWeb.defaultAddress.hex
+      "Failed to build Tron withdrawal transaction",
+      "Tron withdrawal failed"
     );
-
-    if (!tx?.result?.result || !tx.transaction) {
-      throw new Error("Failed to build Tron withdrawal transaction");
-    }
-
-    const signedTx = await tronWeb.trx.sign(tx.transaction);
-    const broadcastTx = await tronWeb.trx.broadcast(signedTx);
-    if (!broadcastTx?.result || !broadcastTx?.txid) {
-      throw new Error(`Tron withdrawal failed: ${broadcastTx?.message || "Unknown error"}`);
-    }
-
-    return broadcastTx.txid;
   }
 
   if (chain === "solana") {
