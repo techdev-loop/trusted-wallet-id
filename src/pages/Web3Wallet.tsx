@@ -18,6 +18,11 @@ import { type Chain, type WalletConnectionMethod } from "@/lib/web3";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
 import { useTronWallet } from "@/lib/tronwallet-adapter";
 import { resolveTronWalletAdapterFromModalId } from "@/lib/tron-wallet-modal-map";
+import {
+  installTronWalletConnectRedirect,
+  openTronWalletDappBrowser,
+  resolveTronConnectStrategy,
+} from "@/lib/tron-wallet-deeplinks";
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
 import Navbar from "@/components/Navbar";
@@ -49,7 +54,35 @@ const Web3Wallet = () => {
       let address: string;
       if (selectedChain === "tron") {
         const selectedTronAdapter = resolveTronWalletAdapterFromModalId(walletId);
-        address = await tronWallet.connect(selectedTronAdapter ?? "auto");
+        const strategy = resolveTronConnectStrategy(walletId, selectedTronAdapter);
+        console.debug("[web3-wallet] tron connect strategy", {
+          walletId,
+          adapter: selectedTronAdapter ?? "auto",
+          mode: strategy.mode,
+        });
+
+        if (strategy.mode === "dapp-browser-open") {
+          const launched = openTronWalletDappBrowser(strategy.walletId);
+          if (!launched) {
+            throw new Error(
+              `Could not open ${strategy.walletId}. Please install the app or try a different wallet.`
+            );
+          }
+          return; // navigates away; user reconnects inside wallet's dApp browser
+        }
+        if (strategy.mode === "wc-redirect") {
+          const handle = installTronWalletConnectRedirect(strategy.walletId);
+          try {
+            address = await tronWallet.connect("walletconnect", { forceFresh: true });
+          } catch (wcError) {
+            if (handle.navigatedRef.current) return; // navigated to wallet app
+            throw wcError;
+          } finally {
+            handle.cleanup();
+          }
+        } else {
+          address = await tronWallet.connect(strategy.adapterType, { forceFresh: true });
+        }
       } else if (selectedChain === "ethereum" || selectedChain === "bsc") {
         address = await wagmiWallet.connectWallet(selectedChain);
       } else {
@@ -81,11 +114,21 @@ const Web3Wallet = () => {
       setCurrentStep("complete");
       toast.success("Wallet connected successfully.");
     } catch (error) {
+      console.error("[web3-wallet] connect failed", {
+        chain: selectedChain,
+        walletId,
+        error,
+      });
       const message =
         error instanceof Error ? error.message : "Failed to connect wallet";
       toast.error(message);
-      // Reopen modal on error so user can try again
-      if (error instanceof Error && !message.includes("User rejected")) {
+      // Reopen modal on non-rejection errors so the user can try a different wallet.
+      // We deliberately do NOT reopen if the user explicitly rejected the request
+      // in their wallet — re-prompting in that case would feel like nagging.
+      const isUserRejection =
+        error instanceof Error &&
+        (message.includes("User rejected") || message.includes("user rejected"));
+      if (error instanceof Error && !isUserRejection) {
         setIsWalletModalOpen(true);
       }
     } finally {

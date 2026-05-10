@@ -353,6 +353,10 @@ async function createTronWalletConnectProvider(): Promise<string> {
           description: "Web3 Identity Wallet Registry",
           url: appUrl,
           icons: getWalletConnectIconUrls(),
+          redirect: {
+            native: appUrl,
+            universal: appUrl,
+          },
         },
       },
     });
