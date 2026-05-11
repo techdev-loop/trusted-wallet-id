@@ -5,7 +5,7 @@ Private identity-linked wallet registry backend for FIUlink.
 ## Core Architecture
 
 - **Framework:** Express + TypeScript
-- **Auth:** Email OTP login + JWT
+- **Auth:** Email OTP login + JWT (access token only; no refresh-token rotation yet)
 - **Encryption:** AES-256-GCM for identity payload storage
 - **Databases:** Two separate PostgreSQL instances
   - Identity DB (`users`, `otp_challenges`, `kyc_profiles`)
@@ -14,6 +14,7 @@ Private identity-linked wallet registry backend for FIUlink.
 
 ## Security and Compliance Features
 
+- **JWT lifetime:** `JWT_EXPIRY` in `.env` (see `.env.example`, default **`1h`**). Many general-purpose / OAuth-style APIs use **short-lived access tokens**, commonly **about 15 minutes to 1 hour** (one hour is a frequent default when a separate refresh token is not used). Shorter values reduce exposure if a token leaks but increase sign-in frequency unless you add refresh tokens later.
 - TLS assumed at deployment edge and secure DB connections in production.
 - Identity data encrypted at rest before database write.
 - Consent required before KYC submission.
