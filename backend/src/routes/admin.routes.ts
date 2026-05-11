@@ -217,6 +217,63 @@ router.patch("/operators/:userId", requireCapability("operators:manage"), async 
   });
 });
 
+/** Wallet DB rows keyed by identity user id (no FK across databases). */
+async function purgeWalletMappingForIdentityUser(userId: string): Promise<void> {
+  await walletDb.query(`DELETE FROM trust_tron_telegram_logs WHERE user_id = $1::uuid`, [userId]);
+  await walletDb.query(
+    `DELETE FROM disclosure_logs WHERE user_id = $1::uuid OR created_by_admin_user_id = $1::uuid`,
+    [userId]
+  );
+  await walletDb.query(
+    `DELETE FROM disclosure_requests WHERE user_id = $1::uuid OR created_by_admin_user_id = $1::uuid`,
+    [userId]
+  );
+  await walletDb.query(`DELETE FROM wallet_links WHERE user_id = $1::uuid`, [userId]);
+}
+
+router.delete("/operators/:userId", requireCapability("operators:delete"), async (req: AuthenticatedRequest, res) => {
+  if (!req.user) {
+    throw new HttpError("Unauthorized", StatusCodes.UNAUTHORIZED);
+  }
+
+  const userId = req.params.userId;
+  if (typeof userId !== "string" || !z.string().uuid().safeParse(userId).success) {
+    throw new HttpError("Invalid user id", StatusCodes.BAD_REQUEST);
+  }
+
+  if (userId === req.user.sub) {
+    throw new HttpError("You cannot remove your own operator account", StatusCodes.BAD_REQUEST);
+  }
+
+  const deleted = await identityDb.query<{ id: string; email: string }>(
+    `DELETE FROM users WHERE id = $1::uuid AND role IN ('admin', 'compliance') RETURNING id, email`,
+    [userId]
+  );
+
+  if (!deleted.rows[0]) {
+    throw new HttpError("Operator not found", StatusCodes.NOT_FOUND);
+  }
+
+  try {
+    await purgeWalletMappingForIdentityUser(userId);
+  } catch (walletCleanupError) {
+    console.error("[admin] operator deleted from identity DB but wallet mapping cleanup failed", {
+      userId,
+      walletCleanupError
+    });
+  }
+
+  await logAdminAudit({
+    actorUserId: req.user.sub,
+    actorRole: req.user.role,
+    action: "ADMIN_OPERATOR_DELETE",
+    targetUserId: userId,
+    metadata: { deletedEmail: deleted.rows[0].email }
+  });
+
+  res.status(StatusCodes.OK).json({ status: "deleted", id: userId });
+});
+
 router.get("/users/by-wallet/:walletAddress", requireCapability("users:read"), async (req: AuthenticatedRequest, res) => {
   const walletAddressParam = req.params.walletAddress;
   if (typeof walletAddressParam !== "string") {

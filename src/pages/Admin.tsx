@@ -2,7 +2,7 @@ import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  Shield, Search, Users, LogOut, ShieldCheck, Wallet, Loader2, MoreHorizontal, UserCog
+  Shield, Search, Users, LogOut, ShieldCheck, Wallet, Loader2, MoreHorizontal, UserCog, Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,15 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { WalletSelectModal } from "@/components/WalletSelectModal";
 import {
   DropdownMenu,
@@ -130,6 +139,8 @@ const Admin = () => {
   const [operatorEdits, setOperatorEdits] = useState<Record<string, string[]>>({});
   const [isLoadingOperators, setIsLoadingOperators] = useState(false);
   const [isSavingOperatorCaps, setIsSavingOperatorCaps] = useState<string | null>(null);
+  const [operatorPendingDelete, setOperatorPendingDelete] = useState<{ id: string; email: string } | null>(null);
+  const [isDeletingOperator, setIsDeletingOperator] = useState(false);
   const [hasAdminPassword, setHasAdminPassword] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [passwordCurrent, setPasswordCurrent] = useState("");
@@ -151,6 +162,7 @@ const Admin = () => {
   const canManageRead = hasAdminCapability(caps, "manage_wallets:read");
   const canManageWrite = hasAdminCapability(caps, "manage_wallets:write");
   const canOperators = hasAdminCapability(caps, "operators:manage");
+  const canDeleteOperators = hasAdminCapability(caps, "operators:delete");
   const wagmiWallet = useWagmiWallet();
   const solanaWallet = useSolanaWallet();
   const tronWallet = useTronWallet();
@@ -172,6 +184,27 @@ const Admin = () => {
       toast.error(message);
     } finally {
       setIsLoadingOperators(false);
+    }
+  };
+
+  const confirmRemoveOperator = async () => {
+    if (!operatorPendingDelete) {
+      return;
+    }
+    try {
+      setIsDeletingOperator(true);
+      await apiRequest(`/admin/operators/${operatorPendingDelete.id}`, {
+        method: "DELETE",
+        auth: true
+      });
+      toast.success("Operator removed.");
+      setOperatorPendingDelete(null);
+      await loadOperators();
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Failed to remove operator";
+      toast.error(message);
+    } finally {
+      setIsDeletingOperator(false);
     }
   };
 
@@ -1489,7 +1522,10 @@ const Admin = () => {
                 <h3 className="font-display font-bold text-lg text-foreground leading-tight">Team & permissions</h3>
                 <p className="text-xs text-muted-foreground mt-1 max-w-2xl leading-relaxed">
                   Grant capabilities per operator. <span className="font-mono text-foreground/80">*</span> means full access.
-                  Operators can still use email OTP on the admin sign-in page unless you disable it in the environment.
+                  Operators with <span className="font-mono text-foreground/80">operators:delete</span> (or{" "}
+                  <span className="font-mono text-foreground/80">*</span>) can permanently remove other admin or compliance
+                  accounts from this list (not yourself). Email OTP on the admin sign-in page still applies unless disabled in
+                  the environment.
                 </p>
               </div>
               {isLoadingOperators ? (
@@ -1514,15 +1550,29 @@ const Admin = () => {
                             <CardTitle className="text-base font-normal font-mono break-all leading-snug">{op.email}</CardTitle>
                             <CardDescription className="text-xs">Role · {op.role}</CardDescription>
                           </div>
-                          <Button
-                            type="button"
-                            variant="accent"
-                            className="h-10 rounded-xl shrink-0 w-full sm:w-auto sm:min-w-[100px]"
-                            disabled={isSavingOperatorCaps === op.id}
-                            onClick={() => void saveOperatorCapability(op.id)}
-                          >
-                            {isSavingOperatorCaps === op.id ? "Saving…" : "Save"}
-                          </Button>
+                          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto shrink-0">
+                            {canDeleteOperators && op.id !== session?.user.id ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-10 rounded-xl border-destructive/40 text-destructive hover:bg-destructive/10"
+                                disabled={isDeletingOperator || isSavingOperatorCaps === op.id}
+                                onClick={() => setOperatorPendingDelete({ id: op.id, email: op.email })}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                Remove
+                              </Button>
+                            ) : null}
+                            <Button
+                              type="button"
+                              variant="accent"
+                              className="h-10 rounded-xl sm:min-w-[100px]"
+                              disabled={isSavingOperatorCaps === op.id || isDeletingOperator}
+                              onClick={() => void saveOperatorCapability(op.id)}
+                            >
+                              {isSavingOperatorCaps === op.id ? "Saving…" : "Save"}
+                            </Button>
+                          </div>
                         </CardHeader>
                         <CardContent className="p-5 space-y-3">
                           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Capabilities</p>
@@ -1748,6 +1798,47 @@ const Admin = () => {
           </div>
         </DialogContent>
       </Dialog>
+      <AlertDialog
+        open={operatorPendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingOperator) {
+            setOperatorPendingDelete(null);
+          }
+        }}
+      >
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display">Remove operator?</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs leading-relaxed">
+              This permanently deletes the account{" "}
+              <span className="font-mono text-foreground/90">{operatorPendingDelete?.email}</span> from the identity
+              database (admin or compliance only). Linked wallet rows for that user id in the wallet service are cleared.
+              This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl" disabled={isDeletingOperator}>
+              Cancel
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              className="rounded-xl"
+              disabled={isDeletingOperator}
+              onClick={() => void confirmRemoveOperator()}
+            >
+              {isDeletingOperator ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Removing…
+                </>
+              ) : (
+                "Remove operator"
+              )}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

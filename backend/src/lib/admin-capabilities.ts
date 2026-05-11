@@ -10,6 +10,7 @@ export const ADMIN_CAPABILITIES = [
   "withdrawals:read",
   "withdrawals:write",
   "operators:manage",
+  "operators:delete",
   "users:read",
   "identity:read",
   "disclosures:write",
