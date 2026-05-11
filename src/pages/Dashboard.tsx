@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { apiRequest, ApiError } from "@/lib/api";
+import { apiRequest, ApiError, revokeServerSession } from "@/lib/api";
 import { clearSession, getSession } from "@/lib/session";
 import {
   approveUSDT,
@@ -210,8 +210,11 @@ const Dashboard = () => {
   );
 
   const handleLogout = () => {
-    clearSession();
-    navigate("/");
+    void (async () => {
+      await revokeServerSession();
+      clearSession();
+      navigate("/");
+    })();
   };
 
   const handleKycSubmit = async () => {

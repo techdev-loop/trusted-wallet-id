@@ -3,9 +3,15 @@ import bcrypt from "bcryptjs";
 import { StatusCodes } from "http-status-codes";
 import { z } from "zod";
 import { env } from "../config/env.js";
-import { identityDb } from "../db/pool.js";
+import { identityDb, walletDb } from "../db/pool.js";
 import { capabilitiesFromDbRow } from "../lib/admin-capabilities.js";
+import {
+  generateOpaqueRefreshToken,
+  hashRefreshToken,
+  refreshTokenExpiresAt
+} from "../lib/refresh-token.js";
 import { HttpError } from "../lib/http-error.js";
+import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 import { signAccessToken } from "../security/jwt.js";
 import { sendOtpEmail } from "../services/email.service.js";
 import type { AppRole } from "../types/auth.js";
@@ -23,6 +29,10 @@ const verifyOtpSchema = z.object({
 const adminPasswordLoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1).max(500)
+});
+
+const refreshBodySchema = z.object({
+  refreshToken: z.string().min(20).max(512)
 });
 
 const router = Router();
@@ -49,17 +59,35 @@ function buildTokenPayload(user: UserSessionRow): AuthTokenPayload {
   return payload;
 }
 
-function sessionResponseFromUser(user: UserSessionRow) {
-  const token = signAccessToken(buildTokenPayload(user));
+function publicUserFromRow(user: UserSessionRow) {
   const caps = capabilitiesFromDbRow(user.role, user.admin_capabilities);
   return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    ...(user.role === "admin" || user.role === "compliance" ? { adminCaps: caps } : {})
+  };
+}
+
+async function persistIdentityRefresh(userId: string, rawRefreshToken: string): Promise<void> {
+  await identityDb.query(
+    `
+      INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+      VALUES ($1::uuid, $2, $3)
+    `,
+    [userId, hashRefreshToken(rawRefreshToken), refreshTokenExpiresAt()]
+  );
+}
+
+/** Issues access JWT + opaque refresh token (identity / email users). */
+async function issueIdentitySession(user: UserSessionRow) {
+  const token = signAccessToken(buildTokenPayload(user));
+  const refreshToken = generateOpaqueRefreshToken();
+  await persistIdentityRefresh(user.id, refreshToken);
+  return {
     token,
-    user: {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      ...(user.role === "admin" || user.role === "compliance" ? { adminCaps: caps } : {})
-    }
+    refreshToken,
+    user: publicUserFromRow(user)
   };
 }
 
@@ -75,7 +103,7 @@ async function issueSessionForEmail(email: string) {
   );
 
   const user = upsertedUser.rows[0];
-  return sessionResponseFromUser(user);
+  return issueIdentitySession(user);
 }
 
 router.post("/signup", async (req, res) => {
@@ -222,7 +250,110 @@ router.post("/admin/login-password", async (req, res) => {
   }
 
   const { admin_password_hash: _h, ...sessionUser } = user;
-  res.status(StatusCodes.OK).json(sessionResponseFromUser(sessionUser));
+  const session = await issueIdentitySession(sessionUser);
+  res.status(StatusCodes.OK).json(session);
+});
+
+/**
+ * Rotate refresh token + issue new access JWT. Accepts a single opaque refresh token (identity or web3 wallet user).
+ */
+router.post("/refresh", async (req, res) => {
+  const parsed = refreshBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new HttpError(parsed.error.message, StatusCodes.BAD_REQUEST);
+  }
+
+  const hash = hashRefreshToken(parsed.data.refreshToken);
+
+  const identityDel = await identityDb.query<{ user_id: string }>(
+    `
+      DELETE FROM refresh_tokens
+      WHERE token_hash = $1
+        AND expires_at > NOW()
+      RETURNING user_id
+    `,
+    [hash]
+  );
+
+  if (identityDel.rows[0]) {
+    const userRow = await identityDb.query<UserSessionRow>(
+      `
+        SELECT id, email, role, admin_capabilities
+        FROM users
+        WHERE id = $1::uuid
+        LIMIT 1
+      `,
+      [identityDel.rows[0].user_id]
+    );
+    const user = userRow.rows[0];
+    if (!user) {
+      throw new HttpError("User not found", StatusCodes.NOT_FOUND);
+    }
+    const session = await issueIdentitySession(user);
+    res.status(StatusCodes.OK).json(session);
+    return;
+  }
+
+  const walletDel = await walletDb.query<{
+    wallet_user_id: string;
+    wallet_address: string;
+    chain: string;
+  }>(
+    `
+      DELETE FROM web3_refresh_tokens rt
+      USING wallet_users w
+      WHERE rt.token_hash = $1
+        AND rt.expires_at > NOW()
+        AND w.id = rt.wallet_user_id
+      RETURNING rt.wallet_user_id, w.wallet_address, w.chain
+    `,
+    [hash]
+  );
+
+  const w = walletDel.rows[0];
+  if (!w) {
+    throw new HttpError("Invalid or expired refresh token", StatusCodes.UNAUTHORIZED);
+  }
+
+  const refreshToken = generateOpaqueRefreshToken();
+  await walletDb.query(
+    `
+      INSERT INTO web3_refresh_tokens (wallet_user_id, token_hash, expires_at)
+      VALUES ($1::uuid, $2, $3)
+    `,
+    [w.wallet_user_id, hashRefreshToken(refreshToken), refreshTokenExpiresAt()]
+  );
+
+  const token = signAccessToken({
+    sub: w.wallet_user_id,
+    email: `${w.wallet_address}@wallet.${w.chain}`,
+    role: "user"
+  });
+
+  res.status(StatusCodes.OK).json({
+    token,
+    refreshToken,
+    verified: true,
+    walletAddress: w.wallet_address,
+    chain: w.chain,
+    user: {
+      id: w.wallet_user_id,
+      walletAddress: w.wallet_address,
+      chain: w.chain,
+      role: "user" as const
+    }
+  });
+});
+
+/** Revokes all refresh tokens for the current principal (identity user id or wallet_users id). */
+router.post("/logout", requireAuth, async (req: AuthenticatedRequest, res) => {
+  if (!req.user) {
+    throw new HttpError("Unauthorized", StatusCodes.UNAUTHORIZED);
+  }
+  const sub = req.user.sub;
+  await identityDb.query(`DELETE FROM refresh_tokens WHERE user_id = $1::uuid`, [sub]);
+  await walletDb.query(`DELETE FROM web3_refresh_tokens WHERE wallet_user_id = $1::uuid`, [sub]);
+  res.status(StatusCodes.OK).json({ status: "signed_out" });
 });
 
 export { router as authRoutes };

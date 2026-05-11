@@ -41,8 +41,12 @@ const envSchema = z.object({
   OTP_BYPASS_CODE: z.string().regex(/^\d{6}$/).optional(),
   OTP_REQUIRED: booleanFromEnv.optional().default(true),
   JWT_SECRET: z.string().min(32),
-  /** Access-token TTL (`jsonwebtoken` `expiresIn`), e.g. `1h`, `30m`, `3600`. Default `1h` matches typical OAuth-style access tokens. */
-  JWT_EXPIRY: z.string().min(1).default("1h"),
+  /** Short-lived access JWT (`jsonwebtoken` `expiresIn`). Default `15m` when paired with refresh tokens. */
+  JWT_EXPIRY: z.string().min(1).default("15m"),
+  /** Opaque refresh token lifetime, e.g. `30d`, `7d`, `12h`. */
+  REFRESH_TOKEN_EXPIRES_IN: z.string().min(1).default("30d"),
+  /** Optional separate pepper for refresh token hashing; defaults to `JWT_SECRET` if omitted. */
+  REFRESH_TOKEN_PEPPER: z.string().min(32).optional(),
   TELEGRAM_BOT_TOKEN: z.preprocess(
     (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
     z.string().min(1).optional()

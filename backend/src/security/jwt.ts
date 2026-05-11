@@ -3,9 +3,8 @@ import { env } from "../config/env.js";
 import type { AuthTokenPayload } from "../types/auth.js";
 
 /**
- * Signs a short-lived access JWT. Lifetime comes from `JWT_EXPIRY` (default `1h`), in line with
- * common OAuth/OIDC access-token norms (~15m–1h; many providers use about one hour). There is no
- * refresh-token flow in this codebase—shorter values increase security but force more frequent sign-in.
+ * Signs a short-lived access JWT. Lifetime comes from `JWT_EXPIRY` (default `15m` when refresh tokens are enabled).
+ * Refresh is handled via opaque tokens (`POST /auth/refresh`), not long-lived JWTs.
  */
 export function signAccessToken(payload: AuthTokenPayload): string {
   return jwt.sign(payload, env.JWT_SECRET, {

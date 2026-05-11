@@ -1,13 +1,18 @@
 export interface SessionUser {
   id: string;
-  email: string;
+  email?: string;
   role: "user" | "admin" | "compliance";
   /** Server-issued capability strings; omitted on legacy sessions (treated as full access for admin/compliance). */
   adminCaps?: string[];
+  /** Web3 wallet session (`/web3/connect`). */
+  walletAddress?: string;
+  chain?: string;
 }
 
 export interface SessionData {
   token: string;
+  /** Opaque refresh token; absent on legacy sessions until next sign-in. */
+  refreshToken?: string;
   user: SessionUser;
 }
 

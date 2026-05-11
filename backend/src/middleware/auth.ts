@@ -16,7 +16,11 @@ export function requireAuth(req: AuthenticatedRequest, _res: Response, next: Nex
   }
 
   const token = authHeader.replace("Bearer ", "").trim();
-  req.user = verifyAccessToken(token);
+  try {
+    req.user = verifyAccessToken(token);
+  } catch {
+    throw new HttpError("Unauthorized", StatusCodes.UNAUTHORIZED);
+  }
   next();
 }
 

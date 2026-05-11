@@ -53,6 +53,7 @@ const Auth = () => {
         email: string;
         otpRequired?: boolean;
         token?: string;
+        refreshToken?: string;
         user?: AuthUser;
       }>("/auth/signup", {
         method: "POST",
@@ -62,6 +63,7 @@ const Auth = () => {
       if (result.otpRequired === false && result.token && result.user) {
         setSession({
           token: result.token,
+          refreshToken: result.refreshToken,
           user: result.user
         });
         toast.success("OTP is disabled in this environment. Signed in directly.");
@@ -87,7 +89,7 @@ const Auth = () => {
 
     try {
       setSubmittingOtp(true);
-      const result = await apiRequest<{ token: string; user: AuthUser }>("/auth/verify-otp", {
+      const result = await apiRequest<{ token: string; refreshToken: string; user: AuthUser }>("/auth/verify-otp", {
         method: "POST",
         body: {
           email,
@@ -97,6 +99,7 @@ const Auth = () => {
 
       setSession({
         token: result.token,
+        refreshToken: result.refreshToken,
         user: result.user
       });
 
@@ -117,12 +120,13 @@ const Auth = () => {
     }
     try {
       setSubmittingAdminPassword(true);
-      const result = await apiRequest<{ token: string; user: AuthUser }>("/auth/admin/login-password", {
+      const result = await apiRequest<{ token: string; refreshToken: string; user: AuthUser }>("/auth/admin/login-password", {
         method: "POST",
         body: { email: email.trim().toLowerCase(), password: adminPassword }
       });
       setSession({
         token: result.token,
+        refreshToken: result.refreshToken,
         user: result.user
       });
       toast.success("Signed in.");

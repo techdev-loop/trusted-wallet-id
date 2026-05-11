@@ -30,7 +30,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { apiRequest, ApiError } from "@/lib/api";
+import { apiRequest, ApiError, revokeServerSession } from "@/lib/api";
 import {
   ASSIGNABLE_CAPABILITIES,
   CAPABILITY_LABELS,
@@ -379,6 +379,7 @@ const Admin = () => {
         }
         setSession({
           token: s.token,
+          refreshToken: s.refreshToken,
           user: {
             ...s.user,
             email: me.user.email,
@@ -509,8 +510,11 @@ const Admin = () => {
   };
 
   const handleLogout = () => {
-    clearSession();
-    navigate("/");
+    void (async () => {
+      await revokeServerSession();
+      clearSession();
+      navigate("/");
+    })();
   };
 
   const handleConnectWithdrawalWallet = async (method: WalletConnectionMethod, walletId?: string) => {

@@ -93,8 +93,9 @@ const Web3Wallet = () => {
 
       const connectResponse = await apiRequest<{
         token: string;
+        refreshToken: string;
         verified: boolean;
-        user: { id: string; walletAddress: string; chain: string };
+        user: { id: string; walletAddress: string; chain: string; role: "user" };
       }>("/web3/connect", {
         method: "POST",
         body: {
@@ -103,12 +104,13 @@ const Web3Wallet = () => {
         }
       });
 
-      if (!connectResponse.token || !connectResponse.user) {
+      if (!connectResponse.token || !connectResponse.refreshToken || !connectResponse.user) {
         throw new Error("Wallet session could not be created.");
       }
 
       setSession({
         token: connectResponse.token,
+        refreshToken: connectResponse.refreshToken,
         user: connectResponse.user
       });
       setCurrentStep("complete");

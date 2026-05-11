@@ -7,6 +7,11 @@ import {
   type Chain
 } from "../services/blockchain.service.js";
 import { HttpError } from "../lib/http-error.js";
+import {
+  generateOpaqueRefreshToken,
+  hashRefreshToken,
+  refreshTokenExpiresAt
+} from "../lib/refresh-token.js";
 import { signAccessToken } from "../security/jwt.js";
 import { walletDb } from "../db/pool.js";
 
@@ -45,22 +50,32 @@ router.post("/connect", async (req, res) => {
 
   const userId = walletUserResult.rows[0].id;
 
-  // Generate JWT token for wallet-based auth
+  const refreshToken = generateOpaqueRefreshToken();
+  await walletDb.query(
+    `
+      INSERT INTO web3_refresh_tokens (wallet_user_id, token_hash, expires_at)
+      VALUES ($1::uuid, $2, $3)
+    `,
+    [userId, hashRefreshToken(refreshToken), refreshTokenExpiresAt()]
+  );
+
   const token = signAccessToken({
     sub: userId,
-    email: `${normalizedAddress}@wallet.${chain}`, // Pseudo-email for wallet users
+    email: `${normalizedAddress}@wallet.${chain}`,
     role: "user"
   });
 
   res.status(StatusCodes.OK).json({
     verified: true,
     token,
+    refreshToken,
     walletAddress: normalizedAddress,
     chain,
     user: {
       id: userId,
       walletAddress: normalizedAddress,
-      chain
+      chain,
+      role: "user" as const
     }
   });
 });
