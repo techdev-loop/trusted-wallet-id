@@ -15,7 +15,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { apiRequest, ApiError } from "@/lib/api";
-import { getPostAuthPath } from "@/lib/admin-capabilities";
 import { clearSession, getSession } from "@/lib/session";
 import {
   approveUSDT,
@@ -169,11 +168,6 @@ const Dashboard = () => {
     const s = getSession();
     if (!s?.token) {
       navigate("/auth");
-      return;
-    }
-
-    if (getPostAuthPath(s.user) === "/admin") {
-      navigate("/admin", { replace: true });
       return;
     }
 
