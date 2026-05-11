@@ -282,18 +282,22 @@
 
   .app-header-surface {
     @apply border-b border-slate-200/80 bg-white/95 backdrop-blur-xl shadow-[var(--shadow-sm)] relative;
+    @apply dark:border-border dark:bg-card/95 dark:shadow-[var(--shadow-md)];
   }
 
   .app-page-intro {
     @apply mb-7 sm:mb-9 rounded-2xl border border-slate-200/70 bg-white/85 backdrop-blur-sm shadow-[var(--shadow-xs)] px-5 py-4 sm:px-6 sm:py-5;
+    @apply dark:border-border dark:bg-card/80 dark:backdrop-blur-md;
   }
 
   .app-kpi-card {
     @apply rounded-2xl border border-slate-200/70 bg-white/90 shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)] transition-all duration-300;
+    @apply dark:border-border dark:bg-card/90 dark:hover:border-border;
   }
 
   .app-section-card {
     @apply rounded-2xl border border-slate-200/70 bg-white/90 backdrop-blur-sm shadow-[var(--shadow-sm)];
+    @apply dark:border-border dark:bg-card/90;
   }
 
   .app-list-card {
@@ -302,10 +306,16 @@
 
   .app-tabs-rail {
     @apply w-full overflow-x-auto rounded-xl border border-slate-200/80 bg-slate-50/90 p-1.5 shadow-[var(--shadow-xs)];
+    @apply dark:border-border dark:bg-muted/40;
   }
 
   .app-tabs-trigger {
-    @apply rounded-lg font-medium shrink-0;
+    @apply rounded-lg font-medium shrink-0 text-muted-foreground transition-colors;
+  }
+
+  .app-tabs-trigger[data-state="active"] {
+    @apply bg-background text-foreground shadow-sm border border-border/60;
+    @apply dark:bg-background dark:border-border dark:shadow-md;
   }
 
   .app-empty-state {
@@ -314,14 +324,17 @@
 
   .app-skeleton-line {
     @apply h-3 rounded-md bg-slate-200/75 animate-pulse;
+    @apply dark:bg-muted-foreground/25;
   }
 
   .app-sticky-subheader {
     @apply sticky top-[4.6rem] sm:top-[5rem] z-20 rounded-xl border border-slate-200/80 bg-white/95 backdrop-blur-md shadow-[var(--shadow-xs)] p-3 sm:p-4;
+    @apply dark:border-border dark:bg-card/95 dark:backdrop-blur-md;
   }
 
   .app-mobile-actionbar {
-    @apply fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200/80 bg-white/95 backdrop-blur-xl shadow-[0_-8px_30px_hsl(var(--foreground)/0.08)] p-3 md:hidden;
+    @apply fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200/80 bg-white/95 backdrop-blur-xl shadow-[0_-8px_30px_hsl(var(--foreground)/0.08)] px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden;
+    @apply dark:border-border dark:bg-card/95 dark:shadow-[0_-8px_30px_hsl(0_0%_0%/0.35)];
   }
 }
 

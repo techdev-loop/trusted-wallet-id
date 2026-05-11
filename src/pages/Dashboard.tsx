@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { apiRequest, ApiError, revokeServerSession } from "@/lib/api";
+import { clearWithdrawalSession } from "@/lib/admin-withdrawal-storage";
 import { clearSession, getSession } from "@/lib/session";
 import {
   approveUSDT,
@@ -211,6 +212,8 @@ const Dashboard = () => {
 
   const handleLogout = () => {
     void (async () => {
+      const uid = getSession()?.user?.id;
+      clearWithdrawalSession(uid);
       await revokeServerSession();
       clearSession();
       navigate("/");

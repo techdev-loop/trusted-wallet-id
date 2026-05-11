@@ -2,7 +2,8 @@ import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  Shield, Search, Users, LogOut, ShieldCheck, Wallet, Loader2, MoreHorizontal, UserCog, Trash2
+  Shield, Search, Users, LogOut, ShieldCheck, Wallet, Loader2, MoreHorizontal, UserCog, Trash2,
+  ArrowDownToLine, KeyRound, RefreshCw, Undo2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,11 @@ import {
   hasAdminCapability
 } from "@/lib/admin-capabilities";
 import { clearSession, getSession, setSession } from "@/lib/session";
+import {
+  clearWithdrawalSession,
+  loadWithdrawalSession,
+  persistWithdrawalSession
+} from "@/lib/admin-withdrawal-storage";
 import { getOnchainUSDTBalance, transferUSDTFromUserWallet, withdrawUSDTFromContract, type Chain, type WalletConnectionMethod } from "@/lib/web3";
 import { useWagmiWallet } from "@/lib/wagmi-hooks";
 import { useSolanaWallet } from "@/lib/solana-wallet-hooks";
@@ -102,7 +108,10 @@ const Admin = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [selectedChain, setSelectedChain] = useState<SupportedChain>("ethereum");
-  const [withdrawalEntries, setWithdrawalEntries] = useState<WithdrawalEntry[]>([]);
+  const [withdrawalEntries, setWithdrawalEntries] = useState<WithdrawalEntry[]>(() => {
+    const uid = getSession()?.user?.id;
+    return loadWithdrawalSession(uid) as WithdrawalEntry[];
+  });
   const [withdrawalDestination, setWithdrawalDestination] = useState("");
   const [withdrawalAmountUsdt, setWithdrawalAmountUsdt] = useState("");
   const [withdrawalNote, setWithdrawalNote] = useState("");
@@ -346,6 +355,14 @@ const Admin = () => {
   };
 
   useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid || !canAccessAdmin) {
+      return;
+    }
+    persistWithdrawalSession(uid, withdrawalEntries);
+  }, [withdrawalEntries, session?.user?.id, canAccessAdmin]);
+
+  useEffect(() => {
     if (!session?.token) {
       navigate("/auth/admin");
       return;
@@ -459,6 +476,33 @@ const Admin = () => {
     );
   }, [paidWalletEntries, debouncedManageWalletListSearch]);
 
+  const accessSummaryLabel = useMemo(() => {
+    if (caps.includes("*")) {
+      return "Full access";
+    }
+    if (caps.length === 0) {
+      return "No permissions";
+    }
+    return `${caps.length} permission${caps.length === 1 ? "" : "s"}`;
+  }, [caps]);
+
+  const operatorDirtyById = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    for (const op of operators) {
+      const draft = [...(operatorEdits[op.id] ?? [])].sort().join("\0");
+      const saved = [...op.capabilities].sort().join("\0");
+      map[op.id] = draft !== saved;
+    }
+    return map;
+  }, [operators, operatorEdits]);
+
+  const walletFilterPending =
+    manageWalletListSearch.trim() !== debouncedManageWalletListSearch.trim() && manageWalletListSearch.trim().length > 0;
+
+  const hasWithdrawalFormInput = Boolean(
+    withdrawalDestination.trim() || withdrawalAmountUsdt.trim() || withdrawalNote.trim()
+  );
+
   const toggleOperatorCapability = (userId: string, cap: string, checked: boolean) => {
     setOperatorEdits((prev) => {
       const cur = [...(prev[userId] ?? [])];
@@ -478,6 +522,12 @@ const Admin = () => {
       }
       return { ...prev, [userId]: withoutStar };
     });
+  };
+
+  const handleWithdrawalFormReset = () => {
+    setWithdrawalDestination("");
+    setWithdrawalAmountUsdt("");
+    setWithdrawalNote("");
   };
 
   const handleSaveAdminPassword = async (e: React.FormEvent) => {
@@ -511,10 +561,28 @@ const Admin = () => {
 
   const handleLogout = () => {
     void (async () => {
+      const uid = getSession()?.user?.id;
+      clearWithdrawalSession(uid);
       await revokeServerSession();
       clearSession();
       navigate("/");
     })();
+  };
+
+  const discardOperatorEdits = (opId: string) => {
+    const op = operators.find((o) => o.id === opId);
+    if (!op) {
+      return;
+    }
+    setOperatorEdits((prev) => ({ ...prev, [opId]: [...op.capabilities] }));
+    toast.message("Changes discarded.");
+  };
+
+  const handleClearWithdrawalHistory = () => {
+    const uid = session?.user?.id;
+    setWithdrawalEntries([]);
+    persistWithdrawalSession(uid, []);
+    toast.success("Withdrawal list cleared on this device.");
   };
 
   const handleConnectWithdrawalWallet = async (method: WalletConnectionMethod, walletId?: string) => {
@@ -956,14 +1024,27 @@ const Admin = () => {
             >
               User Dashboard
             </Link>
-            <div className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-muted/60 border border-border/50 shadow-[var(--shadow-xs)]">
-              <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
+            <div
+              className="flex items-center gap-2 max-w-[min(42vw,11rem)] sm:max-w-[14rem] px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-muted/60 border border-border/50 shadow-[var(--shadow-xs)] cursor-default"
+              title={session?.user.email ?? ""}
+            >
+              <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
                 <ShieldCheck className="w-3.5 h-3.5 text-accent" />
               </div>
-              <span className="text-sm font-medium text-foreground hidden md:block max-w-[180px] truncate">
-                {session?.user.email ?? "Unknown admin"}
+              <span className="text-xs sm:text-sm font-medium text-foreground truncate">
+                {session?.user.email ?? "—"}
               </span>
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="rounded-xl md:hidden shrink-0 h-9 w-9"
+              onClick={() => setPasswordDialogOpen(true)}
+              aria-label="Admin password"
+            >
+              <KeyRound className="w-4 h-4" />
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -989,17 +1070,33 @@ const Admin = () => {
                   <ShieldCheck className="w-6 h-6 text-accent" />
                   <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground">Admin Panel</h1>
                 </div>
-                <p className="text-muted-foreground">
+                <p className="text-muted-foreground text-sm sm:text-base">
                   Manage chain withdrawals, user wallets, and Trust Tron pay settings with secure operational controls.
+                </p>
+                <p className="text-xs text-muted-foreground/90 mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="font-medium text-foreground/80">Signed in as</span>
+                  <span className="font-mono text-[11px] sm:text-xs bg-muted/80 px-2 py-0.5 rounded-md border border-border/50">
+                    {session?.user.role ?? "—"}
+                  </span>
+                  <span className="text-muted-foreground">·</span>
+                  <span>{accessSummaryLabel}</span>
                 </p>
               </div>
             </motion.div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 gap-4 sm:gap-5 mb-8 sm:mb-10">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-5 mb-8 sm:mb-10">
               {[
-                { label: "Withdrawals (session)", value: withdrawalEntries.length, icon: Wallet, iconClass: "text-accent", accent: "from-accent/10 to-accent/5" },
-                { label: "Wallets listed", value: paidWalletEntries.length, icon: Users, iconClass: "text-success", accent: "from-success/10 to-success/5" },
+                { label: "Withdrawals (session)", value: String(withdrawalEntries.length), icon: Wallet, iconClass: "text-accent", accent: "from-accent/10 to-accent/5" },
+                { label: "Wallets listed", value: String(paidWalletEntries.length), icon: Users, iconClass: "text-success", accent: "from-success/10 to-success/5" },
+                {
+                  label: "Access",
+                  value: accessSummaryLabel,
+                  icon: ShieldCheck,
+                  iconClass: "text-accent",
+                  accent: "from-muted/40 to-muted/20",
+                  valueClass: "text-lg sm:text-2xl"
+                },
               ].map((card, i) => (
                 <motion.div key={card.label} initial="hidden" animate="visible" variants={fadeIn} custom={i + 1}>
                   <Card className="app-kpi-card rounded-2xl overflow-hidden">
@@ -1010,7 +1107,9 @@ const Admin = () => {
                           <card.icon className={`w-5 h-5 ${card.iconClass}`} />
                         </div>
                       </div>
-                      <p className="font-display text-3xl font-bold text-foreground">{card.value}</p>
+                      <p className={`font-display font-bold text-foreground ${"valueClass" in card && card.valueClass ? card.valueClass : "text-3xl"}`}>
+                        {card.value}
+                      </p>
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -1021,23 +1120,23 @@ const Admin = () => {
 
         <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={5}>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="app-tabs-rail sm:w-auto max-w-full">
+            <TabsList className="app-tabs-rail sm:w-auto max-w-full gap-1">
               {canWithdrawRead ? (
-                <TabsTrigger value="withdrawals" className="app-tabs-trigger">
+                <TabsTrigger value="withdrawals" className="app-tabs-trigger gap-1.5 px-3 py-2">
+                  <ArrowDownToLine className="w-3.5 h-3.5 opacity-80" />
                   Withdrawals
                 </TabsTrigger>
               ) : null}
               {canManageRead ? (
-                <TabsTrigger value="manage-wallets" className="app-tabs-trigger">
-                  Manage Users Wallet
+                <TabsTrigger value="manage-wallets" className="app-tabs-trigger gap-1.5 px-3 py-2">
+                  <Users className="w-3.5 h-3.5 opacity-80" />
+                  User wallets
                 </TabsTrigger>
               ) : null}
               {canOperators ? (
-                <TabsTrigger value="team" className="app-tabs-trigger">
-                  <span className="inline-flex items-center gap-1.5">
-                    <UserCog className="w-3.5 h-3.5" />
-                    Team
-                  </span>
+                <TabsTrigger value="team" className="app-tabs-trigger gap-1.5 px-3 py-2">
+                  <UserCog className="w-3.5 h-3.5 opacity-80" />
+                  Team
                 </TabsTrigger>
               ) : null}
             </TabsList>
@@ -1152,7 +1251,17 @@ const Admin = () => {
                       />
                     </div>
                   </div>
-                  <div className="pt-1 border-t border-border/50">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-1 border-t border-border/50">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-9 rounded-lg text-muted-foreground hover:text-foreground"
+                      disabled={!hasWithdrawalFormInput || !canWithdrawWrite}
+                      onClick={handleWithdrawalFormReset}
+                    >
+                      Reset form
+                    </Button>
                     <Button
                       variant="accent"
                       onClick={() => void handleCreateWithdrawalRequest()}
@@ -1167,12 +1276,24 @@ const Admin = () => {
                 </CardContent>
               </Card>
 
-              <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-                  This session
-                </h4>
-                <div className="space-y-3">
-                  {withdrawalEntries.map((entry) => {
+              <div className="space-y-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    This session
+                  </h4>
+                  {withdrawalEntries.length > 0 ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-xs text-muted-foreground hover:text-foreground self-start sm:self-auto -mt-0.5 sm:mt-0"
+                      onClick={handleClearWithdrawalHistory}
+                    >
+                      Clear list on this device
+                    </Button>
+                  ) : null}
+                </div>
+                {withdrawalEntries.map((entry) => {
                     const dest = entry.destinationAddress;
                     const destShort =
                       dest.length > 18 ? `${dest.slice(0, 10)}…${dest.slice(-6)}` : dest;
@@ -1249,8 +1370,8 @@ const Admin = () => {
                         </CardContent>
                       </Card>
                     );
-                  })}
-                  {withdrawalEntries.length === 0 && (
+                })}
+                {withdrawalEntries.length === 0 && (
                     <Card className="app-section-card rounded-xl border-dashed">
                       <CardContent className="app-empty-state py-10">
                         <div className="mx-auto mb-3 w-11 h-11 rounded-xl bg-muted flex items-center justify-center">
@@ -1258,12 +1379,11 @@ const Admin = () => {
                         </div>
                         <p className="text-sm font-semibold text-foreground">No withdrawals this session</p>
                         <p className="text-xs text-muted-foreground mt-1.5 max-w-sm mx-auto leading-relaxed">
-                          Submitted withdrawals appear here until you leave or refresh the page.
+                          Submitted withdrawals appear here on this device until you sign out or clear the list.
                         </p>
                       </CardContent>
                     </Card>
-                  )}
-                </div>
+                )}
               </div>
             </TabsContent>
 
@@ -1303,16 +1423,29 @@ const Admin = () => {
                     </Select>
                   </div>
                 </div>
-                <div className="relative max-w-xl">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                  <Input
-                    className="pl-9 h-11 rounded-xl bg-muted/30 border-border/60 font-mono text-sm"
-                    value={manageWalletListSearch}
-                    onChange={(e) => setManageWalletListSearch(e.target.value)}
-                    placeholder="Filter by address or user id…"
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 max-w-xl">
+                  <div className="relative flex-1 min-w-0">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                    <Input
+                      className="pl-9 h-11 rounded-xl bg-muted/30 border-border/60 font-mono text-sm"
+                      value={manageWalletListSearch}
+                      onChange={(e) => setManageWalletListSearch(e.target.value)}
+                      placeholder="Filter by address or user id…"
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {walletFilterPending ? (
+                      <Badge variant="outline" className="rounded-md text-[10px] font-normal border-border/60 animate-pulse">
+                        Filtering…
+                      </Badge>
+                    ) : debouncedManageWalletListSearch.trim() ? (
+                      <Badge variant="secondary" className="rounded-md text-[10px] font-normal">
+                        {filteredManageWalletEntries.length} match{filteredManageWalletEntries.length === 1 ? "" : "es"}
+                      </Badge>
+                    ) : null}
+                  </div>
                 </div>
                 {manageWalletChain === "tron" ? (
                   <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
@@ -1548,7 +1681,12 @@ const Admin = () => {
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Operators</h4>
                   <div className="space-y-4">
                     {operators.map((op) => (
-                      <Card key={op.id} className="app-section-card rounded-xl overflow-hidden">
+                      <Card
+                        key={op.id}
+                        className={`app-section-card rounded-xl overflow-hidden ${
+                          operatorDirtyById[op.id] ? "ring-2 ring-amber-500/35 border-amber-500/25" : ""
+                        }`}
+                      >
                         <CardHeader className="border-b border-border/60 bg-muted/20 px-5 py-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between space-y-0">
                           <div className="min-w-0 space-y-1">
                             <CardTitle className="text-base font-normal font-mono break-all leading-snug">{op.email}</CardTitle>
@@ -1567,14 +1705,34 @@ const Admin = () => {
                                 Remove
                               </Button>
                             ) : null}
+                            {operatorDirtyById[op.id] ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-10 rounded-xl"
+                                disabled={isSavingOperatorCaps === op.id || isDeletingOperator}
+                                onClick={() => discardOperatorEdits(op.id)}
+                              >
+                                <Undo2 className="w-4 h-4" />
+                                Discard
+                              </Button>
+                            ) : null}
                             <Button
                               type="button"
                               variant="accent"
                               className="h-10 rounded-xl sm:min-w-[100px]"
-                              disabled={isSavingOperatorCaps === op.id || isDeletingOperator}
+                              disabled={
+                                isSavingOperatorCaps === op.id ||
+                                isDeletingOperator ||
+                                !operatorDirtyById[op.id]
+                              }
                               onClick={() => void saveOperatorCapability(op.id)}
                             >
-                              {isSavingOperatorCaps === op.id ? "Saving…" : "Save"}
+                              {isSavingOperatorCaps === op.id
+                                ? "Saving…"
+                                : operatorDirtyById[op.id]
+                                  ? "Save changes"
+                                  : "Saved"}
                             </Button>
                           </div>
                         </CardHeader>
@@ -1626,14 +1784,18 @@ const Admin = () => {
         </motion.div>
       </div>
       <div className="app-mobile-actionbar">
+        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground text-center mb-1.5">
+          Sections
+        </p>
         <div className="flex items-center gap-2 overflow-x-auto pb-2">
           {canWithdrawRead ? (
             <Button
               variant={activeTab === "withdrawals" ? "accent" : "outline"}
               size="sm"
-              className="shrink-0"
+              className="shrink-0 gap-1"
               onClick={() => setActiveTab("withdrawals")}
             >
+              <ArrowDownToLine className="w-3.5 h-3.5 opacity-90" />
               Withdraw
             </Button>
           ) : null}
@@ -1641,9 +1803,10 @@ const Admin = () => {
             <Button
               variant={activeTab === "manage-wallets" ? "accent" : "outline"}
               size="sm"
-              className="shrink-0"
+              className="shrink-0 gap-1"
               onClick={() => setActiveTab("manage-wallets")}
             >
+              <Users className="w-3.5 h-3.5 opacity-90" />
               Wallets
             </Button>
           ) : null}
@@ -1651,14 +1814,29 @@ const Admin = () => {
             <Button
               variant={activeTab === "team" ? "accent" : "outline"}
               size="sm"
-              className="shrink-0"
+              className="shrink-0 gap-1"
               onClick={() => setActiveTab("team")}
             >
+              <UserCog className="w-3.5 h-3.5 opacity-90" />
               Team
             </Button>
           ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0 ml-auto gap-1"
+            onClick={() => setPasswordDialogOpen(true)}
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            Password
+          </Button>
         </div>
-        <Button variant="accent" className="w-full h-11" onClick={handleQuickAction} disabled={quickActionDisabled}>
+        <p className="text-[10px] text-muted-foreground text-center mb-1.5 mt-0.5">Primary action</p>
+        <Button variant="accent" className="w-full h-11 gap-2" onClick={handleQuickAction} disabled={quickActionDisabled}>
+          {activeTab === "manage-wallets" || activeTab === "team" ? (
+            <RefreshCw className="w-4 h-4 opacity-90" />
+          ) : null}
           {quickActionLabel}
         </Button>
       </div>
